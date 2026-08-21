@@ -40,6 +40,7 @@ pub const CatalogAuthenticatedSource = enum {
     fx_login,
     stored_key,
     chatgpt_subscription,
+    grok_subscription,
     custom_provider,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
@@ -49,6 +50,7 @@ pub const CatalogAuthenticatedSource = enum {
             .fx_login => .fx_login,
             .stored_key => .stored_key,
             .chatgpt_subscription => .chatgpt_subscription,
+            .grok_subscription => .grok_subscription,
             .custom_provider => .custom_provider,
         };
     }
@@ -145,6 +147,7 @@ pub fn catalogAccessForCredential(
         .ai_gateway_api_key => .ai_gateway_api_key,
         .stored_key => .stored_key,
         .chatgpt_subscription => .chatgpt_subscription,
+        .grok_subscription => .grok_subscription,
         .custom_provider => .custom_provider,
         .fx_login => blk: {
             const team = team_context orelse

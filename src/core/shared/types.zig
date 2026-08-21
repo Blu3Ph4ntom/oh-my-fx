@@ -93,6 +93,7 @@ pub const CredentialSource = enum {
     fx_login,
     stored_key,
     chatgpt_subscription,
+    grok_subscription,
     custom_provider,
 };
 
