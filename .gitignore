@@ -55,3 +55,6 @@ benchmarks/baseline.json
 .vibe/
 .windsurf/
 .zencoder/
+
+# Local engineering workspace (never committed)
+.agent/
