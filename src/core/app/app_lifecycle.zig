@@ -1122,6 +1122,7 @@ fn configuredProviderSelection(
     const model = switch (provider) {
         .gateway => settings.model orelse default_model,
         .codex => settings.codex_model orelse return error.CodexModelNotSelected,
+        .openai_compatible => settings.model orelse default_model,
     };
     return .{ .provider = provider, .model = model };
 }

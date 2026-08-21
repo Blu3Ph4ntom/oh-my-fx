@@ -250,6 +250,7 @@ const AcpContext = struct {
             .permission_reviewer_provider = switch (session.provider) {
                 .gateway => self.state.cfg.permission_reviewer_provider,
                 .codex => self.state.cfg.codex_permission_reviewer_provider,
+                .openai_compatible => null,
             },
             .auto_classifier = self.auto_classifier,
             .subagent_host = self.state.subagent_host,

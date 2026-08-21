@@ -16,9 +16,9 @@ fn fetchCatalog(
     input: model_catalog.FetchInput,
 ) Allocator.Error!model_catalog.ProviderResult {
     _ = input;
+    _ = alloc;
     // Return an empty catalog — the provider works with any model ID.
     // This satisfies the catalog contract without requiring a Vercel catalog.
-    var entries: std.ArrayList(model_catalog.ModelCatalogEntry) = .empty;
-    _ = alloc;
+    const entries: std.ArrayList(model_catalog.ModelCatalogEntry) = .empty;
     return .{ .catalog = entries };
 }

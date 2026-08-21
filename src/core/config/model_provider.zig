@@ -31,9 +31,9 @@ pub fn label(provider: ProviderId) []const u8 {
 pub fn authorizesCredential(provider: ProviderId, source: ?types.CredentialSource) bool {
     const selected = source orelse return false;
     return switch (provider) {
-        .gateway => selected != .chatgpt_subscription,
+        .gateway => selected == .ai_gateway_api_key or selected == .fx_login or selected == .vercel_oidc_token or selected == .stored_key,
         .codex => selected == .chatgpt_subscription,
-        .openai_compatible => selected != .chatgpt_subscription,
+        .openai_compatible => selected == .custom_provider,
     };
 }
 

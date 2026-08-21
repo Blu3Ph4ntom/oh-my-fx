@@ -73,7 +73,7 @@ pub fn buildRequestBody(
     return out.toOwnedSlice();
 }
 
-fn writeMessage(w: *std.Io.Writer.Allocating.Writer, msg: types.ChatMessage) !void {
+fn writeMessage(w: *std.Io.Writer, msg: types.ChatMessage) !void {
     try w.writeAll("{\"role\":");
     try writeJsonString(w, @tagName(msg.role));
     try w.writeAll(",\"content\":");
@@ -89,21 +89,20 @@ fn writeMessage(w: *std.Io.Writer.Allocating.Writer, msg: types.ChatMessage) !vo
     }
 
     // Tool calls (assistant)
-    if (msg.tool_calls) |calls| {
-        if (calls.len > 0) {
-            try w.writeAll(",\"tool_calls\":[");
-            for (calls, 0..) |call, j| {
-                if (j > 0) try w.writeAll(",");
-                try w.writeAll("{\"id\":");
-                try writeJsonString(w, call.id);
-                try w.writeAll(",\"type\":\"function\",\"function\":{\"name\":");
-                try writeJsonString(w, call.name);
-                try w.writeAll(",\"arguments\":");
-                try writeJsonString(w, call.arguments_json);
-                try w.writeAll("}}");
-            }
-            try w.writeAll("]");
+    if (msg.tool_calls.len > 0) {
+        const calls = msg.tool_calls;
+        try w.writeAll(",\"tool_calls\":[");
+        for (calls, 0..) |call, j| {
+            if (j > 0) try w.writeAll(",");
+            try w.writeAll("{\"id\":");
+            try writeJsonString(w, call.id);
+            try w.writeAll(",\"type\":\"function\",\"function\":{\"name\":");
+            try writeJsonString(w, call.name);
+            try w.writeAll(",\"arguments\":");
+            try writeJsonString(w, call.arguments_json);
+            try w.writeAll("}}");
         }
+        try w.writeAll("]");
     }
 
     // Tool result (tool role)
@@ -119,7 +118,7 @@ fn writeMessage(w: *std.Io.Writer.Allocating.Writer, msg: types.ChatMessage) !vo
     try w.writeAll("}");
 }
 
-fn writeJsonString(w: *std.Io.Writer.Allocating.Writer, s: []const u8) !void {
+fn writeJsonString(w: *std.Io.Writer, s: []const u8) !void {
     try w.writeAll("\"");
     for (s) |c| {
         switch (c) {
@@ -165,7 +164,7 @@ pub const StreamParser = struct {
 
     pub fn deinit(self: *StreamParser) void {
         var it = self.tool_arg_buffers.iterator();
-        while (it.next()) |entry| entry.value_ptr.deinit();
+        while (it.next()) |entry| entry.value_ptr.deinit(self.alloc);
         self.tool_arg_buffers.deinit();
         var it2 = self.tool_ids.iterator();
         while (it2.next()) |entry| self.alloc.free(entry.value_ptr.*);
@@ -243,11 +242,17 @@ pub const StreamParser = struct {
                     var id: ?[]const u8 = null;
                     var name: ?[]const u8 = null;
                     var args: ?[]const u8 = null;
-                    if (tc.object.get("id")) |v| if (v == .string) id = v.string;
+                    if (tc.object.get("id")) |v| {
+                        if (v == .string) id = v.string;
+                    }
                     if (tc.object.get("function")) |fn_obj| {
                         if (fn_obj == .object) {
-                            if (fn_obj.object.get("name")) |v| if (v == .string) name = v.string;
-                            if (fn_obj.object.get("arguments")) |v| if (v == .string) args = v.string;
+                            if (fn_obj.object.get("name")) |v| {
+                                if (v == .string) name = v.string;
+                            }
+                            if (fn_obj.object.get("arguments")) |v| {
+                                if (v == .string) args = v.string;
+                            }
                         }
                     }
 
@@ -356,7 +361,7 @@ test "parseDataLine handles tool call fragmented arguments" {
     var p = StreamParser.init(std.testing.allocator);
     defer p.deinit();
     // First chunk: id + name + partial args
-    const c1 = try p.parseDataLine("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_abc\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\"}}]},\"finish_reason\":null}]}");
+    const c1 = try p.parseDataLine("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_abc\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"\"}}]},\"finish_reason\":null}]}");
     try std.testing.expect(c1 != null);
     if (c1) |ch| {
         try std.testing.expect(ch == .tool_call_delta);

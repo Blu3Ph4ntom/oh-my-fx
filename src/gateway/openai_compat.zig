@@ -15,14 +15,41 @@ pub const agent_stream_provider = stream_provider.Provider{
 };
 
 fn isLoopbackHttpUrl(url: []const u8) bool {
-    if (std.mem.startsWith(u8, url, "http://127.0.0.1:")) return true;
-    if (std.mem.startsWith(u8, url, "http://127.0.0.1/")) return true;
-    if (std.mem.eql(u8, url, "http://127.0.0.1")) return true;
-    if (std.mem.startsWith(u8, url, "http://localhost:")) return true;
-    if (std.mem.startsWith(u8, url, "http://localhost/")) return true;
-    if (std.mem.startsWith(u8, url, "http://[::1]:")) return true;
-    if (std.mem.startsWith(u8, url, "http://[::1]/")) return true;
-    return false;
+    const uri = std.Uri.parse(url) catch return false;
+    // Scheme must be http only (no https for loopback in this run)
+    if (!std.mem.eql(u8, uri.scheme, "http")) return false;
+    // Userinfo must be absent (reject user@host, user:pass@host)
+    if (uri.user != null) return false;
+    if (uri.password != null) return false;
+    // Host must be exactly loopback
+    const host = uri.host orelse return false;
+    const host_str = switch (host) {
+        .raw => |raw| raw,
+        .percent_encoded => |raw| raw,
+    };
+    const is_loopback = std.mem.eql(u8, host_str, "127.0.0.1") or
+        std.mem.eql(u8, host_str, "localhost") or
+        std.mem.eql(u8, host_str, "::1") or
+        std.mem.eql(u8, host_str, "[::1]");
+    if (!is_loopback) return false;
+    // Path must not contain @ (which would indicate userinfo confusion)
+    // and must not be empty with host confusion
+    return true;
+}
+
+test "loopback validation accepts valid and rejects host confusion" {
+    try std.testing.expect(isLoopbackHttpUrl("http://127.0.0.1:43123"));
+    try std.testing.expect(isLoopbackHttpUrl("http://127.0.0.1:43123/v1/chat/completions"));
+    try std.testing.expect(isLoopbackHttpUrl("http://localhost:43123"));
+    try std.testing.expect(isLoopbackHttpUrl("http://[::1]:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("https://127.0.0.1:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://evil.com:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://localhost.evil.com:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://127.0.0.1.evil.com:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://127.0.0.1:43123@evil.com"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://user@127.0.0.1:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://user:pass@localhost:43123"));
+    try std.testing.expect(!isLoopbackHttpUrl("ftp://127.0.0.1:43123"));
 }
 
 fn resolveEndpoint(base_url: []const u8) []const u8 {

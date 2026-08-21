@@ -39,11 +39,13 @@ pub const ProviderRoute = struct {
 pub const ProviderRoutes = struct {
     gateway: ProviderRoute,
     codex: ProviderRoute,
+    openai_compatible: ProviderRoute,
 
     pub fn select(self: ProviderRoutes, provider: model_provider.ProviderId) ProviderRoute {
         return switch (provider) {
             .gateway => self.gateway,
             .codex => self.codex,
+            .openai_compatible => self.openai_compatible,
         };
     }
 };
@@ -67,9 +69,14 @@ test "provider routes select independent streams and reviewers" {
     };
     const gateway_reviewer = auto_classifier.Provider{ .context = &gateway_tag, .review_fn = Reviewer.review };
     const codex_reviewer = auto_classifier.Provider{ .context = &codex_tag, .review_fn = Reviewer.review };
+    var compat_tag: u8 = 0;
+    var compat_stream = stream_provider.unavailable_provider;
+    compat_stream.context = &compat_tag;
+    const compat_reviewer = auto_classifier.Provider{ .context = &compat_tag, .review_fn = Reviewer.review };
     const routes = ProviderRoutes{
         .gateway = .{ .agent_stream_provider = gateway_stream, .permission_reviewer_provider = gateway_reviewer },
         .codex = .{ .agent_stream_provider = codex_stream, .permission_reviewer_provider = codex_reviewer },
+        .openai_compatible = .{ .agent_stream_provider = compat_stream, .permission_reviewer_provider = compat_reviewer },
     };
 
     try std.testing.expect(routes.select(.gateway).agent_stream_provider.context.? == @as(*anyopaque, @ptrCast(&gateway_tag)));
