@@ -739,6 +739,7 @@ pub fn Runtime(comptime App: type) type {
             const saved_model = switch (target) {
                 .gateway => settings.model,
                 .codex => settings.codex_model,
+                .openai_compatible => settings.model,
             };
             const requested_model = io_mod.getenv("FX_MODEL") orelse saved_model;
             var selected: ?[]const u8 = null;

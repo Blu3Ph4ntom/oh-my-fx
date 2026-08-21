@@ -709,6 +709,10 @@ pub fn runSubagentChild(
                 .agent_stream_provider = server.streamProviderFor(state, .codex),
                 .permission_reviewer_provider = state.cfg.codex_permission_reviewer_provider,
             },
+            .openai_compatible = .{
+                .agent_stream_provider = server.streamProviderFor(state, .openai_compatible),
+                .permission_reviewer_provider = null,
+            },
         },
         .system_prompt = state.cfg.prompt_policy.system_prompt,
         .model_prompt_overlay = state.cfg.prompt_policy.modelPromptOverlay(admission.model),
