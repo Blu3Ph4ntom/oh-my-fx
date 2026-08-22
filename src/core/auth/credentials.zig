@@ -44,6 +44,7 @@ pub const CatalogAuthenticatedSource = enum {
     stored_key,
     chatgpt_subscription,
     grok_subscription,
+    custom_provider,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
         return switch (self) {
@@ -53,6 +54,7 @@ pub const CatalogAuthenticatedSource = enum {
             .stored_key => .stored_key,
             .chatgpt_subscription => .chatgpt_subscription,
             .grok_subscription => .grok_subscription,
+            .custom_provider => .custom_provider,
         };
     }
 };
