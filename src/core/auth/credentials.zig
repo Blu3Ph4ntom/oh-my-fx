@@ -149,6 +149,7 @@ pub fn catalogAccessForCredential(
         .stored_key => .stored_key,
         .chatgpt_subscription => .chatgpt_subscription,
         .grok_subscription => .grok_subscription,
+        .custom_provider => .custom_provider,
         .fx_login => blk: {
             const team = team_context orelse
                 return .{ .public_only = .fx_login_team_required };
@@ -271,6 +272,10 @@ pub fn resolveForProvider(
             };
             return .{ .credential = credential };
         },
+        .openai_compatible => {
+            const credential = try loadEnvCredential(alloc, "CUSTOM_PROVIDER_API_KEY", .custom_provider);
+            return .{ .credential = credential };
+        },
         .gateway => {},
     }
     return resolvePreferring(
@@ -385,6 +390,7 @@ pub fn loadSource(
         .stored_key => loadStoredKeyCredential(alloc, secret_store),
         .chatgpt_subscription => loadChatGptCredential(alloc, transport, .if_needed),
         .grok_subscription => loadGrokCredential(alloc, transport, .if_needed),
+        .custom_provider => loadEnvCredential(alloc, "CUSTOM_PROVIDER_API_KEY", source),
     };
 }
 
