@@ -1061,6 +1061,7 @@ const AskContext = struct {
         const provider = switch (self.provider) {
             .gateway => self.cfg.permission_reviewer_provider,
             .codex => self.cfg.codex_permission_reviewer_provider,
+            .grok => null,
             .openai_compatible => null,
         } orelse
             return permission_auto_classifier.Classifier.disabled();
@@ -1078,6 +1079,7 @@ const AskContext = struct {
         return switch (self.provider) {
             .gateway => self.cfg.gateway_provider.agent_stream,
             .codex => self.cfg.codex_agent_stream orelse agent_stream_provider.unavailable_provider,
+            .grok => agent_stream_provider.unavailable_provider,
             .openai_compatible => agent_stream_provider.unavailable_provider,
         };
     }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const chatgpt_oauth = @import("chatgpt_oauth.zig");
+const grok_oauth = @import("grok_oauth.zig");
 const debug_trace = @import("../shared/debug_trace.zig");
 const host = @import("../hosts/host.zig");
 const io_mod = @import("../shared/io.zig");
@@ -20,6 +21,7 @@ pub const CatalogPublicOnly = union(enum) {
     credential_refresh_failed: Source,
     authenticated_credential_rejected: Source,
     chatgpt_subscription,
+    grok_subscription,
 
     fn credentialSource(self: CatalogPublicOnly) ?Source {
         return switch (self) {
@@ -28,6 +30,7 @@ pub const CatalogPublicOnly = union(enum) {
             .credential_refresh_failed => |source| source,
             .authenticated_credential_rejected => |source| source,
             .chatgpt_subscription => .chatgpt_subscription,
+            .grok_subscription => .grok_subscription,
         };
     }
 };
@@ -41,7 +44,6 @@ pub const CatalogAuthenticatedSource = enum {
     stored_key,
     chatgpt_subscription,
     grok_subscription,
-    custom_provider,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
         return switch (self) {
@@ -51,7 +53,6 @@ pub const CatalogAuthenticatedSource = enum {
             .stored_key => .stored_key,
             .chatgpt_subscription => .chatgpt_subscription,
             .grok_subscription => .grok_subscription,
-            .custom_provider => .custom_provider,
         };
     }
 };
@@ -89,7 +90,7 @@ pub const CatalogAccess = union(enum) {
     pub fn publicFallbackAfterRejection(self: CatalogAccess) ?CatalogAccess {
         return switch (self) {
             .public_only => null,
-            .authenticated => |access| if (access.source == .chatgpt_subscription)
+            .authenticated => |access| if (access.source == .chatgpt_subscription or access.source == .grok_subscription)
                 null
             else
                 .{
@@ -148,7 +149,6 @@ pub fn catalogAccessForCredential(
         .stored_key => .stored_key,
         .chatgpt_subscription => .chatgpt_subscription,
         .grok_subscription => .grok_subscription,
-        .custom_provider => .custom_provider,
         .fx_login => blk: {
             const team = team_context orelse
                 return .{ .public_only = .fx_login_team_required };
@@ -161,7 +161,7 @@ pub fn catalogAccessForCredential(
         .authenticated = .{
             .source = authenticated_source,
             .credential = credential,
-            .team_context = if (authenticated_source == .chatgpt_subscription) null else team_context,
+            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription) null else team_context,
         },
     };
 }
@@ -180,6 +180,8 @@ pub const missing_credential_message = "Fx needs access to Vercel AI Gateway. Ru
 pub const missing_interactive_credential_message = "Fx needs access to Vercel AI Gateway. Run /login to sign in, /setup to use an API key, or set AI_GATEWAY_API_KEY.";
 pub const missing_chatgpt_credential_message = "fx needs a Codex subscription login for this model. Run fx login codex.";
 pub const missing_chatgpt_interactive_credential_message = "Codex needs a subscription login. Run /login and choose Sign in with Codex.";
+pub const missing_grok_credential_message = "fx needs a Grok subscription login for this model. Run fx login grok.";
+pub const missing_grok_interactive_credential_message = "Grok needs a subscription login. Run /login and choose Sign in with Grok.";
 pub const unreadable_store_message = "Fx could not read the stored API key from " ++ stored_key_backend_label ++ ". A key may be saved but unreadable. Set FX_TRACE_LOG for the failing step, or set AI_GATEWAY_API_KEY.";
 
 pub const Credential = struct {
@@ -219,9 +221,20 @@ pub const StoredKeyReadStatus = enum {
     unavailable,
 };
 
+/// Why the fx login produced no credential. Only meaningful once resolution has
+/// reached the fx-login step and it stayed silent. `unavailable` means the
+/// session could not be loaded or its refresh failed, which is different from
+/// having no session at all: the login exists and may still be repairable.
+pub const FxLoginReadStatus = enum {
+    not_attempted,
+    absent,
+    unavailable,
+};
+
 pub const Resolution = struct {
     credential: ?Credential = null,
     stored_key_status: StoredKeyReadStatus = .not_attempted,
+    fx_login_status: FxLoginReadStatus = .not_attempted,
 };
 
 /// The single credential resolution method. Walks source precedence, then falls back to
@@ -243,19 +256,29 @@ pub fn resolveForProvider(
     provider: model_provider.ProviderId,
     preferred: ?Source,
 ) !Resolution {
-    if (provider == .codex) {
-        const credential = switch (mode) {
-            .stored => try loadStoredChatGptCredential(alloc),
-            .refresh_if_needed => try loadChatGptCredential(alloc, transport, .if_needed),
-        };
-        return .{ .credential = credential };
+    switch (provider) {
+        .codex => {
+            const credential = switch (mode) {
+                .stored => try loadStoredChatGptCredential(alloc),
+                .refresh_if_needed => try loadChatGptCredential(alloc, transport, .if_needed),
+            };
+            return .{ .credential = credential };
+        },
+        .grok => {
+            const credential = switch (mode) {
+                .stored => try loadStoredGrokCredential(alloc),
+                .refresh_if_needed => try loadGrokCredential(alloc, transport, .if_needed),
+            };
+            return .{ .credential = credential };
+        },
+        .gateway => {},
     }
     return resolvePreferring(
         alloc,
         transport,
         secret_store,
         mode,
-        if (preferred == .chatgpt_subscription) null else preferred,
+        if (preferred == .chatgpt_subscription or preferred == .grok_subscription) null else preferred,
     );
 }
 
@@ -285,13 +308,20 @@ pub fn resolvePreferring(
     if (try loadSource(alloc, transport, secret_store, .vercel_oidc_token)) |credential| return .{ .credential = credential };
     if (try loadSource(alloc, transport, secret_store, .ai_gateway_api_key)) |credential| return .{ .credential = credential };
 
-    const fx_login = switch (mode) {
-        .stored => try loadStoredFxLoginCredential(alloc),
-        .refresh_if_needed => try loadFxLoginCredential(alloc, transport),
+    // A login that cannot be loaded or refreshed is one silent source, not a
+    // reason to abandon resolution: the sources on either side of it already
+    // fall through on failure, and a rejected refresh token must not hide a
+    // stored key that works. OutOfMemory stays fatal, as it does for them.
+    var fx_login_status: FxLoginReadStatus = .absent;
+    const fx_login = loadFxLoginForPrecedence(alloc, transport, mode) catch |err| blk: {
+        if (err == error.OutOfMemory) return err;
+        fx_login_status = .unavailable;
+        debug_trace.logf("auth", "fx login load failed mode={t} err={s}; using precedence", .{ mode, @errorName(err) });
+        break :blk null;
     };
     if (fx_login) |credential| return .{ .credential = credential };
 
-    if (secret_store.isDisabled()) return .{};
+    if (secret_store.isDisabled()) return .{ .fx_login_status = fx_login_status };
 
     var status: StoredKeyReadStatus = .not_found;
     const stored = loadSource(alloc, transport, secret_store, .stored_key) catch |err| blk: {
@@ -300,8 +330,19 @@ pub fn resolvePreferring(
         debug_trace.logf("auth", "stored key load failed err={s} status={t}", .{ @errorName(err), status });
         break :blk null;
     };
-    if (stored) |credential| return .{ .credential = credential };
-    return .{ .stored_key_status = status };
+    if (stored) |credential| return .{ .credential = credential, .fx_login_status = fx_login_status };
+    return .{ .stored_key_status = status, .fx_login_status = fx_login_status };
+}
+
+fn loadFxLoginForPrecedence(
+    alloc: std.mem.Allocator,
+    transport: oauth_transport.Provider,
+    mode: LoadMode,
+) !?Credential {
+    return switch (mode) {
+        .stored => loadStoredFxLoginCredential(alloc),
+        .refresh_if_needed => loadFxLoginCredential(alloc, transport),
+    };
 }
 
 /// `loadSource` always refreshes an expired fx login, which `.stored` mode
@@ -323,6 +364,10 @@ fn loadPreferredSource(
             .stored => loadStoredChatGptCredential(alloc),
             .refresh_if_needed => loadChatGptCredential(alloc, transport, .if_needed),
         },
+        .grok_subscription => switch (mode) {
+            .stored => loadStoredGrokCredential(alloc),
+            .refresh_if_needed => loadGrokCredential(alloc, transport, .if_needed),
+        },
         else => loadSource(alloc, transport, secret_store, source),
     };
 }
@@ -339,6 +384,7 @@ pub fn loadSource(
         .fx_login => loadFxLoginCredential(alloc, transport),
         .stored_key => loadStoredKeyCredential(alloc, secret_store),
         .chatgpt_subscription => loadChatGptCredential(alloc, transport, .if_needed),
+        .grok_subscription => loadGrokCredential(alloc, transport, .if_needed),
         .custom_provider => loadEnvCredential(alloc, "CUSTOM_PROVIDER_API_KEY", source),
     };
 }
@@ -364,6 +410,7 @@ pub fn sourceExists(
             break :blk true;
         },
         .chatgpt_subscription => chatgpt_oauth.sourceExists(alloc),
+        .grok_subscription => grok_oauth.sourceExists(alloc),
         .custom_provider => nonEmptyEnvValue("CUSTOM_PROVIDER_API_KEY") != null,
         .stored_key => blk: {
             if (secret_store.isDisabled()) break :blk false;
@@ -425,6 +472,29 @@ fn loadStoredChatGptCredential(alloc: std.mem.Allocator) !?Credential {
     return loadChatGptCredential(alloc, oauth_transport.unavailable_provider, .stored);
 }
 
+fn loadGrokCredential(
+    alloc: std.mem.Allocator,
+    transport: oauth_transport.Provider,
+    mode: grok_oauth.RefreshMode,
+) !?Credential {
+    var access = (try grok_oauth.loadAccess(alloc, transport, mode)) orelse return null;
+    defer access.deinit(alloc);
+    const token = access.access_token;
+    access.access_token = &.{};
+    const account_id = access.account_id;
+    access.account_id = &.{};
+    return .{
+        .token = token,
+        .source = .grok_subscription,
+        .account_id = account_id,
+        .refresh_after_ms = access.refresh_after_ms,
+    };
+}
+
+fn loadStoredGrokCredential(alloc: std.mem.Allocator) !?Credential {
+    return loadGrokCredential(alloc, oauth_transport.unavailable_provider, .stored);
+}
+
 fn nonEmptyEnvValue(name: []const u8) ?[]const u8 {
     return nonEmptyValue(io_mod.getenv(name));
 }
@@ -467,6 +537,13 @@ pub fn refreshChatGptCredential(
     transport: oauth_transport.Provider,
 ) !?Credential {
     return loadChatGptCredential(alloc, transport, .force);
+}
+
+pub fn refreshGrokCredential(
+    alloc: std.mem.Allocator,
+    transport: oauth_transport.Provider,
+) !?Credential {
+    return loadGrokCredential(alloc, transport, .force);
 }
 
 fn refreshFxLoginCredentialLocked(
@@ -560,12 +637,13 @@ pub fn sourceLabel(source: Source) []const u8 {
         .fx_login => "fx login",
         .stored_key => "stored API key (" ++ stored_key_backend_label ++ ")",
         .chatgpt_subscription => "Codex subscription",
+        .grok_subscription => "Grok subscription",
         .custom_provider => "CUSTOM_PROVIDER_API_KEY",
     };
 }
 
 pub fn sourceRefreshable(source: Source) bool {
-    return source == .fx_login or source == .chatgpt_subscription;
+    return source == .fx_login or source == .chatgpt_subscription or source == .grok_subscription;
 }
 
 test "stored key label discloses the backend that answered" {
@@ -930,4 +1008,110 @@ test "credential resolution preserves unreadable store classification" {
     try std.testing.expectEqual(@as(usize, 1), store_fixture.load_calls);
     try std.testing.expect(resolution.credential == null);
     try std.testing.expectEqual(StoredKeyReadStatus.unavailable, resolution.stored_key_status);
+}
+
+test "a failed fx-login refresh falls through to the stored key" {
+    const alloc = std.testing.allocator;
+    var fixture = try ExpiredFxLoginFixture.install(alloc);
+    defer fixture.deinit();
+    var store_fixture = SecretStoreFixture{ .value = "stored-key-that-works" };
+
+    // The refresh cannot succeed, but a working stored key is right behind it.
+    var resolution = try resolve(
+        alloc,
+        oauth_transport.unavailable_provider,
+        store_fixture.provider(),
+        .refresh_if_needed,
+    );
+    defer if (resolution.credential) |*credential| credential.deinit(alloc);
+
+    const credential = resolution.credential orelse return error.TestExpectedCredential;
+    try std.testing.expectEqual(Source.stored_key, credential.source);
+    try std.testing.expectEqualStrings("stored-key-that-works", credential.token);
+    try std.testing.expectEqual(FxLoginReadStatus.unavailable, resolution.fx_login_status);
+    try std.testing.expectEqual(@as(usize, 1), store_fixture.load_calls);
+}
+
+test "a failed fx-login refresh is still reported when nothing else resolves" {
+    const alloc = std.testing.allocator;
+    var fixture = try ExpiredFxLoginFixture.install(alloc);
+    defer fixture.deinit();
+    var store_fixture = SecretStoreFixture{};
+
+    // Falling through must not erase why the login was silent: an unrepairable
+    // session is a different problem from never having logged in.
+    var resolution = try resolve(
+        alloc,
+        oauth_transport.unavailable_provider,
+        store_fixture.provider(),
+        .refresh_if_needed,
+    );
+    defer if (resolution.credential) |*credential| credential.deinit(alloc);
+
+    try std.testing.expect(resolution.credential == null);
+    try std.testing.expectEqual(FxLoginReadStatus.unavailable, resolution.fx_login_status);
+    try std.testing.expectEqual(StoredKeyReadStatus.not_found, resolution.stored_key_status);
+}
+
+/// A HOME holding an fx login whose session is expired and whose refresh token
+/// the issuer rejects, which is what an expired or revoked login looks like on
+/// disk. Paired with `oauth_transport.unavailable_provider`, the refresh fails.
+const ExpiredFxLoginFixture = struct {
+    alloc: std.mem.Allocator,
+    tmp: std.testing.TmpDir,
+    env: *CredentialTestEnv,
+    home: []u8,
+
+    fn install(alloc: std.mem.Allocator) !ExpiredFxLoginFixture {
+        var tmp = std.testing.tmpDir(.{});
+        errdefer tmp.cleanup();
+        const home = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "");
+        errdefer alloc.free(home);
+
+        try tmp.dir.createDirPath(io_mod.getIo(), ".fx");
+        const auth_path = try std.fs.path.join(alloc, &.{ home, ".fx", "auth.json" });
+        defer alloc.free(auth_path);
+        var file = try std.Io.Dir.createFileAbsolute(io_mod.getIo(), auth_path, .{
+            .truncate = true,
+            .permissions = std.Io.File.Permissions.fromMode(0o600),
+        });
+        defer file.close(io_mod.getIo());
+        try file.writeStreamingAll(
+            io_mod.getIo(),
+            "{\"version\":1,\"issuer\":\"https://vercel.com\",\"client_id\":\"client\"," ++
+                "\"access_token\":\"access\",\"refresh_token\":\"rejected-refresh\"," ++
+                "\"expires_at_ms\":1,\"scope\":\"openid offline_access\"," ++
+                "\"token_type\":\"Bearer\",\"team_slug\":\"team-slug\",\"team_id\":\"team-id\"}",
+        );
+
+        const env = try CredentialTestEnv.install(alloc, &.{.{ "HOME", home }});
+        return .{ .alloc = alloc, .tmp = tmp, .env = env, .home = home };
+    }
+
+    fn deinit(self: *ExpiredFxLoginFixture) void {
+        self.env.deinit();
+        self.alloc.free(self.home);
+        self.tmp.cleanup();
+    }
+};
+
+test "a disabled store still reports why the fx login was silent" {
+    const alloc = std.testing.allocator;
+    var fixture = try ExpiredFxLoginFixture.install(alloc);
+    defer fixture.deinit();
+    var store_fixture = SecretStoreFixture{ .disabled = true };
+
+    // The store is switched off, so resolution ends at the login. Its failure is
+    // still the useful diagnostic and must survive the early return.
+    var resolution = try resolve(
+        alloc,
+        oauth_transport.unavailable_provider,
+        store_fixture.provider(),
+        .refresh_if_needed,
+    );
+    defer if (resolution.credential) |*credential| credential.deinit(alloc);
+
+    try std.testing.expect(resolution.credential == null);
+    try std.testing.expectEqual(FxLoginReadStatus.unavailable, resolution.fx_login_status);
+    try std.testing.expectEqual(StoredKeyReadStatus.not_attempted, resolution.stored_key_status);
 }

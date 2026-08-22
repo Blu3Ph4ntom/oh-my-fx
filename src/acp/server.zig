@@ -373,6 +373,7 @@ pub fn streamProviderFor(
         .gateway => state.cfg.gateway_provider.agent_stream,
         .codex => state.cfg.codex_agent_stream orelse
             @import("../core/agent/stream_provider.zig").unavailable_provider,
+        .grok => @import("../core/agent/stream_provider.zig").unavailable_provider,
         .openai_compatible => @import("../core/agent/stream_provider.zig").unavailable_provider,
     };
 }
@@ -384,6 +385,7 @@ pub fn catalogProviderFor(
     return switch (provider) {
         .gateway => state.cfg.gateway_provider.model_catalog,
         .codex => state.cfg.codex_model_catalog,
+        .grok => null,
         .openai_compatible => null,
     };
 }
@@ -1706,6 +1708,7 @@ fn handleSetConfigOption(state: *ServerState, alloc: Allocator, msg: *jsonrpc.Me
             const saved_model = switch (target) {
                 .gateway => settings.model,
                 .codex => settings.codex_model,
+                .grok => settings.model,
                 .openai_compatible => settings.model,
             };
             var selected_model = catalog.items[0].id;

@@ -739,6 +739,7 @@ pub fn Runtime(comptime App: type) type {
             const saved_model = switch (target) {
                 .gateway => settings.model,
                 .codex => settings.codex_model,
+                .grok => settings.model,
                 .openai_compatible => settings.model,
             };
             const requested_model = io_mod.getenv("FX_MODEL") orelse saved_model;
@@ -793,6 +794,8 @@ pub fn Runtime(comptime App: type) type {
                 var persistence = config_runtime.attemptUserPreferences(app.alloc, switch (target) {
                     .gateway => .{ .provider = .gateway, .model = provider_runtime.model(app) },
                     .codex => .{ .provider = .codex, .codex_model = provider_runtime.model(app) },
+                    .grok => .{ .provider = .grok, .model = provider_runtime.model(app) },
+                    .openai_compatible => .{ .provider = .openai_compatible, .model = provider_runtime.model(app) },
                 });
                 defer persistence.deinit(app.alloc);
                 switch (persistence) {
