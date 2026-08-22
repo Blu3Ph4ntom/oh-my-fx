@@ -44,6 +44,7 @@ pub const CatalogAuthenticatedSource = enum {
     stored_key,
     chatgpt_subscription,
     grok_subscription,
+    custom_provider,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
         return switch (self) {
@@ -53,6 +54,7 @@ pub const CatalogAuthenticatedSource = enum {
             .stored_key => .stored_key,
             .chatgpt_subscription => .chatgpt_subscription,
             .grok_subscription => .grok_subscription,
+            .custom_provider => .custom_provider,
         };
     }
 };
@@ -149,6 +151,7 @@ pub fn catalogAccessForCredential(
         .stored_key => .stored_key,
         .chatgpt_subscription => .chatgpt_subscription,
         .grok_subscription => .grok_subscription,
+        .custom_provider => .custom_provider,
         .fx_login => blk: {
             const team = team_context orelse
                 return .{ .public_only = .fx_login_team_required };
@@ -161,7 +164,7 @@ pub fn catalogAccessForCredential(
         .authenticated = .{
             .source = authenticated_source,
             .credential = credential,
-            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription) null else team_context,
+            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription or authenticated_source == .custom_provider) null else team_context,
         },
     };
 }
@@ -271,6 +274,10 @@ pub fn resolveForProvider(
             };
             return .{ .credential = credential };
         },
+        .openai_compatible => {
+            const credential = try loadSource(alloc, transport, secret_store, .custom_provider);
+            return .{ .credential = credential };
+        },
         .gateway => {},
     }
     return resolvePreferring(
@@ -278,7 +285,7 @@ pub fn resolveForProvider(
         transport,
         secret_store,
         mode,
-        if (preferred == .chatgpt_subscription or preferred == .grok_subscription) null else preferred,
+        if (preferred == .chatgpt_subscription or preferred == .grok_subscription or preferred == .custom_provider) null else preferred,
     );
 }
 
