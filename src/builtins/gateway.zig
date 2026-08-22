@@ -624,6 +624,7 @@ const OAuthHttpOperation = struct {
                     .post_form => .{ .override = "application/x-www-form-urlencoded" },
                     .post_json => .{ .override = "application/json" },
                 },
+                .authorization = if (self.request.authorization) |auth| .{ .override = auth } else .default,
                 .user_agent = .{ .override = gateway_client.user_agent },
                 .accept_encoding = .omit,
             },
