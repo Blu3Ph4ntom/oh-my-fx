@@ -1346,15 +1346,6 @@ pub const Runtime = struct {
                     self,
                     loadRuntimeCredentialSource,
                 ),
-            .grok => if (self.credentialSource() == .grok_subscription)
-                false
-            else
-                self.selectSourceWithLoader(
-                    alloc,
-                    .grok_subscription,
-                    self,
-                    loadRuntimeCredentialSource,
-                ),
             .openai_compatible => if (self.credentialSource() == .custom_provider)
                 false
             else
@@ -1364,7 +1355,7 @@ pub const Runtime = struct {
                     self,
                     loadRuntimeCredentialSource,
                 ),
-            .gateway => if (self.credentialSource() != .chatgpt_subscription and self.credentialSource() != .grok_subscription and self.credentialSource() != .custom_provider)
+            .gateway => if (self.credentialSource() != .chatgpt_subscription)
                 false
             else
                 @as(?bool, try self.reselectByPrecedenceWithDeps(

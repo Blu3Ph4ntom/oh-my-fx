@@ -44,7 +44,6 @@ pub const CatalogAuthenticatedSource = enum {
     stored_key,
     chatgpt_subscription,
     grok_subscription,
-    custom_provider,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
         return switch (self) {
@@ -54,7 +53,6 @@ pub const CatalogAuthenticatedSource = enum {
             .stored_key => .stored_key,
             .chatgpt_subscription => .chatgpt_subscription,
             .grok_subscription => .grok_subscription,
-            .custom_provider => .custom_provider,
         };
     }
 };
@@ -151,7 +149,6 @@ pub fn catalogAccessForCredential(
         .stored_key => .stored_key,
         .chatgpt_subscription => .chatgpt_subscription,
         .grok_subscription => .grok_subscription,
-        .custom_provider => .custom_provider,
         .fx_login => blk: {
             const team = team_context orelse
                 return .{ .public_only = .fx_login_team_required };
@@ -164,7 +161,7 @@ pub fn catalogAccessForCredential(
         .authenticated = .{
             .source = authenticated_source,
             .credential = credential,
-            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription or authenticated_source == .custom_provider) null else team_context,
+            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription) null else team_context,
         },
     };
 }
@@ -274,10 +271,6 @@ pub fn resolveForProvider(
             };
             return .{ .credential = credential };
         },
-        .openai_compatible => {
-            const credential = try loadSource(alloc, transport, secret_store, .custom_provider);
-            return .{ .credential = credential };
-        },
         .gateway => {},
     }
     return resolvePreferring(
@@ -285,7 +278,7 @@ pub fn resolveForProvider(
         transport,
         secret_store,
         mode,
-        if (preferred == .chatgpt_subscription or preferred == .grok_subscription or preferred == .custom_provider) null else preferred,
+        if (preferred == .chatgpt_subscription or preferred == .grok_subscription) null else preferred,
     );
 }
 
@@ -392,7 +385,6 @@ pub fn loadSource(
         .stored_key => loadStoredKeyCredential(alloc, secret_store),
         .chatgpt_subscription => loadChatGptCredential(alloc, transport, .if_needed),
         .grok_subscription => loadGrokCredential(alloc, transport, .if_needed),
-        .custom_provider => loadEnvCredential(alloc, "CUSTOM_PROVIDER_API_KEY", source),
     };
 }
 
@@ -418,7 +410,6 @@ pub fn sourceExists(
         },
         .chatgpt_subscription => chatgpt_oauth.sourceExists(alloc),
         .grok_subscription => grok_oauth.sourceExists(alloc),
-        .custom_provider => nonEmptyEnvValue("CUSTOM_PROVIDER_API_KEY") != null,
         .stored_key => blk: {
             if (secret_store.isDisabled()) break :blk false;
             const stored = secret_store.load(alloc) catch |err| switch (err) {
@@ -645,7 +636,6 @@ pub fn sourceLabel(source: Source) []const u8 {
         .stored_key => "stored API key (" ++ stored_key_backend_label ++ ")",
         .chatgpt_subscription => "Codex subscription",
         .grok_subscription => "Grok subscription",
-        .custom_provider => "CUSTOM_PROVIDER_API_KEY",
     };
 }
 

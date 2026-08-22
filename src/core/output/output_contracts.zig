@@ -741,7 +741,6 @@ pub const ModelListSnapshot = struct {
         return switch (self.provider) {
             .gateway => "gateway",
             .codex => model_provider.label(.codex),
-            .grok => model_provider.label(.grok),
             .openai_compatible => model_provider.label(.openai_compatible),
         };
     }
@@ -756,7 +755,6 @@ pub const ModelListSnapshot = struct {
             .credential_refresh_failed => "Vercel sign-in refresh failed; using the public model catalog.",
             .authenticated_credential_rejected => "Your Gateway credential was rejected; using the public model catalog.",
             .chatgpt_subscription => "Codex models require an authenticated Codex catalog.",
-            .grok_subscription => "Grok models require an authenticated Grok catalog.",
         };
     }
 };

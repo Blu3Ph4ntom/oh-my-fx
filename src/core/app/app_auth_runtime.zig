@@ -794,8 +794,6 @@ pub fn Runtime(comptime App: type) type {
                 var persistence = config_runtime.attemptUserPreferences(app.alloc, switch (target) {
                     .gateway => .{ .provider = .gateway, .model = provider_runtime.model(app) },
                     .codex => .{ .provider = .codex, .codex_model = provider_runtime.model(app) },
-                    .grok => .{ .provider = .grok, .model = provider_runtime.model(app) },
-                    .openai_compatible => .{ .provider = .openai_compatible, .model = provider_runtime.model(app) },
                 });
                 defer persistence.deinit(app.alloc);
                 switch (persistence) {
