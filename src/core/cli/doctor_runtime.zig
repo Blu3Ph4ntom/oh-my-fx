@@ -127,6 +127,7 @@ pub fn collect(
         .model = switch (snapshot.provider) {
             .gateway => detailed.settings.model,
             .codex => detailed.settings.codex_model,
+            .grok => detailed.settings.model,
             .openai_compatible => detailed.settings.model,
         },
         .permission_mode = detailed.settings.permission_mode,
