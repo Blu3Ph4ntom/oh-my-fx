@@ -58,3 +58,5 @@ benchmarks/baseline.json
 
 # Local engineering workspace (never committed)
 .agent/
+.wsl-cache/
+tmp/
