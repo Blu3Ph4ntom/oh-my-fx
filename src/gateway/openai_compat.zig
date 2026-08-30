@@ -224,6 +224,9 @@ pub fn streamCompletion(
             .tool_calls = calls_slice,
         },
         .ownership = .owned,
+    };
+}
+
 test "e2e openai_compatible tool loop with fixture" {
     const alloc = std.testing.allocator;
     try std.testing.expect(isLoopbackHttpUrl("http://127.0.0.1:1234/v1/chat/completions"));
