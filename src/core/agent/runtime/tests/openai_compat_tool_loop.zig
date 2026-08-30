@@ -20,14 +20,15 @@ test "openai_compatible tool loop via orchestrator with real read_file" {
             .chunks = &[_][]const u8{"done"},
         },
     };
-    const gateway = FakeGateway.init(alloc, &completions);
+    var gateway = FakeGateway.init(alloc, &completions);
     defer gateway.deinit();
 
-    const hooks = test_support.FakeAgentRuntimeDeps.init(alloc);
+    var hooks = test_support.FakeAgentRuntimeDeps.init(alloc);
     defer hooks.deinit();
 
-    const fixture = test_support.PromptFixture{};
-    const config = fixture.config();
+    var fixture = test_support.PromptFixture{};
+    _ = &fixture;
+    var config = fixture.config();
     var job = fixture.job();
     job.prompt = @constCast("Read fixture.txt");
     job.model = @constCast("company/coder-v1");
