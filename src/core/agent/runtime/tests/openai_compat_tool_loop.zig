@@ -30,7 +30,7 @@ test "openai_compatible tool loop via orchestrator with real read_file" {
 
     var fixture = test_support.PromptFixture{};
     _ = &fixture;
-    var config = fixture.config();
+    const config = fixture.config();
     var job = fixture.job();
     job.prompt = @constCast("Read fixture.txt");
     job.model = @constCast("company/coder-v1");
