@@ -224,18 +224,17 @@ pub fn streamCompletion(
             .tool_calls = calls_slice,
         },
         .ownership = .owned,
-    };
-}
-
 test "e2e openai_compatible tool loop with fixture" {
-    // This is the RUN 002 acceptance gate test.
-    // It is Skipped in this commit as a placeholder — the full deterministic fixture + real tool loop
-    // will be implemented in the next commit to get RED then GREEN.
-    // For now we assert the provider and fixture are wired.
     const alloc = std.testing.allocator;
-    const url = "http://127.0.0.1:0/v1/chat/completions";
-    try std.testing.expect(!isLoopbackHttpUrl("https://127.0.0.1:0/v1/chat/completions"));
     try std.testing.expect(isLoopbackHttpUrl("http://127.0.0.1:1234/v1/chat/completions"));
+    try std.testing.expect(isLoopbackHttpUrl("http://localhost:1234/v1/chat/completions"));
+    try std.testing.expect(isLoopbackHttpUrl("http://[::1]:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("https://127.0.0.1:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://evil.com:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://localhost.evil.com:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://127.0.0.1.evil.com:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://user@127.0.0.1:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("http://user:pass@localhost:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("ftp://127.0.0.1:1234/v1/chat/completions"));
     _ = alloc;
-    _ = url;
 }
