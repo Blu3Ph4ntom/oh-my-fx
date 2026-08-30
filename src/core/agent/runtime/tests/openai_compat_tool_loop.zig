@@ -16,9 +16,9 @@ test "openai_compatible tool loop via orchestrator with real read_file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const content = "OH_MY_FX_TOOL_LOOP_PROOF";
-    var f = try tmp.dir.createFile("fixture.txt", .{});
-    try f.writeAll(content);
-    f.close();
+    var f = try tmp.dir.createFile(std.testing.io, "fixture.txt", .{});
+    try f.writeStreamingAll(std.testing.io, content);
+    f.close(std.testing.io);
 
     // FakeGateway with two completions: first returns read_file tool call, second returns final answer
     const completions = [_]FakeCompletion{
@@ -60,7 +60,7 @@ test "openai_compatible tool loop via orchestrator with real read_file" {
     try std.testing.expect(std.mem.indexOf(u8, gateway.request_bodies.items[0], "GATEWAY-SECRET-MUST-NOT-LEAK") == null);
     try std.testing.expect(std.mem.indexOf(u8, gateway.request_bodies.items[0], "CODEX-SECRET-MUST-NOT-LEAK") == null);
     try std.testing.expect(std.mem.indexOf(u8, gateway.request_bodies.items[0], "GROK-SECRET-MUST-NOT-LEAK") == null);
-    try std.testing.expect(std.mem.indexOf(u8, gateway.request_bodies.items[0], "COMPATIBLE-SECRET-EXPECTED") == null); // api_key is in header, not body
+    try std.testing.expect(std.mem.indexOf(u8, gateway.request_bodies.items[0], "COMPATIBLE-SECRET-EXPECTED") == null);
 
     // Verify second request contains tool result with expected content and matching id
     try std.testing.expect(std.mem.indexOf(u8, gateway.request_bodies.items[1], "call_abc123") != null);
@@ -70,12 +70,11 @@ test "openai_compatible tool loop via orchestrator with real read_file" {
     // Verify no third request
     try std.testing.expectEqual(@as(usize, 2), gateway.index);
 
-    // Verify API key was correctly sent (should be compatible secret, not others)
+    // Verify API key was correctly sent
     try std.testing.expectEqualStrings("COMPATIBLE-SECRET-EXPECTED", gateway.request_api_keys.items[0]);
     try std.testing.expectEqualStrings("COMPATIBLE-SECRET-EXPECTED", gateway.request_api_keys.items[1]);
 
-    // Verify tool was executed via hooks (check that the file was read)
-    // The FakeAgentRuntimeDeps will have recorded the tool execution; we can check via history
+    // Verify tool was executed via hooks
     const history = hooks.history.items;
     var found_tool_result = false;
     for (history) |msg| {
