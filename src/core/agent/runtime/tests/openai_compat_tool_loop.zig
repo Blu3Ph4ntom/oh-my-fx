@@ -21,9 +21,11 @@ test "openai_compatible tool loop via orchestrator with real read_file" {
         },
     };
     var gateway = FakeGateway.init(alloc, &completions);
+    _ = &gateway;
     defer gateway.deinit();
 
     var hooks = test_support.FakeAgentRuntimeDeps.init(alloc);
+    _ = &hooks;
     defer hooks.deinit();
 
     var fixture = test_support.PromptFixture{};
