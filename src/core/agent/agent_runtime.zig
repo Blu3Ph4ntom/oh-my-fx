@@ -46,6 +46,7 @@ test {
     _ = @import("runtime/tests/tool_flow.zig");
     _ = @import("runtime/tests/interruption_flow.zig");
     _ = @import("runtime/tests/finalization_flow.zig");
+    _ = @import("runtime/tests/openai_compat_tool_loop.zig");
     _ = @import("runtime/orchestrator.zig");
     _ = @import("runtime/vision_contracts.zig");
 }
