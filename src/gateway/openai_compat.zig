@@ -234,8 +234,8 @@ test "e2e openai_compatible tool loop with fixture" {
     // For now we assert the provider and fixture are wired.
     const alloc = std.testing.allocator;
     const url = "http://127.0.0.1:0/v1/chat/completions";
-    try std.testing.expect(!openai_compat.isLoopbackHttpUrl("https://127.0.0.1:0/v1/chat/completions"));
-    try std.testing.expect(openai_compat.isLoopbackHttpUrl("http://127.0.0.1:1234/v1/chat/completions"));
+    try std.testing.expect(!isLoopbackHttpUrl("https://127.0.0.1:0/v1/chat/completions"));
+    try std.testing.expect(isLoopbackHttpUrl("http://127.0.0.1:1234/v1/chat/completions"));
     _ = alloc;
     _ = url;
 }
