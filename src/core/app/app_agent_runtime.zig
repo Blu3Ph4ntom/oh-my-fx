@@ -1065,6 +1065,10 @@ pub fn Runtime(comptime App: type) type {
                         .agent_stream_provider = tool_context.agent_stream_provider,
                         .permission_reviewer_provider = tool_context.permission_reviewer_provider,
                     },
+                    .grok = .{
+                        .agent_stream_provider = tool_context.agent_stream_provider,
+                        .permission_reviewer_provider = tool_context.permission_reviewer_provider,
+                    },
                     .openai_compatible = .{
                         .agent_stream_provider = tool_context.agent_stream_provider,
                         .permission_reviewer_provider = tool_context.permission_reviewer_provider,

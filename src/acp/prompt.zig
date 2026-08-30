@@ -710,6 +710,10 @@ pub fn runSubagentChild(
                 .agent_stream_provider = server.streamProviderFor(state, .codex),
                 .permission_reviewer_provider = state.cfg.codex_permission_reviewer_provider,
             },
+            .grok = .{
+                .agent_stream_provider = server.streamProviderFor(state, .grok),
+                .permission_reviewer_provider = null,
+            },
             .openai_compatible = .{
                 .agent_stream_provider = server.streamProviderFor(state, .openai_compatible),
                 .permission_reviewer_provider = null,

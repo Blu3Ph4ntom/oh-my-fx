@@ -1708,6 +1708,7 @@ fn handleSetConfigOption(state: *ServerState, alloc: Allocator, msg: *jsonrpc.Me
             const saved_model = switch (target) {
                 .gateway => settings.model,
                 .codex => settings.codex_model,
+                .grok => settings.model,
                 .openai_compatible => settings.model,
             };
             var selected_model = catalog.items[0].id;

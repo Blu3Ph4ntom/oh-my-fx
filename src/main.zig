@@ -1610,6 +1610,13 @@ const App = struct {
                 else
                     null,
             },
+            .grok = .{
+                .agent_stream_provider = if (comptime host_target.is_wasm)
+                    agent_stream_provider.unavailable_provider
+                else
+                    builtin_providers.agentStream(.grok),
+                .permission_reviewer_provider = null,
+            },
             .openai_compatible = .{
                 .agent_stream_provider = if (comptime host_target.is_wasm)
                     agent_stream_provider.unavailable_provider
