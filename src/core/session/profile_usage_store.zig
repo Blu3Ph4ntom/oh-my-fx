@@ -409,7 +409,7 @@ pub const Store = struct {
             if (writable) .read_write else .read_only,
         );
         if (writable) {
-            file.setPermissions(zio, private_file_permissions) catch
+            io_mod.setPermissions(file, private_file_permissions) catch
                 return error.PrivateStatePermissionsUnsupported;
         }
         const verified = if (writable) try file.stat(zio) else initial;

@@ -292,7 +292,7 @@ pub const Store = struct {
         const initial = try file.stat(zio);
         if (initial.kind != .file or initial.nlink != 1) return error.DurablePathUnsafe;
         if (writable) {
-            file.setPermissions(zio, private_file_permissions) catch {
+            io_mod.setPermissions(file, private_file_permissions) catch {
                 return error.PrivateStatePermissionsUnsupported;
             };
         }

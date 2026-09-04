@@ -309,7 +309,7 @@ fn copyBinary(src_path: []const u8, dest_path: []const u8) !void {
         dest.writeStreamingAll(zio, transfer_buf[0..n]) catch return error.ReplaceFailed;
     }
 
-    dest.setPermissions(zio, stat.permissions) catch {};
+    io_mod.setPermissions(dest, stat.permissions) catch {};
 }
 
 fn writeTempFile(dir: std.Io.Dir, name: []const u8, content: []const u8) !void {
