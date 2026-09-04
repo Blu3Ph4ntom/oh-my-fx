@@ -62,3 +62,4 @@ benchmarks/baseline.json
 tmp/
 tmp-win-*.txt
 tmp-hello*
+tmp-w*.txt
