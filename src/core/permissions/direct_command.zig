@@ -198,7 +198,7 @@ fn executeDirectReadOnlyWithLimitAndTestControls(
     if (backend != .none and backend != .macos) {
         return error.UnsupportedDirectBackend;
     }
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) {
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) {
         return error.UnsupportedDirectPlatform;
     }
     if (backend == .macos and builtin.os.tag != .macos) {
@@ -235,7 +235,7 @@ fn executeDirectReadOnlyWithLimitAndTestControls(
             .stdin = if (child_count == 0) .ignore else .pipe,
             .stdout = .pipe,
             .stderr = .pipe,
-            .pgid = if (builtin.os.tag != .windows and builtin.os.tag != .wasi)
+            .pgid = if (comptime builtin.os.tag != .windows and builtin.os.tag != .wasi)
                 (if (child_count == 0) 0 else group_id)
             else
                 null,
@@ -737,7 +737,7 @@ fn deadlineExpired(cfg: sandbox.Config) bool {
 }
 
 fn signalGroup(group_id: ?std.posix.pid_t, force: bool) void {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
     const pid = group_id orelse return;
     std.posix.kill(-pid, if (force) std.posix.SIG.KILL else std.posix.SIG.TERM) catch |err| switch (err) {
         error.ProcessNotFound => {},
@@ -947,7 +947,7 @@ test "direct termination arbiter gives cancellation and timeout precedence" {
 }
 
 test "direct executor runs fixed argv with sanitized environment and no artifact" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const argv = [_][]const u8{"/usr/bin/env"};
     const stages = [_]command_effect.DirectStage{.{
@@ -1015,7 +1015,7 @@ test "direct executor runs a supported pipeline and reports final output" {
     const foreground = result.command_result.?.foreground;
     try std.testing.expectEqualStrings("printf x | wc -c", foreground.command);
     try std.testing.expectEqual(@as(?i64, 0), foreground.exit_code);
-    const expected_stdout_bytes: usize = if (builtin.os.tag == .linux) 2 else 9;
+    const expected_stdout_bytes: usize = if (comptime builtin.os.tag == .linux) 2 else 9;
     try std.testing.expectEqual(expected_stdout_bytes, foreground.stdout_bytes);
     try std.testing.expectEqual(@as(?[]const u8, null), foreground.output_file);
     try std.testing.expectEqual(@as(?[]const u8, null), foreground.stdout_file);
@@ -1073,7 +1073,7 @@ fn createListingFiles(
 }
 
 test "direct executor enforces canonical capacity with native large ls output" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -1193,7 +1193,7 @@ test "direct executor admits exact output limit and rejects limit plus one witho
 }
 
 test "direct executor canonical limit covers stderr and counted pipeline relays" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const exact_stderr_argv = [_][]const u8{
         "/usr/bin/awk",
@@ -1318,7 +1318,7 @@ test "direct executor charges non-final pipeline bytes before relay" {
 }
 
 test "direct executor enforces one budget across concurrent stdout and stderr" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const exact_argv = [_][]const u8{
         "/bin/sh",
@@ -1360,7 +1360,7 @@ test "direct executor enforces one budget across concurrent stdout and stderr" {
 }
 
 test "direct executor reaps partial spawn and output-limit process groups" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const PidCapture = struct {
         pid: ?std.posix.pid_t = null,
@@ -1444,7 +1444,7 @@ test "direct executor reaps partial spawn and output-limit process groups" {
 }
 
 test "direct executor cleans up cancellation after the first pipeline spawn" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     var cancel = std.atomic.Value(bool).init(false);
     const CancelAfterSpawn = struct {
@@ -1573,7 +1573,7 @@ const CallbackCapture = struct {
 };
 
 test "direct executor callbacks receive only bounded projected output" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const argv = [_][]const u8{
         "/bin/sh",
@@ -1609,7 +1609,7 @@ test "direct executor callbacks receive only bounded projected output" {
 }
 
 test "direct executor raw callback projection keeps projected result isolated" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const argv = [_][]const u8{
         "/bin/sh",
@@ -1641,7 +1641,7 @@ test "direct executor raw callback projection keeps projected result isolated" {
 }
 
 test "direct executor accepted callbacks preserve repeated newline-free stream order" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const argv = [_][]const u8{
         "/bin/sh",
@@ -1673,7 +1673,7 @@ test "direct executor accepted callbacks preserve repeated newline-free stream o
 }
 
 test "direct executor keeps stderr projector state independent per child" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const producer_argv = [_][]const u8{
         "/bin/sh",
@@ -1729,7 +1729,7 @@ test "direct executor reports final stage status without pipefail" {
 }
 
 test "direct relay treats a closed downstream pipe as normal completion" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const argv = [_][]const u8{"/usr/bin/false"};
     var child = try std.process.spawn(io_mod.getIo(), .{
@@ -1750,7 +1750,7 @@ test "direct relay treats a closed downstream pipe as normal completion" {
 }
 
 test "direct executor treats downstream pipe closure as normal pipeline completion" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const producer_argv = [_][]const u8{
         "/bin/sh",
@@ -1846,7 +1846,7 @@ test "direct executor cancellation and timeout terminate and reap the process gr
 }
 
 test "direct executor flushes partial callback output before timeout" {
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const argv = [_][]const u8{
         "/bin/sh",

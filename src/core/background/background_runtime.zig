@@ -2827,7 +2827,7 @@ fn captureProcessTokenForTest(
 }
 
 test "saved headless delivery waits for the initial record" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -2872,7 +2872,7 @@ test "saved headless delivery waits for the initial record" {
 }
 
 test "saved headless retries transient process identity unavailability before release" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -2951,7 +2951,7 @@ test "saved headless retries transient process identity unavailability before re
 }
 
 test "saved headless keeps command unreleased when process identity stays unavailable" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -3029,7 +3029,7 @@ test "saved headless keeps command unreleased when process identity stays unavai
 }
 
 test "saved headless persistence failure closes the unreleased script pipe" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -3076,7 +3076,7 @@ test "saved headless persistence failure closes the unreleased script pipe" {
 }
 
 test "durable long lived persistence failure keeps the degraded release" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});

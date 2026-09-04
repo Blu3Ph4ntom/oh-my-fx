@@ -70,7 +70,7 @@ fn spawnPrepared(
     const argv: []const []const u8 = switch (request.isolation) {
         .none => &direct_argv,
         .macos_profile => |profile_path| blk: {
-            if (builtin.os.tag != .macos) return error.Unsupported;
+            if (comptime builtin.os.tag != .macos) return error.Unsupported;
             sandbox_argv = .{
                 "/usr/bin/sandbox-exec",
                 "-f",
@@ -290,7 +290,7 @@ fn matchToken(
 }
 
 fn readLinuxProcStat(file: std.Io.File, buffer: []u8) !usize {
-    if (builtin.os.tag != .linux) return error.ProcessIdentityUnsupported;
+    if (comptime builtin.os.tag != .linux) return error.ProcessIdentityUnsupported;
     while (true) {
         // A process can disappear after open, and procfs reports that read as
         // ESRCH. Read directly so the expected race does not reach Zig's
@@ -389,7 +389,7 @@ fn captureLinuxToken(
 fn captureMacOSToken(
     pid: std.posix.pid_t,
 ) !process_supervisor.ProcessInstanceToken {
-    if (builtin.os.tag != .macos) return error.ProcessIdentityUnsupported;
+    if (comptime builtin.os.tag != .macos) return error.ProcessIdentityUnsupported;
     const ProcBsdInfo = extern struct {
         pbi_flags: u32,
         pbi_status: u32,
@@ -480,7 +480,7 @@ fn captureMacOSToken(
 /// Process identifier used by the background supervisor. POSIX pids do not
 /// exist on Windows (`std.posix.pid_t` is a HANDLE there), so Windows tracks
 /// processes by numeric DWORD id instead.
-const Pid = if (builtin.os.tag == .windows) u32 else Pid;
+const Pid = if (comptime builtin.os.tag == .windows) u32 else Pid;
 
 fn formatChildPid(alloc: Allocator, id: std.process.Child.Id) ![]u8 {
     if (comptime builtin.os.tag == .windows) return std.fmt.allocPrint(alloc, "{d}", .{@intFromPtr(id)});
@@ -833,7 +833,7 @@ const SpawnedBackgroundHandshake = struct {
         process_token: ?process_supervisor.ProcessInstanceToken,
         timeout_ms: i64,
     ) bool {
-        if (builtin.os.tag == .windows or builtin.os.tag == .wasi) {
+        if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) {
             return waitForProcessExit(
                 alloc,
                 self.pid,
@@ -1126,7 +1126,7 @@ test "native provider transfers a prepared process to its owned handle" {
 }
 
 test "native provider captures the current process identity" {
-    if (builtin.os.tag != .linux and builtin.os.tag != .macos) {
+    if (comptime builtin.os.tag != .linux and builtin.os.tag != .macos) {
         return error.SkipZigTest;
     }
 
@@ -1135,7 +1135,7 @@ test "native provider captures the current process identity" {
     defer alloc.free(pid);
 
     const token = try provider.captureToken(alloc, pid);
-    const platform = if (builtin.os.tag == .linux) "linux:" else "macos:";
+    const platform = if (comptime builtin.os.tag == .linux) "linux:" else "macos:";
     try std.testing.expect(std.mem.startsWith(u8, token.view(), platform));
 }
 
@@ -1266,7 +1266,7 @@ test "released background command does not inherit release pipe as stdin" {
 }
 
 test "unreleased background cleanup reaps an exited child before token liveness" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     const argv = [_][]const u8{

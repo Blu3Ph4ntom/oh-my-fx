@@ -1566,7 +1566,7 @@ test "planner preserves accepted printf argv exactly" {
 
 test "planner native printf forms match shell-visible execution" {
     const builtin = @import("builtin");
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const commands = [_][]const u8{
         "printf x",
@@ -1583,7 +1583,7 @@ test "planner native printf forms match shell-visible execution" {
 
 test "planner generated native printf matrix matches shell bytes status and stderr" {
     const builtin = @import("builtin");
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const alloc = std.testing.allocator;
     const data_classes = [_][]const u8{
@@ -1623,7 +1623,7 @@ test "planner generated native printf matrix matches shell bytes status and stde
 
 test "planner native ls policy preserves reviewed target behavior" {
     const builtin = @import("builtin");
-    if (builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) return error.SkipZigTest;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});

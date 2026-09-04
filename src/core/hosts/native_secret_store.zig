@@ -11,7 +11,7 @@ const Allocator = std.mem.Allocator;
 
 /// Names the backend that answers on this platform so operators can tell where a
 /// stored key lives without knowing how the backend is selected.
-const backend_label = if (builtin.os.tag == .macos) "macOS Keychain" else "profile file";
+const backend_label = if (comptime builtin.os.tag == .macos) "macOS Keychain" else "profile file";
 
 const max_key_file_bytes: usize = 8 * 1024;
 

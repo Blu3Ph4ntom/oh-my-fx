@@ -1456,7 +1456,7 @@ pub const ClipboardImageAttachment = struct {
 };
 
 pub fn loadClipboardImageAttachment(alloc: std.mem.Allocator) !ClipboardImageAttachment {
-    if (builtin.os.tag != .macos) return error.Unsupported;
+    if (comptime builtin.os.tag != .macos) return error.Unsupported;
 
     const source_dir = try createTempSnapshotDir(alloc);
     errdefer {

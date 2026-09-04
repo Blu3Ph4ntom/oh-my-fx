@@ -6119,7 +6119,7 @@ test "request tool permission checks copy and rename destinations" {
 }
 
 test "run_command timeout returns model-visible failure" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -6407,7 +6407,7 @@ test "interactive devbox success emits raw provider output once" {
 }
 
 test "run_command reactive sandbox retry timeout retains both attempts" {
-    if (builtin.os.tag != .macos) return;
+    if (comptime builtin.os.tag != .macos) return;
 
     const alloc = std.testing.allocator;
     const zio = io_mod.getIo();
@@ -6524,7 +6524,7 @@ test "run_command reactive sandbox retry timeout retains both attempts" {
 }
 
 test "run_command post-spawn cancellation returns structured evidence in every mode" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -6651,7 +6651,7 @@ test "run_command post-spawn cancellation returns structured evidence in every m
 }
 
 test "broader sandbox retry consumes the original command timeout budget" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     var rt = TestRuntime{
         .command_timeout_ms = 1,
@@ -6695,7 +6695,7 @@ test "broader sandbox retry consumes the original command timeout budget" {
 }
 
 test "pre-spawn broader retry cancellation defers tool diagnostics" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     diagnostics.resetForTest();
     defer diagnostics.resetForTest();
@@ -6753,7 +6753,7 @@ test "pre-spawn broader retry cancellation defers tool diagnostics" {
 }
 
 test "run_command success exposes structured foreground metadata" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     var rt = TestRuntime{
         .permission_mode = .auto,
@@ -6925,7 +6925,7 @@ test "browser run_command maps host cancellation and deadline without signal or 
 }
 
 test "run_command propagates output callback failure" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const FailOutput = struct {
         fn write(_: *anyopaque, _: ?types.ToolLifecycleId, _: command_contract.CommandOutputStream, _: []const u8) error{OutOfMemory}!void {
@@ -6956,7 +6956,7 @@ test "run_command propagates output callback failure" {
 }
 
 test "run_command returns model output and structured metadata" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     var rt = TestRuntime{
         .permission_mode = .auto,
@@ -6988,7 +6988,7 @@ test "run_command returns model output and structured metadata" {
 }
 
 test "run_command nonzero exit returns structured masked failure" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     var rt = TestRuntime{
         .permission_mode = .auto,
@@ -7028,7 +7028,7 @@ test "run_command nonzero exit returns structured masked failure" {
 }
 
 test "run_command huge output exposes truncation and artifact paths without stdout body" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return;
 
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -7070,7 +7070,7 @@ test "run_command huge output exposes truncation and artifact paths without stdo
 }
 
 test "run_command reactive sandbox widening preserves the restricted attempt" {
-    if (builtin.os.tag != .macos) return;
+    if (comptime builtin.os.tag != .macos) return;
 
     var rt = TestRuntime{
         .permission_mode = .auto,
@@ -7117,7 +7117,7 @@ test "run_command reactive sandbox widening preserves the restricted attempt" {
 }
 
 test "run_command preflight sandbox widening reports that no attempt ran" {
-    if (builtin.os.tag != .macos) return;
+    if (comptime builtin.os.tag != .macos) return;
 
     diagnostics.resetForTest();
     defer diagnostics.resetForTest();

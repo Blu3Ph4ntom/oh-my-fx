@@ -1800,7 +1800,7 @@ test "prepare derives a missing write without creating the target" {
 }
 
 test "prepare shows the canonical external target when a symlink redirects outside the workspace" {
-    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
 
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
@@ -2147,7 +2147,7 @@ test "prepare rejects call target and authority identity mismatches" {
 }
 
 test "prepare rejects an intermediate-directory retarget" {
-    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -3249,7 +3249,7 @@ test "apply returns deepest-first bounded residue when created parents are not e
 
 test "apply preserves the existing destination mode" {
     if (comptime io_mod.is_windows) return error.SkipZigTest; // Mode enforcement is POSIX-only.
-    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

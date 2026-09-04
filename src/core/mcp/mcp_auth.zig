@@ -2403,7 +2403,7 @@ test "authorization redirect target must match the registered callback" {
 }
 
 test "interactive callback wait observes lifecycle cancellation" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) {
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) {
         return error.SkipZigTest;
     }
     var address = try std.Io.net.IpAddress.parse("127.0.0.1", 0);

@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 
 /// Process identifier used by the tracker. `std.posix.pid_t` is a HANDLE on
 /// Windows, so Windows tracks processes by numeric DWORD id instead.
-const Pid = if (builtin.os.tag == .windows) u32 else std.posix.pid_t;
+const Pid = if (comptime builtin.os.tag == .windows) u32 else std.posix.pid_t;
 
 const Identity = union(enum) {
     linux_start_ticks: u64,
@@ -543,7 +543,7 @@ fn openLinuxProcFile(path: []const u8) !?std.Io.File {
 }
 
 test "Linux proc helpers treat missing process data as vanished" {
-    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .linux) return error.SkipZigTest;
     try std.testing.expect(
         (try openLinuxProcDir("/proc/self/fx-process-tree-missing")) == null,
     );

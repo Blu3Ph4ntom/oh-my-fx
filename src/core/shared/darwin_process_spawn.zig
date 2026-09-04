@@ -301,7 +301,7 @@ fn close_fd(fd: std.posix.fd_t) void {
 }
 
 fn darwin_io() !std.Io {
-    if (builtin.os.tag != .macos) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     return wrap(std.testing.io);
 }
 
@@ -399,7 +399,7 @@ fn reap_child(io: std.Io, pid: std.posix.pid_t) void {
     }
 }
 
-const max_tracked_fd = if (builtin.os.tag == .macos) std.c.OPEN_MAX else 256;
+const max_tracked_fd = if (comptime builtin.os.tag == .macos) std.c.OPEN_MAX else 256;
 
 fn open_fd_snapshot() [max_tracked_fd]bool {
     if (comptime builtin.os.tag == .windows) return [_]bool{false} ** max_tracked_fd;

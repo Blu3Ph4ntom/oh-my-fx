@@ -3412,7 +3412,7 @@ fn handleSigWinchWeb() callconv(.c) void {
 
 const handle_sigwinch: app_lifecycle.ResizeHandler = if (host_target.is_wasm)
     handleSigWinchWeb
-else if (builtin.os.tag == .windows)
+else if (comptime builtin.os.tag == .windows)
     handleSigWinchIgnored
 else
     handleSigWinchNative;

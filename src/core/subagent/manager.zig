@@ -11555,6 +11555,8 @@ fn runProcessDeliveryRace(
     boundary: bool,
     action: ProcessDeliveryRaceAction,
 ) !ProcessDeliveryOutcome {
+    // Pipe/fork delivery harness serves POSIX-only tests.
+    if (comptime builtin.os.tag == .windows) return error.ProcessPipeFailed;
     var ready_pipe: [2]std.c.fd_t = undefined;
     if (std.c.pipe(&ready_pipe) != 0) return error.ProcessPipeFailed;
     defer closeProcessFd(ready_pipe[0]);
@@ -11770,6 +11772,8 @@ test "delivery projections release ordered locks on every allocation failure" {
 }
 
 test "independent process delivery queries cannot cross detach or reparent" {
+    // Fork/pipe delivery harness has no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (comptime !@hasDecl(std.c, "fork")) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);

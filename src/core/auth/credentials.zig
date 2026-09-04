@@ -171,7 +171,7 @@ pub fn catalogAccessForCredential(
 
 /// Current native product copy. Store mechanics and availability come from the
 /// injected host port; Core retains the stable user-facing source name.
-pub const stored_key_backend_label = if (builtin.os.tag == .macos) "macOS Keychain" else "profile file";
+pub const stored_key_backend_label = if (comptime builtin.os.tag == .macos) "macOS Keychain" else "profile file";
 
 /// Both modes resolve the same source set; the mode selects only whether an expired
 /// fx login session is refreshed first.

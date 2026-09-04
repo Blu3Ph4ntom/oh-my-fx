@@ -79,7 +79,7 @@ test "Darwin process I/O replaces only processSpawn with stable storage" {
 }
 
 test "getIo applies Darwin process selection to the test fallback" {
-    if (builtin.os.tag != .macos) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
 
     const previous = real_io;
     real_io = null;
@@ -91,7 +91,7 @@ test "getIo applies Darwin process selection to the test fallback" {
 }
 
 test "getIo Darwin test fallback runs a child through the selected backend" {
-    if (builtin.os.tag != .macos) return error.SkipZigTest;
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
 
     const previous = real_io;
     real_io = null;

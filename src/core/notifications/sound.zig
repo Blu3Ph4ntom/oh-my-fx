@@ -133,7 +133,7 @@ const Dependencies = struct {
         if (comptime builtin.os.tag != .macos) {
             return .{
                 .ctx = null,
-                .platform = if (builtin.os.tag == .linux) .linux else .unsupported,
+                .platform = if (comptime builtin.os.tag == .linux) .linux else .unsupported,
                 .spawn = unsupportedSpawnSoundProcess,
                 .start_waiter = unsupportedStartWaiter,
                 .sound_path = unavailableSoundPath,

@@ -939,7 +939,7 @@ fn launchHost(alloc: Allocator) !void {
         .stdin = .ignore,
         .stdout = .ignore,
         .stderr = .ignore,
-        .pgid = if (builtin.os.tag == .macos or builtin.os.tag == .linux)
+        .pgid = if (comptime builtin.os.tag == .macos or builtin.os.tag == .linux)
             0
         else
             null,

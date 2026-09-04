@@ -474,7 +474,7 @@ pub fn Handlers(comptime App: type) type {
                 else
                     false;
                 if (copied) break :blk .{ .copied_file = path };
-                if (builtin.os.tag == .macos) break :blk .{ .copy_failed = path };
+                if (comptime builtin.os.tag == .macos) break :blk .{ .copy_failed = path };
                 break :blk .{ .saved = path };
             } else blk: {
                 break :blk .unavailable;

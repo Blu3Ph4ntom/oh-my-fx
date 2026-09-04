@@ -9023,7 +9023,7 @@ test "runtime-wide recovery serialization observes the operation deadline" {
 }
 
 test "guarded stdio subscription startup releases catalog locks before transport commit" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
 
     const child = try std.process.spawn(std.testing.io, .{
         .argv = &.{ "sh", "-c", "while IFS= read -r request; do :; done" },
@@ -9119,7 +9119,7 @@ test "guarded stdio subscription startup releases catalog locks before transport
 }
 
 test "runtime shutdown releases catalog locks before subscription cancellation write" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
 
     const alloc = std.testing.allocator;
     var runtime = McpRuntime.init(alloc);
@@ -9944,7 +9944,7 @@ fn spawnStdioServer(alloc: Allocator, server: *McpServer, argv: []const []const 
         .stdout = .pipe,
         .stderr = .ignore,
         .environ_map = if (server.env_map != null) &server.env_map.? else null,
-        .pgid = if (builtin.os.tag == .windows) null else 0,
+        .pgid = if (comptime builtin.os.tag == .windows) null else 0,
     });
 
     server.dispatcher = try stdio_dispatcher.StdioDispatcher.create(
@@ -15326,7 +15326,7 @@ test "legacy URL waiter publication is allocator-safe and retirement wakes it" {
 }
 
 test "runtime retirement cancels a committed stdio tool call before waiting for its lease" {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
 
     const alloc = std.testing.allocator;
     const shell_server =

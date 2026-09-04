@@ -9,7 +9,7 @@ const frame_layout = @import("render_engine/frame_layout.zig");
 const cursor_probe = @import("terminal/cursor_probe.zig");
 const resize_runtime = @import("resize_runtime.zig");
 const ui_terminal = @import("terminal/terminal.zig");
-const wasm_terminal = if (builtin.os.tag == .wasi) @import("terminal/wasm_terminal.zig") else struct {};
+const wasm_terminal = if (comptime builtin.os.tag == .wasi) @import("terminal/wasm_terminal.zig") else struct {};
 
 const Allocator = std.mem.Allocator;
 const Layout = types.Layout;
@@ -35,7 +35,7 @@ extern "c" fn unlockpt(fd: c_int) c_int;
 extern "c" fn ptsname(fd: c_int) ?[*:0]u8;
 
 pub const supports_resize_signal = resize_runtime.supports_resize_signal;
-pub const ResizeHandler = if (builtin.os.tag == .wasi or builtin.os.tag == .windows)
+pub const ResizeHandler = if (comptime builtin.os.tag == .wasi or builtin.os.tag == .windows)
     *const fn () callconv(.c) void
 else
     std.posix.Sigaction.handler_fn;
@@ -66,7 +66,7 @@ pub const AlternateScreenOwner = enum {
 pub const TerminalState = struct {
     // `io_mod.stdinFd()` calls into kernel32 and cannot run at comptime for
     // a field default. Windows replaces this handle before terminal use.
-    stdin_fd: std.posix.fd_t = if (builtin.os.tag == .windows) std.os.windows.INVALID_HANDLE_VALUE else std.posix.STDIN_FILENO,
+    stdin_fd: std.posix.fd_t = if (comptime builtin.os.tag == .windows) std.os.windows.INVALID_HANDLE_VALUE else std.posix.STDIN_FILENO,
     windows_console_mode: std.os.windows.DWORD = 0,
     original_termios: std.posix.termios = undefined,
     raw_enabled: bool = false,

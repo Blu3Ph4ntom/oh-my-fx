@@ -1657,20 +1657,22 @@ fn jsonNumber(value: std.json.Value) !f64 {
 }
 
 fn terminateChild(child_id: std.process.Child.Id) void {
-    switch (builtin.os.tag) {
-        .windows => {
-            const windows = std.os.windows;
-            switch (windows.ntdll.NtTerminateProcess(child_id, @enumFromInt(1))) {
-                .SUCCESS, .PROCESS_IS_TERMINATING, .ACCESS_DENIED => {},
-                else => |status| debug_trace.logf(
-                    "mcp",
-                    "failed to terminate stdio child status={any}",
-                    .{status},
-                ),
-            }
-        },
-        .wasi => {},
-        else => std.posix.kill(-child_id, .KILL) catch |group_err| {
+    // Runtime `switch` does not prune untaken branches from the link; the
+    // POSIX kill calls below would leave undefined imports on Windows.
+    if (comptime builtin.os.tag == .windows) {
+        const windows = std.os.windows;
+        switch (windows.ntdll.NtTerminateProcess(child_id, @enumFromInt(1))) {
+            .SUCCESS, .PROCESS_IS_TERMINATING, .ACCESS_DENIED => {},
+            else => |status| debug_trace.logf(
+                "mcp",
+                "failed to terminate stdio child status={any}",
+                .{status},
+            ),
+        }
+        return;
+    }
+    if (comptime builtin.os.tag == .wasi) return;
+    std.posix.kill(-child_id, .KILL) catch |group_err| {
             std.posix.kill(child_id, .KILL) catch |child_err| switch (child_err) {
                 error.ProcessNotFound => {},
                 else => debug_trace.logf(
@@ -1679,8 +1681,7 @@ fn terminateChild(child_id: std.process.Child.Id) void {
                     .{ child_id, @errorName(group_err), @errorName(child_err) },
                 ),
             };
-        },
-    }
+        }
 }
 
 test "classifyInbound separates responses notifications progress and requests" {
@@ -1844,7 +1845,7 @@ fn createShellDispatcher(script: []const u8) !struct {
     dispatcher: *StdioDispatcher,
     pid: std.posix.pid_t,
 } {
-    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) {
+    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) {
         return error.SkipZigTest;
     }
     const child = try std.process.spawn(io_mod.getIo(), .{

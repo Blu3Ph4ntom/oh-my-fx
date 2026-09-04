@@ -24,7 +24,7 @@ fn shellKind(path: []const u8) ?ShellKind {
 }
 
 fn fallbackLoginShell() []const u8 {
-    return if (builtin.os.tag == .macos) "/bin/zsh" else "/bin/bash";
+    return if (comptime builtin.os.tag == .macos) "/bin/zsh" else "/bin/bash";
 }
 
 fn supportedLoginShell(configured_login_shell: ?[]const u8) ResolveError![]const u8 {
@@ -356,7 +356,7 @@ test "resolver rejects missing relative and unsupported shells" {
 test "login shell resolution falls back without accepting explicit unsupported shells" {
     const fallback = try resolve("/opt/homebrew/bin/fish", .user_login);
     try std.testing.expectEqualStrings(fallbackLoginShell(), fallback.path);
-    if (builtin.os.tag == .macos) {
+    if (comptime builtin.os.tag == .macos) {
         try std.testing.expectEqualSlices(
             []const u8,
             &.{ "/bin/zsh", "-l", "-i" },

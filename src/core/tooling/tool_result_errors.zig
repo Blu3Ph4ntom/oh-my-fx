@@ -315,7 +315,7 @@ pub fn filesystemAccessDeniedJson(
 }
 
 fn filesystemAccessDeniedSuggestion() []const u8 {
-    if (builtin.os.tag == .macos) {
+    if (comptime builtin.os.tag == .macos) {
         return "Do not retry this path unchanged or propose a symlink. Fx permissions and /sandbox none cannot override the operating system. If the path is in a protected folder such as Desktop, Documents, or Downloads, ask the user to grant the terminal app Files and Folders or Full Disk Access. Otherwise, ask the user to correct OS filesystem permissions or move/copy the project to an accessible location.";
     }
     return "Do not retry this path unchanged or propose a symlink. Fx permissions and /sandbox none cannot override the operating system. Ask the user to correct OS filesystem permissions or move/copy the project to an accessible location.";
@@ -586,7 +586,7 @@ test "filesystem access denial JSON preserves recovery details" {
         try std.testing.expect(std.mem.find(u8, suggestion, "Do not retry") != null);
         try std.testing.expect(std.mem.find(u8, suggestion, "symlink") != null);
         try std.testing.expect(std.mem.find(u8, suggestion, "/sandbox none") != null);
-        if (builtin.os.tag == .macos) {
+        if (comptime builtin.os.tag == .macos) {
             try std.testing.expect(std.mem.find(u8, suggestion, "If the path is in a protected folder") != null);
             try std.testing.expect(std.mem.find(u8, suggestion, "Files and Folders") != null);
         }
