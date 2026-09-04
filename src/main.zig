@@ -3401,12 +3401,19 @@ fn handleSigWinchNative(_: std.posix.SIG) callconv(.c) void {
     resize_interlock.noteResizeSignal();
 }
 
+// Windows has no SIGWINCH; resizes arrive through console input events.
+fn handleSigWinchIgnored() callconv(.c) void {
+    resize_interlock.noteResizeSignal();
+}
+
 fn handleSigWinchWeb() callconv(.c) void {
     resize_interlock.noteResizeSignal();
 }
 
 const handle_sigwinch: app_lifecycle.ResizeHandler = if (host_target.is_wasm)
     handleSigWinchWeb
+else if (builtin.os.tag == .windows)
+    handleSigWinchIgnored
 else
     handleSigWinchNative;
 

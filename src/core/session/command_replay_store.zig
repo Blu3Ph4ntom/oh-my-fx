@@ -516,7 +516,7 @@ fn createSpool(
         const handle = try std.fmt.allocPrint(
             alloc,
             "fx-command-replay-{d}-{d}-{d}.bin",
-            .{ std.c.getpid(), io_mod.nanoTimestamp(), attempt },
+            .{ io_mod.currentProcessId(), io_mod.nanoTimestamp(), attempt },
         );
         const file = capability.createExclusiveFile(
             alloc,

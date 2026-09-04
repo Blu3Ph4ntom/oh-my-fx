@@ -429,6 +429,13 @@ pub fn privateFilePermissions() std.Io.File.Permissions {
     return permissionsFromMode(0o600);
 }
 
+/// Numeric current-process id for filenames and logs. `std.c.getpid` is a
+/// process HANDLE on Windows, not a number, so its address value is used.
+pub fn currentProcessId() u64 {
+    if (comptime is_windows) return @intCast(@intFromPtr(std.c.getpid()));
+    return @intCast(std.c.getpid());
+}
+
 pub fn stdinIsTty() bool {
     return std.Io.File.stdin().isTty(getIo()) catch false;
 }

@@ -460,7 +460,9 @@ pub const Record = struct {
             return error.InvalidTerminalRecord;
         }
         if (self.takeover_owner_pid) |pid| {
-            _ = std.fmt.parseInt(std.posix.pid_t, pid, 10) catch
+            // Numeric validation only; pids never legitimately parse as
+            // negative, and `std.posix.pid_t` is a HANDLE on Windows.
+            _ = std.fmt.parseInt(u64, pid, 10) catch
                 return error.InvalidTerminalRecord;
             _ = process_supervisor.ProcessInstanceToken.parse(
                 self.takeover_owner_process_token.?,
