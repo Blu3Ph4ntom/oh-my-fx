@@ -1673,15 +1673,15 @@ fn terminateChild(child_id: std.process.Child.Id) void {
     }
     if (comptime builtin.os.tag == .wasi) return;
     std.posix.kill(-child_id, .KILL) catch |group_err| {
-            std.posix.kill(child_id, .KILL) catch |child_err| switch (child_err) {
-                error.ProcessNotFound => {},
-                else => debug_trace.logf(
-                    "mcp",
-                    "failed to terminate stdio child pid={d} group_err={s} child_err={s}",
-                    .{ child_id, @errorName(group_err), @errorName(child_err) },
-                ),
-            };
-        }
+        std.posix.kill(child_id, .KILL) catch |child_err| switch (child_err) {
+            error.ProcessNotFound => {},
+            else => debug_trace.logf(
+                "mcp",
+                "failed to terminate stdio child pid={d} group_err={s} child_err={s}",
+                .{ child_id, @errorName(group_err), @errorName(child_err) },
+            ),
+        };
+    };
 }
 
 test "classifyInbound separates responses notifications progress and requests" {
