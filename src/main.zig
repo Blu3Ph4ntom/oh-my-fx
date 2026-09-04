@@ -3014,7 +3014,7 @@ fn environBlockFromRaw(raw_env: RawEnviron) std.process.Environ.Block {
     // On Windows `Environ.Block` is a global-env marker, not a slice. The
     // raw UTF-8 block from the C runtime stays available via `raw_env`.
     if (comptime builtin.os.tag == .windows) {
-        _ = raw_env;
+        _ = &raw_env;
         return .global;
     }
     var count: usize = 0;

@@ -1001,7 +1001,7 @@ fn validatePreimage(
             const expected_identity = prepared.policy_targets.items[0].expected_identity orelse
                 break :blk .stale;
             if (!identityEql(actual_identity, expected_identity)) break :blk .stale;
-            if ((stat.permissions).readOnly()) break :blk .io_failure;
+            if (io_mod.permissionsReadOnly(stat.permissions)) break :blk .io_failure;
             if (expected_permissions) |permissions| {
                 if (stat.permissions != permissions) break :blk .stale;
             }

@@ -468,7 +468,7 @@ test "file_info active output omits readonly" {
     defer alloc.free(path);
     setMode(path, 0o444) catch return error.SkipZigTest;
     const stat = try std.Io.Dir.cwd().statFile(io_mod.getIo(), path, .{});
-    if (!stat.permissions.readOnly()) return error.SkipZigTest;
+    if (!io_mod.permissionsReadOnly(stat.permissions)) return error.SkipZigTest;
     const workspace = try workspaceRoot(alloc, tmp);
     defer alloc.free(workspace);
 

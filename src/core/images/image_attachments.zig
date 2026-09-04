@@ -600,7 +600,8 @@ const SnapshotMetadata = struct {
 fn syncSnapshotDirectory(snapshot_dir: std.Io.Dir) !void {
     io_mod.syncVerifiedDir(snapshot_dir) catch |err| switch (err) {
         error.OperationUnsupported => {},
-        else => return err,
+        // Inferred error set is exactly this on Windows (early return).
+        else => if (comptime io_mod.is_windows) unreachable else return err,
     };
 }
 

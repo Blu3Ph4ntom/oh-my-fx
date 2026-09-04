@@ -1,0 +1,104 @@
+install
++- install fx
+   +- compile exe fx ReleaseSafe native 19 errors
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\Io\Writer.zig:1803:5: error: invalid format string 'd' for type '*anyopaque'
+    @compileError("invalid format string '" ++ fmt ++ "' for type '" ++ @typeName(@TypeOf(value)) ++ "'");
+    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    printValue__anon_470088: C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\Io\Writer.zig:1084:40
+    print__anon_470044: C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\Io\Writer.zig:719:25
+    24 reference(s) hidden; use '-freference-trace=26' to see all references
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\fmt.zig:436:41: error: access of union field 'int' while field 'pointer' is active
+    const Accumulate = std.meta.Int(info.int.signedness, @max(8, info.int.bits));
+                                    ~~~~^~~~
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\builtin.zig:550:18: note: union declared here
+pub const Type = union(enum) {
+                 ^~~~~
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\fmt.zig:436:41: error: access of union field 'int' while field 'pointer' is active
+    const Accumulate = std.meta.Int(info.int.signedness, @max(8, info.int.bits));
+                                    ~~~~^~~~
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\builtin.zig:550:18: note: union declared here
+pub const Type = union(enum) {
+                 ^~~~~
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\posix.zig:1075:9: error: use std.Io instead
+        @compileError("use std.Io instead");
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src\core\images\image_attachments.zig:603:14: error: unreachable else prong; all cases already handled
+        else => return err,
+        ~~~~~^~~~~~~~~~~~~
+src\core\mcp\mcp_auth.zig:1798:41: error: expected type 'c_long', found 'i64'
+    const timeout = std.posix.timeval{ .sec = seconds, .usec = 0 };
+                                       ~^~~~~~~~~~~~~
+src\core\mcp\mcp_auth.zig:1798:41: note: signed 32-bit int cannot represent all possible signed 64-bit values
+src\core\permissions\sandbox.zig:1944:33: error: expected integer or vector, found '*anyopaque'
+    return @intCast(std.c.getpid());
+                    ~~~~~~~~~~~~^~
+src\core\permissions\sandbox.zig:2710:20: error: negation of type '*anyopaque'
+    std.posix.kill(-pid, if (force) std.posix.SIG.KILL else std.posix.SIG.TERM) catch |err| switch (err) {
+                   ^~~~
+src\core\session\profile_usage_store.zig:612:9: error: expected type '@typeInfo(@typeInfo(@TypeOf(core.shared.io.openExistingRegularFile)).@"fn".return_type.?).error_union.error_set', found 'error{FileControlFailed}'
+        error.FileControlFailed => error.UsageReadFailed,
+        ^~~~~~~~~~~~~~~~~~~~~~~
+src\core\session\profile_usage_store.zig:612:9: note: 'error.FileControlFailed' not a member of destination error set
+src\core\shared\io.zig:483:65: error: comptime call of extern function
+    if (comptime is_windows) return @ptrCast(windowsGetStdHandle(windows_std_input_handle));
+                                             ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+src\ui\shell_runtime.zig:67:46: note: called at comptime from here
+    stdin_fd: std.posix.fd_t = io_mod.stdinFd(),
+                               ~~~~~~~~~~~~~~^~
+src\ui\shell_runtime.zig:67:46: note: struct field default value must be comptime-known
+src\core\workspace\workspace_access.zig:586:14: error: unreachable else prong; all cases already handled
+        else => return error.InvalidPath,
+        ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+src\tools\shell\background_process.zig:550:39: error: enum 'c.SIG__enum_3795' has no member named 'KILL'
+        sendSignal(pid, std.posix.SIG.KILL, &force_killed, &first_error);
+                                      ^~~~
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\c.zig:2614:17: note: enum declared here
+    .windows => enum(u32) {
+                ^~~~
+src\tools\shell\background_process.zig:577:70: error: expected type 'os.windows.Bool(c_int)', found 'comptime_int'
+        const handle = windowsOpenProcess(windows_PROCESS_TERMINATE, 0, pid) orelse {
+                                                                     ^
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\os\windows.zig:4106:12: note: enum declared here
+    return enum(Backing) {
+           ^~~~
+src\tools\shell\background_process.zig:645:110: note: parameter type declared here
+extern "kernel32" fn windowsOpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
+                                                                                               ~~~~~~~~~~~~~~^~~~~
+src\tools\shell\background_process.zig:623:108: error: expected type 'os.windows.Bool(c_int)', found 'comptime_int'
+        const handle = windowsOpenProcess(windows_SYNCHRONIZE | windows_PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) orelse {
+                                                                                                           ^
+C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib\std\os\windows.zig:4106:12: note: enum declared here
+    return enum(Backing) {
+           ^~~~
+src\tools\shell\background_process.zig:645:110: note: parameter type declared here
+extern "kernel32" fn windowsOpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
+                                                                                               ~~~~~~~~~~~~~~^~~~~
+src\tools\web\http_fetch.zig:45:29: error: type 'c_long' cannot represent integer value '2147772030'
+const wsa_fionbio: c_long = 0x8004667E;
+                            ^~~~~~~~~~
+src\tools\web\http_fetch.zig:77:22: error: duplicate switch value
+        wsa_enobufs, wsa_enomem => .NOBUFS,
+                     ^~~~~~~~~~
+src\tools\web\http_fetch.zig:77:9: note: previous value here
+        wsa_enobufs, wsa_enomem => .NOBUFS,
+        ^~~~~~~~~~~
+src\tools\web\http_fetch.zig:1639:65: error: expected pointer, found 'usize'
+            var wsa_fd: WindowsPollFd = .{ .fd = @intFromPtr(pfd.fd), .events = pfd.events, .revents = 0 };
+                                                             ~~~^~~
+src\tools\web\http_fetch.zig:1808:14: error: expected type 'usize', found '*anyopaque'
+            .fd = fd,
+            ~^~~~~~~
+src\ui\terminal\terminal.zig:39:40: error: type 'void' has no members
+    const req: c_int = @intCast(std.c.T.IOCGWINSZ);
+                                ~~~~~~~^~~~~~~~~~
+error: 19 compilation errors
+failed command: "C:\\Users\\heman\\AppData\\Local\\Temp\\zig-native\\zig-x86_64-windows-0.16.0\\zig.exe" build-exe -fstrip -fno-stack-check -fno-stack-protector -fomit-frame-pointer -fno-error-tracing -fno-unwind-tables -OReleaseSafe --dep build_options "-Mroot=A:\\Projects\\oh-my-fx\\src\\main.zig" "-Mbuild_options=.zig-cache\\c\\b4820477238bf32d98daf5b57b81a421\\options.zig" -lc --cache-dir .zig-cache --global-cache-dir "C:\\Users\\heman\\AppData\\Local\\zig" --name fx --zig-lib-dir "C:\\Users\\heman\\AppData\\Local\\Temp\\zig-native\\zig-x86_64-windows-0.16.0\\lib\\" --listen=-
+
+Build Summary: 1/4 steps succeeded (1 failed)
+install transitive failure
++- install fx transitive failure
+   +- compile exe fx ReleaseSafe native 19 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache\o\50a724841281255f3fad2196900d2258\build.exe C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\zig.exe C:\Users\heman\AppData\Local\Temp\zig-native\zig-x86_64-windows-0.16.0\lib A:\Projects\oh-my-fx .zig-cache C:\Users\heman\AppData\Local\zig --seed 0x949734bd -Z305064fb301b029e -Doptimize=ReleaseSafe

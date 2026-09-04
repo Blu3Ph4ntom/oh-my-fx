@@ -64,7 +64,10 @@ pub const AlternateScreenOwner = enum {
 };
 
 pub const TerminalState = struct {
-    stdin_fd: std.posix.fd_t = io_mod.stdinFd(),
+    // `io_mod.stdinFd()` calls into kernel32 and cannot run at comptime for
+    // a field default. Windows replaces this handle before terminal use.
+    stdin_fd: std.posix.fd_t = if (builtin.os.tag == .windows) std.os.windows.INVALID_HANDLE_VALUE else std.posix.STDIN_FILENO,
+    windows_console_mode: std.os.windows.DWORD = 0,
     original_termios: std.posix.termios = undefined,
     raw_enabled: bool = false,
     alternate_screen_owner: AlternateScreenOwner = .none,
@@ -106,11 +109,21 @@ pub const TerminalState = struct {
 
     pub fn captureOriginalTermios(self: *TerminalState) !void {
         if (comptime builtin.os.tag == .wasi) return;
+        if (comptime builtin.os.tag == .windows) {
+            self.stdin_fd = io_mod.stdinFd();
+            self.windows_console_mode = io_mod.windowsConsoleGetMode() orelse return error.NotATerminal;
+            return;
+        }
         self.original_termios = try std.posix.tcgetattr(self.stdin_fd);
     }
 
     pub fn enableRawMode(self: *TerminalState) !void {
         if (comptime builtin.os.tag == .wasi) {
+            self.raw_enabled = true;
+            return;
+        }
+        if (comptime builtin.os.tag == .windows) {
+            if (io_mod.windowsConsoleSetRaw() == null) return error.NotATerminal;
             self.raw_enabled = true;
             return;
         }
@@ -143,7 +156,9 @@ pub const TerminalState = struct {
 
     pub fn disableRawMode(self: *TerminalState) void {
         if (!self.raw_enabled) return;
-        if (comptime builtin.os.tag != .wasi) {
+        if (comptime builtin.os.tag == .windows) {
+            io_mod.windowsConsoleRestore(self.windows_console_mode);
+        } else if (comptime builtin.os.tag != .wasi) {
             std.posix.tcsetattr(self.stdin_fd, .FLUSH, self.original_termios) catch {};
         }
         self.raw_enabled = false;
@@ -255,6 +270,7 @@ pub const TerminalState = struct {
         if (comptime builtin.os.tag == .wasi) {
             return std.Io.File.stdin().readStreaming(io_mod.getIo(), &.{out});
         }
+        if (comptime builtin.os.tag == .windows) return io_mod.readStdinBytes(out);
         return std.posix.read(self.stdin_fd, out);
     }
 
@@ -265,6 +281,12 @@ pub const TerminalState = struct {
                 -1 => .{ .hung_up = true },
                 else => .{},
             };
+        }
+        // `std.posix.poll` has no ws2_32 binding in Zig 0.16; wait on the
+        // console input handle, which is all the TUI needs here.
+        if (comptime builtin.os.tag == .windows) {
+            const timeout: u64 = if (timeout_ms < 0) 0xFFFFFFFF else @intCast(timeout_ms);
+            return .{ .readable = io_mod.waitForStdinEnter(timeout) };
         }
         var fds = [_]std.posix.pollfd{.{
             .fd = self.stdin_fd,

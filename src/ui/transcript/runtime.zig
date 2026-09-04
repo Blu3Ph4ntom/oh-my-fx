@@ -4079,8 +4079,9 @@ fn sameFullDiffResolver(
 pub const TranscriptRuntime = struct {
     // `std.Io.File.stdout()` reads the PEB via inline assembly, which cannot
     // evaluate at comptime on Windows. The field is only ever overridden by
-    // tests, so zero it there; every other platform keeps the real default.
-    stdout_file: std.Io.File = if (builtin.os.tag == .windows) std.mem.zeroes(std.Io.File) else std.Io.File.stdout(),
+    // tests, so it holds a dummy handle there; every other platform keeps
+    // the real default.
+    stdout_file: std.Io.File = if (builtin.os.tag == .windows) .{ .handle = @ptrFromInt(1), .flags = .{ .nonblocking = false } } else std.Io.File.stdout(),
     sync_updates_enabled: bool = true,
     history_reset_uses_ris: bool = false,
     layout: Layout = undefined,

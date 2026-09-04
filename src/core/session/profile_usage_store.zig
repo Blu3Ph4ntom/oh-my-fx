@@ -608,9 +608,14 @@ fn openExistingUsageFile(
     dir: std.Io.Dir,
     mode: std.Io.Dir.OpenFileOptions.Mode,
 ) !std.Io.File {
-    return io_mod.openExistingRegularFile(dir, usage_file, mode) catch |err| switch (err) {
-        error.FileControlFailed => error.UsageReadFailed,
-        else => err,
+    return io_mod.openExistingRegularFile(dir, usage_file, mode) catch |err| {
+        // `FileControlFailed` cannot occur on Windows (no fcntl path), so it
+        // is absent from the inferred error set there.
+        if (comptime io_mod.is_windows) return err;
+        return switch (err) {
+            error.FileControlFailed => error.UsageReadFailed,
+            else => err,
+        };
     };
 }
 

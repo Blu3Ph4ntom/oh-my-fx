@@ -583,7 +583,9 @@ fn canonicalExistingDirectory(
     const canonical = io_mod.realpathAlloc(alloc, absolute) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.FileNotFound => return error.PathNotFound,
-        else => return error.InvalidPath,
+        // The inferred error set is exactly these two on Windows, where the
+        // POSIX fallback code after the comptime branch is pruned.
+        else => if (comptime io_mod.is_windows) unreachable else return error.InvalidPath,
     };
     errdefer alloc.free(canonical);
 

@@ -15,8 +15,11 @@ const is_windows = builtin.os.tag == .windows;
 // handful of syscalls below are declared here. Every WSA error is translated
 // to `posix.E` at this boundary, keeping the poll/read/write state machines
 // and their tests shared across platforms.
+// Layout-identical to WSAPOLLFD, so Windows passes these straight to WSAPoll.
+// The fd stays a `posix.fd_t` (a HANDLE on Windows) so shared construction
+// sites compile unchanged; only the poll implementation reinterprets it.
 const WindowsPollFd = extern struct {
-    fd: usize,
+    fd: posix.fd_t,
     events: i16,
     revents: i16,
 };
@@ -32,7 +35,7 @@ const poll_events = if (is_windows) struct {
 
 extern "ws2_32" fn wsaStartup(wVersionRequested: u16, lpWSAData: *anyopaque) callconv(.winapi) c_int;
 extern "ws2_32" fn wsaSocket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
-extern "ws2_32" fn wsaIoctlsocket(s: usize, cmd: c_long, argp: *c_ulong) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaIoctlsocket(s: usize, cmd: c_ulong, argp: *c_ulong) callconv(.winapi) c_int;
 extern "ws2_32" fn wsaConnect(s: usize, name: *const anyopaque, namelen: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn wsaPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn wsaRecv(s: usize, buf: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
@@ -42,7 +45,7 @@ extern "ws2_32" fn wsaClosesocket(s: usize) callconv(.winapi) c_int;
 extern "ws2_32" fn wsaGetLastError() callconv(.winapi) c_int;
 
 const wsa_invalid_socket: usize = std.math.maxInt(usize);
-const wsa_fionbio: c_long = 0x8004667E;
+const wsa_fionbio: c_ulong = @bitCast(@as(u32, 0x8004667E));
 const wsa_ewouldblock: c_int = 10035;
 const wsa_einprogress: c_int = 10036;
 const wsa_eintr: c_int = 10004;
@@ -53,7 +56,7 @@ const wsa_etimedout: c_int = 10060;
 const wsa_enetunreach: c_int = 10051;
 const wsa_ehostunreach: c_int = 10065;
 const wsa_enobufs: c_int = 10055;
-const wsa_enomem: c_int = 10055;
+// WSAENOBUFS and WSAENOMEM share value 10055; one arm covers both.
 const wsa_efault: c_int = 10014;
 const wsa_einval: c_int = 10022;
 const wsa_enotsock: c_int = 10038;
@@ -74,7 +77,7 @@ fn wsaErrorToErrno(code: c_int) posix.E {
         wsa_etimedout => .TIMEDOUT,
         wsa_enetunreach => .NETUNREACH,
         wsa_ehostunreach => .HOSTUNREACH,
-        wsa_enobufs, wsa_enomem => .NOBUFS,
+        wsa_enobufs => .NOBUFS,
         wsa_efault => .FAULT,
         wsa_einval => .INVAL,
         wsa_enotsock => .NOTSOCK,
@@ -1636,18 +1639,17 @@ fn pollDefault(_: ?*anyopaque, fds: []pollfd, timeout_ms: i32) PollError!usize {
     if (comptime is_windows) {
         var out_ready: usize = 0;
         for (fds) |*pfd| {
-            var wsa_fd: WindowsPollFd = .{ .fd = @intFromPtr(pfd.fd), .events = pfd.events, .revents = 0 };
-            const rc = wsaPoll(&wsa_fd, 1, timeout_ms);
+            pfd.revents = 0;
+            const rc = wsaPoll(pfd, 1, timeout_ms);
             if (rc < 0) {
                 const err = wsaErrorToErrno(wsaGetLastError());
                 return switch (err) {
                     .INTR => error.Interrupted,
-                    .NOBUFS, .NOMEM => error.SystemResources,
+                    .NOBUFS => error.SystemResources,
                     .NETDOWN => error.NetworkDown,
                     else => posix.unexpectedErrno(err),
                 };
             }
-            pfd.revents = wsa_fd.revents;
             out_ready += @intCast(rc);
         }
         return out_ready;

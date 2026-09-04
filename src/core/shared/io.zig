@@ -379,7 +379,15 @@ pub fn permissionsFromMode(mode: u32) std.Io.File.Permissions {
 /// paths should assert private ACLs here in a future change.
 pub fn permissionsOpenToGroupOther(permissions: std.Io.File.Permissions) bool {
     if (comptime is_windows) return false;
-    return io_mod.permissionsOpenToGroupOther(permissions);
+    return permissions.toMode() & 0o077 != 0;
+}
+
+/// True when no class holds write permission. Portable across the POSIX
+/// mode struct and the Windows attribute DWORD, whose std `.readOnly()`
+/// helper does not compile on Windows in Zig 0.16.
+pub fn permissionsReadOnly(permissions: std.Io.File.Permissions) bool {
+    if (comptime is_windows) return @intFromEnum(permissions) & 0x1 != 0;
+    return permissions.readOnly();
 }
 
 /// True when the owner class may write. Always true on Windows; the OS
@@ -392,13 +400,13 @@ pub fn permissionsOwnerWritable(permissions: std.Io.File.Permissions) bool {
 /// True for owner-only file modes (0600). Vacuously true on Windows.
 pub fn permissionsIsPrivateFile(permissions: std.Io.File.Permissions) bool {
     if (comptime is_windows) return true;
-    return io_mod.permissionsIsPrivateFile(permissions);
+    return permissions.toMode() & 0o777 == 0o600;
 }
 
 /// True for owner-only directory modes (0700). Vacuously true on Windows.
 pub fn permissionsIsPrivateDir(permissions: std.Io.File.Permissions) bool {
     if (comptime is_windows) return true;
-    return io_mod.permissionsIsPrivateDir(permissions);
+    return permissions.toMode() & 0o777 == 0o700;
 }
 
 /// Portable numeric mode for persistence and comparison. 0 on Windows.
@@ -443,6 +451,15 @@ extern "kernel32" fn windowsSetConsoleMode(hConsoleHandle: std.os.windows.HANDLE
 
 pub const windows_console_echo_input: std.os.windows.DWORD = 0x0004;
 pub const windows_console_line_input: std.os.windows.DWORD = 0x0002;
+pub const windows_console_processed_input: std.os.windows.DWORD = 0x0001;
+
+/// Current console input mode, if the handle is a console.
+pub fn windowsConsoleGetMode() ?std.os.windows.DWORD {
+    if (comptime !is_windows) return null;
+    var mode: std.os.windows.DWORD = 0;
+    if (windowsGetConsoleMode(windowsGetStdHandle(windows_std_input_handle), &mode) == .FALSE) return null;
+    return mode;
+}
 
 /// Puts the Windows console into character-by-character mode without echo
 /// for masked key prompts. Returns the previous mode for `windowsConsoleRestore`.
@@ -451,9 +468,11 @@ pub fn windowsConsoleSetRaw() ?std.os.windows.DWORD {
     if (comptime !is_windows) return null;
     const handle = windowsGetStdHandle(windows_std_input_handle);
     var mode: std.os.windows.DWORD = 0;
-    if (windowsGetConsoleMode(handle, &mode) == 0) return null;
-    const raw = mode & ~(windows_console_echo_input | windows_console_line_input);
-    if (windowsSetConsoleMode(handle, raw) == 0) return null;
+    if (windowsGetConsoleMode(handle, &mode) == .FALSE) return null;
+    // Clearing processed input lets Fx observe Ctrl-C itself, matching the
+    // POSIX raw mode that disables ISIG.
+    const raw = mode & ~(windows_console_echo_input | windows_console_line_input | windows_console_processed_input);
+    if (windowsSetConsoleMode(handle, raw) == .FALSE) return null;
     return mode;
 }
 
@@ -506,7 +525,7 @@ pub fn writeFileAtomic(alloc: std.mem.Allocator, path: []const u8, text: []const
     e2eFailIfDurableMutationAttempted();
     const maybe_existing_permissions = existingFilePermissions(path);
     if (maybe_existing_permissions) |existing_permissions| {
-        if (existing_permissions.readOnly()) return error.AccessDenied;
+        if (permissionsReadOnly(existing_permissions)) return error.AccessDenied;
     }
     const permissions = maybe_existing_permissions orelse .default_file;
     const temp_path = try std.fmt.allocPrint(alloc, "{s}.tmp.{d}", .{ path, nanoTimestamp() });
@@ -665,7 +684,7 @@ fn validateReplaceTarget(dir: std.Io.Dir, name: []const u8) !void {
         else => return err,
     };
     if (stat.kind != .file or stat.nlink != 1) return error.DurablePathUnsafe;
-    if ((stat.permissions).readOnly()) return error.AccessDenied;
+    if (permissionsReadOnly(stat.permissions)) return error.AccessDenied;
 }
 
 fn cleanupVerifiedTemp(dir: std.Io.Dir, name: []const u8) void {
@@ -730,7 +749,7 @@ pub fn durableReplaceVerifiedWithOps(
         return error.DurableReplacePostRenameFailed;
     };
     if (final_stat.kind != .file or final_stat.nlink != 1 or
-        !io_mod.permissionsIsPrivateFile(final_stat.permissions))
+        !permissionsIsPrivateFile(final_stat.permissions))
     {
         return error.DurableReplacePostRenameFailed;
     }
@@ -863,7 +882,7 @@ pub fn copyFileAtomic(alloc: std.mem.Allocator, source_path: []const u8, dest_pa
     const stat = try source.stat(zio);
     if (stat.kind != .file) return error.NotRegularFile;
     if (existingFilePermissions(dest_path)) |existing_permissions| {
-        if (existing_permissions.readOnly()) return error.AccessDenied;
+        if (permissionsReadOnly(existing_permissions)) return error.AccessDenied;
     }
 
     const temp_path = try std.fmt.allocPrint(alloc, "{s}.tmp.{d}", .{ dest_path, nanoTimestamp() });
@@ -1118,7 +1137,7 @@ test "writeFileAtomic preserves existing file permissions" {
     defer alloc.free(file_path);
 
     try writeFileAtomic(alloc, file_path, "first");
-    try std.Io.Dir.cwd().setFilePermissions(getIo(), file_path, io_mod.permissionsFromMode(0o755), .{});
+    try std.Io.Dir.cwd().setFilePermissions(getIo(), file_path, permissionsFromMode(0o755), .{});
     try writeFileAtomic(alloc, file_path, "second");
 
     const stat = try std.Io.Dir.cwd().statFile(getIo(), file_path, .{});

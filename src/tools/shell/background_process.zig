@@ -573,13 +573,13 @@ fn sendSignal(
     first_error: *?std.posix.KillError,
 ) void {
     if (comptime builtin.os.tag == .windows) {
-        _ = signal;
-        const handle = windowsOpenProcess(windows_PROCESS_TERMINATE, 0, pid) orelse {
+        _ = &signal;
+        const handle = windowsOpenProcess(windows_PROCESS_TERMINATE, .FALSE, pid) orelse {
             if (first_error.* == null) first_error.* = error.ProcessNotFound;
             return;
         };
         defer _ = windowsCloseHandle(handle);
-        if (windowsTerminateProcess(handle, 1) == 0) {
+        if (windowsTerminateProcess(handle, 1) == .FALSE) {
             if (first_error.* == null) first_error.* = error.ProcessNotFound;
             return;
         }
@@ -620,12 +620,12 @@ fn anyProcessTreeMemberRunning(
 
 fn isPidRunningRaw(pid: Pid) bool {
     if (comptime builtin.os.tag == .windows) {
-        const handle = windowsOpenProcess(windows_SYNCHRONIZE | windows_PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) orelse {
+        const handle = windowsOpenProcess(windows_SYNCHRONIZE | windows_PROCESS_QUERY_LIMITED_INFORMATION, .FALSE, pid) orelse {
             return windowsGetLastError() == windows_ERROR_ACCESS_DENIED;
         };
         defer _ = windowsCloseHandle(handle);
         var code: std.os.windows.DWORD = 0;
-        if (windowsGetExitCodeProcess(handle, &code) == 0) return true;
+        if (windowsGetExitCodeProcess(handle, &code) == .FALSE) return true;
         return code == windows_STILL_ACTIVE;
     }
     std.posix.kill(pid, @enumFromInt(0)) catch |err| switch (err) {
@@ -666,16 +666,16 @@ const WindowsProcessEntry = extern struct {
 
 fn collectDescendantPidsWindows(alloc: Allocator, root_pid: Pid) ![]Pid {
     const snapshot = windowsCreateToolhelp32Snapshot(windows_TH32CS_SNAPPROCESS, 0);
-    if (snapshot == @as(std.os.windows.HANDLE, @ptrFromInt(@as(usize, @bitCast(@as(isize, -1)))))) return error.ProcessListFailed;
+    if (snapshot == std.os.windows.INVALID_HANDLE_VALUE) return error.ProcessListFailed;
     defer _ = windowsCloseHandle(snapshot);
     var pairs: std.ArrayList(PidPair) = .empty;
     defer pairs.deinit(alloc);
     var entry: WindowsProcessEntry = std.mem.zeroes(WindowsProcessEntry);
     entry.dwSize = @sizeOf(WindowsProcessEntry);
-    if (windowsProcess32FirstW(snapshot, &entry) == 0) return error.ProcessListFailed;
+    if (windowsProcess32FirstW(snapshot, &entry) == .FALSE) return error.ProcessListFailed;
     while (true) {
         try pairs.append(alloc, .{ .pid = entry.th32ProcessID, .ppid = entry.th32ParentProcessID });
-        if (windowsProcess32NextW(snapshot, &entry) == 0) break;
+        if (windowsProcess32NextW(snapshot, &entry) == .FALSE) break;
     }
     var descendants: std.ArrayList(Pid) = .empty;
     errdefer descendants.deinit(alloc);

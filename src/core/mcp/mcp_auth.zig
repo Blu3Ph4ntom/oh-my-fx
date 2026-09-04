@@ -1793,9 +1793,24 @@ fn validateJsonContentType(content_type: ?[]const u8) !void {
     }
 }
 
+extern "ws2_32" fn mcpSetsockopt(s: usize, level: c_int, optname: c_int, optval: *const anyopaque, optlen: c_int) callconv(.winapi) c_int;
+
 fn setSocketTimeouts(socket: std.posix.socket_t, seconds: i64) void {
     if (comptime host_target.is_wasm) return;
-    const timeout = std.posix.timeval{ .sec = seconds, .usec = 0 };
+    // Winsock takes timeouts as DWORD milliseconds, not timeval.
+    if (comptime builtin.os.tag == .windows) {
+        const ms: u32 = @intCast(@max(0, @min(seconds * 1000, @as(i64, std.math.maxInt(u32)))));
+        var timeout_ms = ms;
+        const sock: usize = @intFromPtr(socket);
+        if (mcpSetsockopt(sock, 0xffff, 0x1006, @ptrCast(&timeout_ms), @sizeOf(u32)) != 0) {
+            debug_trace.logf("mcp", "OAuth receive timeout setup failed", .{});
+        }
+        if (mcpSetsockopt(sock, 0xffff, 0x1005, @ptrCast(&timeout_ms), @sizeOf(u32)) != 0) {
+            debug_trace.logf("mcp", "OAuth send timeout setup failed", .{});
+        }
+        return;
+    }
+    const timeout = std.posix.timeval{ .sec = @intCast(@max(0, @min(seconds, @as(i64, std.math.maxInt(c_long))))), .usec = 0 };
     const bytes = std.mem.asBytes(&timeout);
     std.posix.setsockopt(
         socket,
