@@ -2703,7 +2703,11 @@ fn wrapTestPreparedProcess(
 ) !background_process_provider.PreparedProcess {
     const state = try alloc.create(TestPreparedProcess);
     errdefer alloc.destroy(state);
-    const pid = try std.fmt.allocPrint(alloc, "{d}", .{child.id.?});
+    // `child.id` is a HANDLE on Windows, which has no decimal format.
+    const pid = if (comptime builtin.os.tag == .windows)
+        try std.fmt.allocPrint(alloc, "{d}", .{@intFromPtr(child.id.?)})
+    else
+        try std.fmt.allocPrint(alloc, "{d}", .{child.id.?});
     state.* = .{
         .alloc = alloc,
         .child = child,

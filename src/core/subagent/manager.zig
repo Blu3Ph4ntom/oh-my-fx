@@ -11299,6 +11299,8 @@ fn forkProcessMutation(
 }
 
 fn waitProcessMutation(pid: std.c.pid_t) !u8 {
+    // No waitpid on Windows; the calling tests are POSIX-only and skip there.
+    if (comptime builtin.os.tag == .windows) return error.ProcessWaitFailed;
     var status: c_int = 0;
     while (true) {
         const waited = std.c.waitpid(pid, &status, 0);
@@ -11365,6 +11367,8 @@ fn runProcessMutationPair(
 }
 
 test "competing processes converge while recovering one pending relationship transaction" {
+    // Fork-based mutation helpers have no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (comptime !@hasDecl(std.c, "fork")) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
@@ -11433,6 +11437,8 @@ test "competing processes converge while recovering one pending relationship tra
 }
 
 test "competing process interval polls append one durable delivery" {
+    // Fork-based mutation helpers have no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (comptime !@hasDecl(std.c, "fork")) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
@@ -11475,6 +11481,8 @@ test "competing process interval polls append one durable delivery" {
 }
 
 test "competing process policy admissions cannot cross the capacity budget" {
+    // Fork-based mutation helpers have no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (comptime !@hasDecl(std.c, "fork")) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
