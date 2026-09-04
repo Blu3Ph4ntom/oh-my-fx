@@ -3003,10 +3003,20 @@ fn rawArgs(c_argc: c_int, c_argv: [*][*:0]c_char) []const [*:0]const u8 {
 }
 
 fn argsFromRaw(raw_args: []const [*:0]const u8) std.process.Args {
+    // On Windows `Args.Vector` is WTF-16, which the C runtime does not hand
+    // us. The vector only feeds `argv0` display metadata; the real UTF-8
+    // arguments travel through `raw_args` everywhere else.
+    if (comptime builtin.os.tag == .windows) return .{ .vector = &[_]u16{} };
     return .{ .vector = raw_args };
 }
 
 fn environBlockFromRaw(raw_env: RawEnviron) std.process.Environ.Block {
+    // On Windows `Environ.Block` is a global-env marker, not a slice. The
+    // raw UTF-8 block from the C runtime stays available via `raw_env`.
+    if (comptime builtin.os.tag == .windows) {
+        _ = raw_env;
+        return .global;
+    }
     var count: usize = 0;
     while (raw_env[count] != null) : (count += 1) {}
     return .{ .slice = raw_env[0..count :null] };

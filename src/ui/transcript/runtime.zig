@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const debug_trace = @import("../../core/shared/debug_trace.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const input_action = @import("../../core/input/input_action.zig");
@@ -4076,7 +4077,10 @@ fn sameFullDiffResolver(
 }
 
 pub const TranscriptRuntime = struct {
-    stdout_file: std.Io.File = std.Io.File.stdout(),
+    // `std.Io.File.stdout()` reads the PEB via inline assembly, which cannot
+    // evaluate at comptime on Windows. The field is only ever overridden by
+    // tests, so zero it there; every other platform keeps the real default.
+    stdout_file: std.Io.File = if (builtin.os.tag == .windows) std.mem.zeroes(std.Io.File) else std.Io.File.stdout(),
     sync_updates_enabled: bool = true,
     history_reset_uses_ris: bool = false,
     layout: Layout = undefined,

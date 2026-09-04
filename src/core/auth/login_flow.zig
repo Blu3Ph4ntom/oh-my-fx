@@ -984,6 +984,13 @@ fn unavailableWaitForEnter(_: ?*anyopaque, _: u64) bool {
 }
 
 fn realWaitForEnter(_: ?*anyopaque, timeout_ms: u64) bool {
+    // `std.posix.poll` has no ws2_32 binding in Zig 0.16 and can never
+    // compile on Windows; wait on the console input handle instead.
+    if (comptime builtin.os.tag == .windows) {
+        if (!io_mod.waitForStdinEnter(timeout_ms)) return false;
+        discardStdinLine();
+        return true;
+    }
     var fds = [_]std.posix.pollfd{.{
         .fd = std.posix.STDIN_FILENO,
         .events = std.posix.POLL.IN,
@@ -999,7 +1006,10 @@ fn realWaitForEnter(_: ?*anyopaque, timeout_ms: u64) bool {
 fn discardStdinLine() void {
     var buf: [256]u8 = undefined;
     while (true) {
-        const n = std.posix.read(std.posix.STDIN_FILENO, &buf) catch return;
+        const n = if (comptime builtin.os.tag == .windows)
+            io_mod.readStdinBytes(&buf) catch return
+        else
+            std.posix.read(std.posix.STDIN_FILENO, &buf) catch return;
         if (n == 0) return;
         if (std.mem.findScalar(u8, buf[0..n], '\n') != null) return;
     }

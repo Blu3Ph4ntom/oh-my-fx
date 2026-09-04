@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const debug_trace = @import("../../core/shared/debug_trace.zig");
 const io_mod = @import("../../core/shared/io.zig");
 const url_policy = @import("url_policy.zig");
@@ -6,6 +7,97 @@ const url_policy = @import("url_policy.zig");
 const Allocator = std.mem.Allocator;
 const IpAddress = std.Io.net.IpAddress;
 const posix = std.posix;
+const is_windows = builtin.os.tag == .windows;
+
+// ---- Windows (ws2_32) transport -------------------------------------------
+// Zig 0.16 ships ws2_32 types but no function bindings (`std.pollfd`
+// does not even exist on Windows), and MSVCRT exports no sockets, so the
+// handful of syscalls below are declared here. Every WSA error is translated
+// to `posix.E` at this boundary, keeping the poll/read/write state machines
+// and their tests shared across platforms.
+const WindowsPollFd = extern struct {
+    fd: usize,
+    events: i16,
+    revents: i16,
+};
+const pollfd = if (is_windows) WindowsPollFd else pollfd;
+const poll_events = if (is_windows) struct {
+    // WSAPOLLFD event flags (Winsock2), not POSIX poll flags.
+    pub const IN: i16 = 0x0100;
+    pub const OUT: i16 = 0x0010;
+    pub const ERR: i16 = 0x0001;
+    pub const HUP: i16 = 0x0002;
+    pub const NVAL: i16 = 0x0004;
+} else posix.POLL;
+
+extern "ws2_32" fn wsaStartup(wVersionRequested: u16, lpWSAData: *anyopaque) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaSocket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
+extern "ws2_32" fn wsaIoctlsocket(s: usize, cmd: c_long, argp: *c_ulong) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaConnect(s: usize, name: *const anyopaque, namelen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaRecv(s: usize, buf: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaSend(s: usize, buf: *const anyopaque, len: c_int, flags: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaGetsockopt(s: usize, level: c_int, optname: c_int, optval: [*]u8, optlen: *c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaClosesocket(s: usize) callconv(.winapi) c_int;
+extern "ws2_32" fn wsaGetLastError() callconv(.winapi) c_int;
+
+const wsa_invalid_socket: usize = std.math.maxInt(usize);
+const wsa_fionbio: c_long = 0x8004667E;
+const wsa_ewouldblock: c_int = 10035;
+const wsa_einprogress: c_int = 10036;
+const wsa_eintr: c_int = 10004;
+const wsa_enetdown: c_int = 10050;
+const wsa_econnreset: c_int = 10054;
+const wsa_econnrefused: c_int = 10061;
+const wsa_etimedout: c_int = 10060;
+const wsa_enetunreach: c_int = 10051;
+const wsa_ehostunreach: c_int = 10065;
+const wsa_enobufs: c_int = 10055;
+const wsa_enomem: c_int = 10055;
+const wsa_efault: c_int = 10014;
+const wsa_einval: c_int = 10022;
+const wsa_enotsock: c_int = 10038;
+const wsa_enotconn: c_int = 10057;
+const wsa_eafnosupport: c_int = 10047;
+const wsa_emfile: c_int = 10024;
+const wsa_eacces: c_int = 10013;
+const wsa_sol_socket: c_int = 0xffff;
+const wsa_so_error: c_int = 0x1007;
+
+fn wsaErrorToErrno(code: c_int) posix.E {
+    return switch (code) {
+        wsa_eintr => .INTR,
+        wsa_ewouldblock, wsa_einprogress => .AGAIN,
+        wsa_enetdown => .NETDOWN,
+        wsa_econnreset => .CONNRESET,
+        wsa_econnrefused => .CONNREFUSED,
+        wsa_etimedout => .TIMEDOUT,
+        wsa_enetunreach => .NETUNREACH,
+        wsa_ehostunreach => .HOSTUNREACH,
+        wsa_enobufs, wsa_enomem => .NOBUFS,
+        wsa_efault => .FAULT,
+        wsa_einval => .INVAL,
+        wsa_enotsock => .NOTSOCK,
+        wsa_enotconn => .NOTCONN,
+        wsa_eafnosupport => .AFNOSUPPORT,
+        wsa_emfile => .MFILE,
+        wsa_eacces => .ACCES,
+        else => .IO,
+    };
+}
+
+var wsa_startup_done: bool = false;
+fn wsaEnsureStartup() void {
+    if (comptime !is_windows) return;
+    if (wsa_startup_done) return;
+    var wsa_data: [512]u8 = undefined;
+    // Winsock 2.2; the buffer only needs to hold a WSADATA.
+    if (wsaStartup(0x0202, &wsa_data) == 0) wsa_startup_done = true;
+}
+
+fn fdToSocket(fd: posix.fd_t) usize {
+    return @intFromPtr(fd);
+}
 
 pub const max_body_bytes: usize = 10 * 1024 * 1024;
 const max_redirect_hops: usize = 10;
@@ -1232,6 +1324,23 @@ fn connectPinned(address: IpAddress, options: FetchOptions) !posix.fd_t {
 
     var storage: PosixAddress = undefined;
     const len = addressToPosix(address, &storage);
+    if (comptime is_windows) {
+        while (true) {
+            if (wsaConnect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
+            switch (wsaErrorToErrno(wsaGetLastError())) {
+                .INTR => {
+                    try checkControl(options);
+                    continue;
+                },
+                .AGAIN => {
+                    try pollFd(fd, poll_events.OUT, options);
+                    try checkSocketError(fd);
+                    return fd;
+                },
+                else => |err| return classifyConnectErrno(err),
+            }
+        }
+    }
     while (true) switch (posix.errno(posix.system.connect(fd, &storage.any, len))) {
         .SUCCESS => return fd,
         .INTR => {
@@ -1239,7 +1348,7 @@ fn connectPinned(address: IpAddress, options: FetchOptions) !posix.fd_t {
             continue;
         },
         .INPROGRESS, .AGAIN, .ALREADY => {
-            try pollFd(fd, posix.POLL.OUT, options);
+            try pollFd(fd, poll_events.OUT, options);
             try checkSocketError(fd);
             return fd;
         },
@@ -1291,6 +1400,15 @@ fn addressToPosix(address: IpAddress, storage: *PosixAddress) posix.socklen_t {
 }
 
 fn openSocket(family: posix.sa_family_t) !posix.fd_t {
+    if (comptime is_windows) {
+        wsaEnsureStartup();
+        const sock = wsaSocket(@intCast(family), @intCast(posix.SOCK.STREAM), 0);
+        if (sock == wsa_invalid_socket) return error.SocketOpenFailed;
+        const fd: posix.fd_t = @ptrFromInt(sock);
+        errdefer closeFd(fd);
+        try setNonblocking(fd);
+        return fd;
+    }
     const fd = while (true) {
         const rc = posix.system.socket(family, posix.SOCK.STREAM, 0);
         switch (posix.errno(rc)) {
@@ -1310,6 +1428,8 @@ fn openSocket(family: posix.sa_family_t) !posix.fd_t {
 }
 
 fn setCloexec(fd: posix.fd_t) !void {
+    // Windows sockets are not inherited by child processes by default.
+    if (comptime is_windows) return;
     while (true) switch (posix.errno(posix.system.fcntl(fd, posix.F.SETFD, @as(usize, posix.FD_CLOEXEC)))) {
         .SUCCESS => return,
         .INTR => continue,
@@ -1318,6 +1438,11 @@ fn setCloexec(fd: posix.fd_t) !void {
 }
 
 fn setNonblocking(fd: posix.fd_t) !void {
+    if (comptime is_windows) {
+        var mode: c_ulong = 1;
+        if (wsaIoctlsocket(fdToSocket(fd), wsa_fionbio, &mode) != 0) return error.SocketOptionFailed;
+        return;
+    }
     const current = while (true) {
         const rc = posix.system.fcntl(fd, posix.F.GETFL, @as(usize, 0));
         switch (posix.errno(rc)) {
@@ -1337,6 +1462,13 @@ fn setNonblocking(fd: posix.fd_t) !void {
 }
 
 fn checkSocketError(fd: posix.fd_t) !void {
+    if (comptime is_windows) {
+        var value: c_int = 0;
+        var len: c_int = @sizeOf(c_int);
+        if (wsaGetsockopt(fdToSocket(fd), wsa_sol_socket, wsa_so_error, @ptrCast(&value), &len) != 0) return error.ConnectionFailed;
+        if (value == 0) return;
+        return classifyConnectErrno(wsaErrorToErrno(value));
+    }
     var value: c_int = 0;
     var len: std.c.socklen_t = @sizeOf(c_int);
     if (std.c.getsockopt(fd, posix.SOL.SOCKET, posix.SO.ERROR, &value, &len) != 0) return error.ConnectionFailed;
@@ -1346,6 +1478,10 @@ fn checkSocketError(fd: posix.fd_t) !void {
 }
 
 fn closeFd(fd: posix.fd_t) void {
+    if (comptime is_windows) {
+        _ = wsaClosesocket(fdToSocket(fd));
+        return;
+    }
     while (true) switch (posix.errno(posix.system.close(fd))) {
         .SUCCESS => return,
         .INTR => continue,
@@ -1493,10 +1629,29 @@ const PollError = posix.PollError || error{Interrupted};
 
 const Poller = struct {
     ctx: ?*anyopaque,
-    poll_fn: *const fn (?*anyopaque, []posix.pollfd, i32) PollError!usize,
+    poll_fn: *const fn (?*anyopaque, []pollfd, i32) PollError!usize,
 };
 
-fn pollDefault(_: ?*anyopaque, fds: []posix.pollfd, timeout_ms: i32) PollError!usize {
+fn pollDefault(_: ?*anyopaque, fds: []pollfd, timeout_ms: i32) PollError!usize {
+    if (comptime is_windows) {
+        var out_ready: usize = 0;
+        for (fds) |*pfd| {
+            var wsa_fd: WindowsPollFd = .{ .fd = @intFromPtr(pfd.fd), .events = pfd.events, .revents = 0 };
+            const rc = wsaPoll(&wsa_fd, 1, timeout_ms);
+            if (rc < 0) {
+                const err = wsaErrorToErrno(wsaGetLastError());
+                return switch (err) {
+                    .INTR => error.Interrupted,
+                    .NOBUFS, .NOMEM => error.SystemResources,
+                    .NETDOWN => error.NetworkDown,
+                    else => posix.unexpectedErrno(err),
+                };
+            }
+            pfd.revents = wsa_fd.revents;
+            out_ready += @intCast(rc);
+        }
+        return out_ready;
+    }
     const fds_count = std.math.cast(posix.nfds_t, fds.len) orelse
         return error.SystemResources;
     const rc = posix.system.poll(fds.ptr, fds_count, timeout_ms);
@@ -1531,6 +1686,13 @@ const ReadSyscall = struct {
 };
 
 fn readDefault(_: ?*anyopaque, fd: posix.fd_t, buf: []u8) RawSyscallResult {
+    if (comptime is_windows) {
+        if (buf.len == 0) return .{ .count = 0 };
+        const capped: c_int = @intCast(@min(buf.len, @as(usize, std.math.maxInt(c_int))));
+        const rc = wsaRecv(fdToSocket(fd), buf.ptr, capped, 0);
+        if (rc < 0) return .{ .failure = wsaErrorToErrno(wsaGetLastError()) };
+        return .{ .count = @intCast(rc) };
+    }
     const rc = posix.system.read(fd, buf.ptr, buf.len);
     return switch (posix.errno(rc)) {
         .SUCCESS => .{ .count = @intCast(rc) },
@@ -1587,7 +1749,7 @@ fn rawReadWith(
     syscall: ReadSyscall,
 ) !usize {
     while (true) {
-        try pollFdWith(fd, posix.POLL.IN, options, poller);
+        try pollFdWith(fd, poll_events.IN, options, poller);
         switch (syscall.read_fn(syscall.ctx, fd, buf)) {
             .count => |count| return count,
             .failure => |err| switch (classifyReadErrno(err)) {
@@ -1608,14 +1770,21 @@ fn rawWriteAll(fd: posix.fd_t, bytes: []const u8, options: FetchOptions) !void {
 fn rawWriteAllWith(fd: posix.fd_t, bytes: []const u8, options: FetchOptions, poller: Poller) !void {
     var written: usize = 0;
     while (written < bytes.len) {
-        try pollFdWith(fd, posix.POLL.OUT, options, poller);
-        const rc = std.c.send(
-            fd,
-            bytes[written..].ptr,
-            bytes.len - written,
-            @intCast(posix.MSG.NOSIGNAL),
-        );
-        const errno = posix.errno(rc);
+        try pollFdWith(fd, poll_events.OUT, options, poller);
+        const chunk_len: c_int = @intCast(@min(bytes.len - written, @as(usize, std.math.maxInt(c_int))));
+        const rc: isize = if (comptime is_windows)
+            wsaSend(fdToSocket(fd), @ptrCast(bytes[written..].ptr), chunk_len, 0)
+        else
+            std.c.send(
+                fd,
+                bytes[written..].ptr,
+                bytes.len - written,
+                @intCast(posix.MSG.NOSIGNAL),
+            );
+        const errno: posix.E = if (comptime is_windows)
+            (if (rc < 0) wsaErrorToErrno(wsaGetLastError()) else .SUCCESS)
+        else
+            posix.errno(rc);
         if (errno != .SUCCESS) switch (classifyWriteErrno(errno)) {
             .retry => {
                 if (errno == .INTR) try checkControl(options);
@@ -1635,7 +1804,7 @@ fn pollFd(fd: posix.fd_t, events: i16, options: FetchOptions) !void {
 
 fn pollFdWith(fd: posix.fd_t, events: i16, options: FetchOptions, poller: Poller) !void {
     while (true) {
-        var fds = [_]posix.pollfd{.{
+        var fds = [_]pollfd{.{
             .fd = fd,
             .events = events,
             .revents = 0,
@@ -1657,15 +1826,37 @@ fn pollFdWith(fd: posix.fd_t, events: i16, options: FetchOptions, poller: Poller
 }
 
 fn classifyPollEvents(fd: posix.fd_t, events: i16, revents: i16) !void {
-    if ((revents & posix.POLL.NVAL) != 0) return error.InvalidDescriptor;
+    if ((revents & poll_events.NVAL) != 0) return error.InvalidDescriptor;
     if ((revents & events) != 0) return;
-    if (events == posix.POLL.IN and (revents & posix.POLL.HUP) != 0) return;
-    if ((revents & posix.POLL.ERR) != 0) return pollSocketError(fd);
-    if ((revents & posix.POLL.HUP) != 0) return error.UnexpectedClose;
+    if (events == poll_events.IN and (revents & poll_events.HUP) != 0) return;
+    if ((revents & poll_events.ERR) != 0) return pollSocketError(fd);
+    if ((revents & poll_events.HUP) != 0) return error.UnexpectedClose;
     return error.UnexpectedClose;
 }
 
 fn pollSocketError(fd: posix.fd_t) !void {
+    if (comptime is_windows) {
+        var value: c_int = 0;
+        var len: c_int = @sizeOf(c_int);
+        if (wsaGetsockopt(fdToSocket(fd), wsa_sol_socket, wsa_so_error, @ptrCast(&value), &len) != 0)
+            return error.UnexpectedClose;
+        if (value == 0) return error.UnexpectedClose;
+        return switch (wsaErrorToErrno(value)) {
+            .CONNREFUSED => error.ConnectionRefused,
+            .CONNRESET => error.ConnectionResetByPeer,
+            .TIMEDOUT => error.Timeout,
+            .NETDOWN => error.NetworkDown,
+            .NETUNREACH => error.NetworkUnreachable,
+            .HOSTUNREACH => error.HostUnreachable,
+            .PIPE => error.BrokenPipe,
+            .NOTCONN => error.SocketUnconnected,
+            .NOBUFS, .NOMEM => error.SystemResources,
+            .IO => error.InputOutput,
+            .BADF => error.InvalidDescriptor,
+            .CANCELED => error.Canceled,
+            else => error.UnexpectedClose,
+        };
+    }
     var value: c_int = 0;
     var len: std.c.socklen_t = @sizeOf(c_int);
     if (std.c.getsockopt(fd, posix.SOL.SOCKET, posix.SO.ERROR, &value, &len) != 0)
@@ -2333,6 +2524,7 @@ test "web_fetch content length and close delimited bodies enforce exact caps" {
 }
 
 test "web_fetch chunked body rejects cumulative announced size before reading payload" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     const alloc = std.testing.allocator;
     const payloads = [_][]const u8{
         "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n",
@@ -2653,6 +2845,7 @@ test "web_fetch TLS encrypted transport buffers satisfy stdlib minimums" {
 }
 
 test "web_fetch TLS deadline reader fills internal buffer for zero length readVec" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     var fds: [2]std.c.fd_t = undefined;
     if (std.c.pipe(&fds) != 0) return error.PipeFailed;
     defer closeFd(fds[0]);
@@ -3482,6 +3675,7 @@ const ScriptedDialer = struct {
 };
 
 test "web_fetch admitted dialing preserves order and one shared deadline" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     var fds: [2]std.c.fd_t = undefined;
     if (std.c.pipe(&fds) != 0) return error.PipeFailed;
     defer closeFd(fds[1]);
@@ -3601,7 +3795,7 @@ const ScriptedPoller = struct {
         return .{ .ctx = @ptrCast(self), .poll_fn = poll };
     }
 
-    fn poll(raw: ?*anyopaque, fds: []posix.pollfd, timeout_ms: i32) PollError!usize {
+    fn poll(raw: ?*anyopaque, fds: []pollfd, timeout_ms: i32) PollError!usize {
         const self: *@This() = @ptrCast(@alignCast(raw.?));
         self.calls += 1;
         self.observed_events = fds[0].events;
@@ -3623,65 +3817,71 @@ const ScriptedPoller = struct {
     }
 };
 
+const test_fd: posix.fd_t = if (is_windows) @ptrFromInt(42) else 42;
+const test_invalid_fd: posix.fd_t = if (is_windows) @ptrFromInt(std.math.maxInt(usize)) else @as(posix.fd_t, -1);
+
 test "web_fetch poll events preserve requested readiness and hangup semantics" {
-    try classifyPollEvents(-1, posix.POLL.IN, posix.POLL.IN | posix.POLL.HUP);
-    try classifyPollEvents(-1, posix.POLL.IN, posix.POLL.IN | posix.POLL.ERR);
-    try classifyPollEvents(-1, posix.POLL.OUT, posix.POLL.OUT | posix.POLL.HUP);
-    try classifyPollEvents(-1, posix.POLL.IN, posix.POLL.HUP);
+    try classifyPollEvents(test_invalid_fd, poll_events.IN, poll_events.IN | poll_events.HUP);
+    try classifyPollEvents(test_invalid_fd, poll_events.IN, poll_events.IN | poll_events.ERR);
+    try classifyPollEvents(test_invalid_fd, poll_events.OUT, poll_events.OUT | poll_events.HUP);
+    try classifyPollEvents(test_invalid_fd, poll_events.IN, poll_events.HUP);
     try std.testing.expectError(
         error.UnexpectedClose,
-        classifyPollEvents(-1, posix.POLL.OUT, posix.POLL.HUP),
+        classifyPollEvents(test_invalid_fd, poll_events.OUT, poll_events.HUP),
     );
     try std.testing.expectError(
         error.InvalidDescriptor,
-        classifyPollEvents(-1, posix.POLL.IN, posix.POLL.NVAL),
+        classifyPollEvents(test_invalid_fd, poll_events.IN, poll_events.NVAL),
     );
 
-    var sockets: [2]std.c.fd_t = undefined;
-    if (std.c.socketpair(posix.AF.UNIX, posix.SOCK.STREAM, 0, &sockets) != 0)
-        return error.SocketPairFailed;
-    defer closeFd(sockets[0]);
-    defer closeFd(sockets[1]);
-    try std.testing.expectError(
-        error.UnexpectedClose,
-        classifyPollEvents(sockets[0], posix.POLL.IN, posix.POLL.ERR),
-    );
+    // `socketpair` is POSIX-only; the logic above already ran on Windows.
+    if (comptime !is_windows) {
+        var sockets: [2]std.c.fd_t = undefined;
+        if (std.c.socketpair(posix.AF.UNIX, posix.SOCK.STREAM, 0, &sockets) != 0)
+            return error.SocketPairFailed;
+        defer closeFd(sockets[0]);
+        defer closeFd(sockets[1]);
+        try std.testing.expectError(
+            error.UnexpectedClose,
+            classifyPollEvents(sockets[0], poll_events.IN, poll_events.ERR),
+        );
+    }
 }
 
 test "web_fetch injected poll failures and arguments remain exact" {
     var interrupted = ScriptedPoller{
         .result = .interrupted_once,
-        .revents = posix.POLL.IN,
+        .revents = poll_events.IN,
     };
     try pollFdWith(
-        42,
-        posix.POLL.IN,
+        test_fd,
+        poll_events.IN,
         .{ .deadline = .{ .deadline_ms = monotonicMillis() + 1000 } },
         interrupted.poller(),
     );
     try std.testing.expectEqual(@as(usize, 2), interrupted.calls);
-    try std.testing.expectEqual(posix.POLL.IN, interrupted.observed_events);
+    try std.testing.expectEqual(poll_events.IN, interrupted.observed_events);
 
     var resources = ScriptedPoller{ .result = .system_resources };
     try std.testing.expectError(error.SystemResources, pollFdWith(
-        42,
-        posix.POLL.IN,
+        test_fd,
+        poll_events.IN,
         .{},
         resources.poller(),
     ));
     try std.testing.expectEqual(@as(usize, 1), resources.calls);
-    try std.testing.expectEqual(posix.POLL.IN, resources.observed_events);
+    try std.testing.expectEqual(poll_events.IN, resources.observed_events);
     try std.testing.expectEqual(@as(i32, 1000), resources.observed_timeout_ms);
 
     var network_down = ScriptedPoller{ .result = .network_down };
     try std.testing.expectError(error.NetworkDown, pollFdWith(
-        42,
-        posix.POLL.OUT,
+        test_fd,
+        poll_events.OUT,
         .{},
         network_down.poller(),
     ));
     try std.testing.expectEqual(@as(usize, 1), network_down.calls);
-    try std.testing.expectEqual(posix.POLL.OUT, network_down.observed_events);
+    try std.testing.expectEqual(poll_events.OUT, network_down.observed_events);
 }
 
 fn noOpSignalHandler(_: posix.SIG) callconv(.c) void {}
@@ -3700,6 +3900,7 @@ const PollSignalStorm = struct {
 };
 
 test "web_fetch poll deadline is not extended by interrupted syscalls" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     const action: posix.Sigaction = .{
         .handler = .{ .handler = noOpSignalHandler },
         .mask = posix.sigemptyset(),
@@ -3732,7 +3933,7 @@ test "web_fetch poll deadline is not extended by interrupted syscalls" {
 
     try std.testing.expectError(error.Timeout, pollFd(
         fds[0],
-        posix.POLL.IN,
+        poll_events.IN,
         .{ .deadline = .{ .deadline_ms = deadline_ms } },
     ));
     const elapsed_ms = monotonicMillis() - started_ms;
@@ -3794,12 +3995,12 @@ const InterruptingRead = struct {
 
 test "web_fetch interrupted socket read rechecks cancellation before retry" {
     var cancel_flag: std.atomic.Value(bool) = .init(false);
-    var poller = ScriptedPoller{ .revents = posix.POLL.IN };
+    var poller = ScriptedPoller{ .revents = poll_events.IN };
     var read = InterruptingRead{ .cancel_flag = &cancel_flag };
     var buf: [1]u8 = undefined;
 
     try std.testing.expectError(error.Canceled, rawReadWith(
-        42,
+        test_fd,
         &buf,
         .{ .cancel_flag = &cancel_flag },
         poller.poller(),
@@ -3810,6 +4011,7 @@ test "web_fetch interrupted socket read rechecks cancellation before retry" {
 }
 
 test "web_fetch deadline reader drains bytes after hangup and then returns eof" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     var fds: [2]std.c.fd_t = undefined;
     if (std.c.pipe(&fds) != 0) return error.PipeFailed;
     defer closeFd(fds[0]);
@@ -3835,6 +4037,7 @@ test "web_fetch deadline reader drains bytes after hangup and then returns eof" 
 }
 
 test "web_fetch deadline adapters retain invalid descriptor causes" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     var fds: [2]std.c.fd_t = undefined;
     if (std.c.pipe(&fds) != 0) return error.PipeFailed;
     closeFd(fds[0]);
@@ -3861,6 +4064,7 @@ test "web_fetch deadline adapters retain invalid descriptor causes" {
 }
 
 test "web_fetch closed peer write returns a cause without terminating process" {
+    if (comptime is_windows) return error.SkipZigTest; // POSIX pipes, socketpairs, or signals.
     var sockets: [2]std.c.fd_t = undefined;
     if (std.c.socketpair(posix.AF.UNIX, posix.SOCK.STREAM, 0, &sockets) != 0)
         return error.SocketPairFailed;
@@ -3869,7 +4073,7 @@ test "web_fetch closed peer write returns a cause without terminating process" {
         return error.SocketShutdownFailed;
     closeFd(sockets[1]);
 
-    var poller = ScriptedPoller{ .revents = posix.POLL.OUT | posix.POLL.HUP };
+    var poller = ScriptedPoller{ .revents = poll_events.OUT | poll_events.HUP };
     rawWriteAllWith(
         sockets[0],
         "x",

@@ -101,7 +101,7 @@ fn spawnPrepared(
     };
 
     const child_id = child.id orelse return error.SpawnFailed;
-    const pid = try std.fmt.allocPrint(alloc, "{d}", .{child_id});
+    const pid = try formatChildPid(alloc, child_id);
     var pid_owned = true;
     errdefer if (pid_owned) alloc.free(pid);
 
@@ -261,7 +261,7 @@ fn captureToken(
     alloc: Allocator,
     pid_text: []const u8,
 ) background_process_provider.ProviderError!process_supervisor.ProcessInstanceToken {
-    const pid = std.fmt.parseInt(std.posix.pid_t, pid_text, 10) catch
+    const pid = std.fmt.parseInt(Pid, pid_text, 10) catch
         return error.InvalidPid;
     return switch (builtin.os.tag) {
         .linux => captureLinuxToken(alloc, pid) catch |err| switch (err) {
@@ -477,9 +477,19 @@ fn captureMacOSToken(
     return process_supervisor.ProcessInstanceToken.parse(text);
 }
 
+/// Process identifier used by the background supervisor. POSIX pids do not
+/// exist on Windows (`std.posix.pid_t` is a HANDLE there), so Windows tracks
+/// processes by numeric DWORD id instead.
+const Pid = if (builtin.os.tag == .windows) u32 else Pid;
+
+fn formatChildPid(alloc: Allocator, id: std.process.Child.Id) ![]u8 {
+    if (comptime builtin.os.tag == .windows) return std.fmt.allocPrint(alloc, "{d}", .{@intFromPtr(id)});
+    return std.fmt.allocPrint(alloc, "{d}", .{id});
+}
+
 const PidPair = struct {
-    pid: std.posix.pid_t,
-    ppid: std.posix.pid_t,
+    pid: Pid,
+    ppid: Pid,
 };
 
 fn signalProcess(
@@ -498,12 +508,12 @@ fn signalProcess(
         },
     }
     if (!host.current().background_processes) return error.Unsupported;
-    const pid = std.fmt.parseInt(std.posix.pid_t, pid_text, 10) catch
+    const pid = std.fmt.parseInt(Pid, pid_text, 10) catch
         return error.InvalidPid;
     try signalPidTree(pid);
 }
 
-fn signalPidTree(root_pid: std.posix.pid_t) std.posix.KillError!void {
+fn signalPidTree(root_pid: Pid) std.posix.KillError!void {
     const descendants = collectDescendantPids(
         std.heap.page_allocator,
         root_pid,
@@ -513,7 +523,7 @@ fn signalPidTree(root_pid: std.posix.pid_t) std.posix.KillError!void {
             "could not inspect background process descendants pid={d} err={s}",
             .{ root_pid, @errorName(err) },
         );
-        break :fallback &[_]std.posix.pid_t{};
+        break :fallback &[_]Pid{};
     };
     defer if (descendants.len > 0) {
         std.heap.page_allocator.free(descendants);
@@ -521,7 +531,12 @@ fn signalPidTree(root_pid: std.posix.pid_t) std.posix.KillError!void {
 
     var signaled = false;
     var first_error: ?std.posix.KillError = null;
-    sendSignal(-root_pid, std.posix.SIG.TERM, &signaled, &first_error);
+    if (comptime builtin.os.tag == .windows) {
+        // No process-group kill on Windows; the tree walk below covers descendants.
+        sendSignal(root_pid, std.posix.SIG.TERM, &signaled, &first_error);
+    } else {
+        sendSignal(-root_pid, std.posix.SIG.TERM, &signaled, &first_error);
+    }
     for (descendants) |pid| {
         sendSignal(pid, std.posix.SIG.TERM, &signaled, &first_error);
     }
@@ -552,11 +567,25 @@ fn signalPidTree(root_pid: std.posix.pid_t) std.posix.KillError!void {
 }
 
 fn sendSignal(
-    pid: std.posix.pid_t,
+    pid: Pid,
     signal: std.posix.SIG,
     signaled: *bool,
     first_error: *?std.posix.KillError,
 ) void {
+    if (comptime builtin.os.tag == .windows) {
+        _ = signal;
+        const handle = windowsOpenProcess(windows_PROCESS_TERMINATE, 0, pid) orelse {
+            if (first_error.* == null) first_error.* = error.ProcessNotFound;
+            return;
+        };
+        defer _ = windowsCloseHandle(handle);
+        if (windowsTerminateProcess(handle, 1) == 0) {
+            if (first_error.* == null) first_error.* = error.ProcessNotFound;
+            return;
+        }
+        signaled.* = true;
+        return;
+    }
     std.posix.kill(pid, signal) catch |err| {
         if (err != error.ProcessNotFound and first_error.* == null) {
             first_error.* = err;
@@ -567,8 +596,8 @@ fn sendSignal(
 }
 
 fn waitForProcessTreeExit(
-    root_pid: std.posix.pid_t,
-    descendants: []const std.posix.pid_t,
+    root_pid: Pid,
+    descendants: []const Pid,
     timeout_ms: i64,
 ) void {
     const start = io_mod.milliTimestamp();
@@ -579,8 +608,8 @@ fn waitForProcessTreeExit(
 }
 
 fn anyProcessTreeMemberRunning(
-    root_pid: std.posix.pid_t,
-    descendants: []const std.posix.pid_t,
+    root_pid: Pid,
+    descendants: []const Pid,
 ) bool {
     if (isPidRunningRaw(root_pid)) return true;
     for (descendants) |pid| {
@@ -589,7 +618,16 @@ fn anyProcessTreeMemberRunning(
     return false;
 }
 
-fn isPidRunningRaw(pid: std.posix.pid_t) bool {
+fn isPidRunningRaw(pid: Pid) bool {
+    if (comptime builtin.os.tag == .windows) {
+        const handle = windowsOpenProcess(windows_SYNCHRONIZE | windows_PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) orelse {
+            return windowsGetLastError() == windows_ERROR_ACCESS_DENIED;
+        };
+        defer _ = windowsCloseHandle(handle);
+        var code: std.os.windows.DWORD = 0;
+        if (windowsGetExitCodeProcess(handle, &code) == 0) return true;
+        return code == windows_STILL_ACTIVE;
+    }
     std.posix.kill(pid, @enumFromInt(0)) catch |err| switch (err) {
         error.ProcessNotFound => return false,
         else => return true,
@@ -597,10 +635,59 @@ fn isPidRunningRaw(pid: std.posix.pid_t) bool {
     return true;
 }
 
+const windows_PROCESS_TERMINATE: std.os.windows.DWORD = 0x0001;
+const windows_SYNCHRONIZE: std.os.windows.DWORD = 0x00100000;
+const windows_PROCESS_QUERY_LIMITED_INFORMATION: std.os.windows.DWORD = 0x1000;
+const windows_ERROR_ACCESS_DENIED: std.os.windows.DWORD = 5;
+const windows_STILL_ACTIVE: std.os.windows.DWORD = 259;
+const windows_TH32CS_SNAPPROCESS: std.os.windows.DWORD = 0x00000002;
+
+extern "kernel32" fn windowsOpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
+extern "kernel32" fn windowsTerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn windowsCloseHandle(hObject: std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn windowsGetExitCodeProcess(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn windowsGetLastError() callconv(.winapi) std.os.windows.DWORD;
+extern "kernel32" fn windowsCreateToolhelp32Snapshot(dwFlags: std.os.windows.DWORD, th32ProcessID: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn windowsProcess32FirstW(hSnapshot: std.os.windows.HANDLE, lppe: *WindowsProcessEntry) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn windowsProcess32NextW(hSnapshot: std.os.windows.HANDLE, lppe: *WindowsProcessEntry) callconv(.winapi) std.os.windows.BOOL;
+
+const WindowsProcessEntry = extern struct {
+    dwSize: std.os.windows.DWORD,
+    cntUsage: std.os.windows.DWORD,
+    th32ProcessID: std.os.windows.DWORD,
+    th32DefaultHeapID: usize,
+    th32ModuleID: std.os.windows.DWORD,
+    cntThreads: std.os.windows.DWORD,
+    th32ParentProcessID: std.os.windows.DWORD,
+    pcPriClassBase: i32,
+    dwFlags: std.os.windows.DWORD,
+    szExeFile: [260]u16,
+};
+
+fn collectDescendantPidsWindows(alloc: Allocator, root_pid: Pid) ![]Pid {
+    const snapshot = windowsCreateToolhelp32Snapshot(windows_TH32CS_SNAPPROCESS, 0);
+    if (snapshot == @as(std.os.windows.HANDLE, @ptrFromInt(@as(usize, @bitCast(@as(isize, -1)))))) return error.ProcessListFailed;
+    defer _ = windowsCloseHandle(snapshot);
+    var pairs: std.ArrayList(PidPair) = .empty;
+    defer pairs.deinit(alloc);
+    var entry: WindowsProcessEntry = std.mem.zeroes(WindowsProcessEntry);
+    entry.dwSize = @sizeOf(WindowsProcessEntry);
+    if (windowsProcess32FirstW(snapshot, &entry) == 0) return error.ProcessListFailed;
+    while (true) {
+        try pairs.append(alloc, .{ .pid = entry.th32ProcessID, .ppid = entry.th32ParentProcessID });
+        if (windowsProcess32NextW(snapshot, &entry) == 0) break;
+    }
+    var descendants: std.ArrayList(Pid) = .empty;
+    errdefer descendants.deinit(alloc);
+    try appendDescendants(alloc, pairs.items, root_pid, &descendants);
+    return descendants.toOwnedSlice(alloc);
+}
+
 fn collectDescendantPids(
     alloc: Allocator,
-    root_pid: std.posix.pid_t,
-) ![]std.posix.pid_t {
+    root_pid: Pid,
+) ![]Pid {
+    if (comptime builtin.os.tag == .windows) return collectDescendantPidsWindows(alloc, root_pid);
     const result = try std.process.run(alloc, io_mod.getIo(), .{
         .argv = &.{ "ps", "-axo", "pid=,ppid=" },
         .stdout_limit = .limited(1024 * 1024),
@@ -621,19 +708,19 @@ fn collectDescendantPids(
         const pid_text = fields.next() orelse continue;
         const ppid_text = fields.next() orelse continue;
         const pid = std.fmt.parseInt(
-            std.posix.pid_t,
+            Pid,
             pid_text,
             10,
         ) catch continue;
         const ppid = std.fmt.parseInt(
-            std.posix.pid_t,
+            Pid,
             ppid_text,
             10,
         ) catch continue;
         try pairs.append(alloc, .{ .pid = pid, .ppid = ppid });
     }
 
-    var descendants: std.ArrayList(std.posix.pid_t) = .empty;
+    var descendants: std.ArrayList(Pid) = .empty;
     errdefer descendants.deinit(alloc);
     try appendDescendants(
         alloc,
@@ -647,8 +734,8 @@ fn collectDescendantPids(
 fn appendDescendants(
     alloc: Allocator,
     pairs: []const PidPair,
-    parent_pid: std.posix.pid_t,
-    descendants: *std.ArrayList(std.posix.pid_t),
+    parent_pid: Pid,
+    descendants: *std.ArrayList(Pid),
 ) !void {
     for (pairs) |pair| {
         if (pair.ppid != parent_pid) continue;
@@ -666,13 +753,13 @@ test "native process adapter orders descendants deepest first" {
         .{ .pid = 13, .ppid = 10 },
         .{ .pid = 14, .ppid = 99 },
     };
-    var descendants: std.ArrayList(std.posix.pid_t) = .empty;
+    var descendants: std.ArrayList(Pid) = .empty;
     defer descendants.deinit(alloc);
 
     try appendDescendants(alloc, &pairs, 10, &descendants);
 
     try std.testing.expectEqualSlices(
-        std.posix.pid_t,
+        Pid,
         &.{ 12, 11, 13 },
         descendants.items,
     );
@@ -814,20 +901,13 @@ fn waitForProcessExit(
 }
 
 fn processExists(pid_text: []const u8) bool {
-    switch (builtin.os.tag) {
-        .windows, .wasi => return true,
-        else => {},
-    }
+    if (comptime builtin.os.tag == .wasi) return true;
     const pid = std.fmt.parseInt(
-        std.posix.pid_t,
+        Pid,
         pid_text,
         10,
     ) catch return false;
-    std.posix.kill(pid, @enumFromInt(0)) catch |err| switch (err) {
-        error.ProcessNotFound => return false,
-        else => return true,
-    };
-    return true;
+    return isPidRunningRaw(pid);
 }
 
 fn expectBlockedWrapperDoesNotExecute(
@@ -1218,7 +1298,7 @@ test "unreleased background cleanup reaps an exited child before token liveness"
     };
     process_supervisor.process_token_match_for_test = Stub.match;
     defer process_supervisor.process_token_match_for_test = null;
-    const pid = try std.fmt.allocPrint(alloc, "{d}", .{child.id.?});
+    const pid = try formatChildPid(alloc, child.id.?);
     const token = try process_supervisor.ProcessInstanceToken.parse(
         "linux:00112233445566778899aabbccddeeff:12345",
     );
@@ -1277,7 +1357,7 @@ test "unreleased background wrapper cleanup is bounded" {
     };
     process_supervisor.process_token_match_for_test = Stub.match;
     defer process_supervisor.process_token_match_for_test = null;
-    const pid = try std.fmt.allocPrint(alloc, "{d}", .{child.id.?});
+    const pid = try formatChildPid(alloc, child.id.?);
     const token = try process_supervisor.ProcessInstanceToken.parse(
         "linux:00112233445566778899aabbccddeeff:12345",
     );
