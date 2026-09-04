@@ -1331,7 +1331,7 @@ fn connectPinned(address: IpAddress, options: FetchOptions) !posix.fd_t {
     const len = addressToPosix(address, &storage);
     if (comptime is_windows) {
         while (true) {
-            if (connect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
+            if (wsaConnect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
             switch (wsaErrorToErrno(GetLastError())) {
                 .INTR => {
                     try checkControl(options);
