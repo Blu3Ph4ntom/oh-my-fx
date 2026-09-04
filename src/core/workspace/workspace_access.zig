@@ -580,12 +580,13 @@ fn canonicalExistingDirectory(
         try std.fs.path.resolve(alloc, &.{ primary_directory, input_path });
     defer alloc.free(absolute);
 
-    const canonical = io_mod.realpathAlloc(alloc, absolute) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.FileNotFound => return error.PathNotFound,
-        // The inferred error set is exactly these two on Windows, where the
-        // POSIX fallback code after the comptime branch is pruned.
-        else => if (comptime io_mod.is_windows) unreachable else return error.InvalidPath,
+    // If-chain rather than switch: the inferred error set is exactly these
+    // two on Windows (POSIX fallback pruned), which would make `else`
+    // unreachable there, while other platforms can produce more errors.
+    const canonical = io_mod.realpathAlloc(alloc, absolute) catch |err| {
+        if (err == error.OutOfMemory) return error.OutOfMemory;
+        if (err == error.FileNotFound) return error.PathNotFound;
+        return error.InvalidPath;
     };
     errdefer alloc.free(canonical);
 

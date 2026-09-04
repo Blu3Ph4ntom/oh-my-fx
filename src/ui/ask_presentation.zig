@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const assistant_presentation = @import("../core/agent/assistant_presentation.zig");
 const diff_mod = @import("../core/output/diff.zig");
 const presentation_mode = @import("../core/config/presentation_mode.zig");
@@ -402,7 +403,9 @@ fn probeTerminal(
     const fallback = shell_runtime.CursorPosition{ .row = layout.rows, .col = 1 };
     const fallback_light = if (no_color) false else ui_render.explicitThemeOverride() orelse false;
     ui_render.initTheme(fallback_light, null);
-    if (std.c.isatty(std.posix.STDIN_FILENO) == 0) return fallback;
+    if (comptime builtin.os.tag == .windows) {
+        if (!io_mod.stdinIsTty()) return fallback;
+    } else if (std.c.isatty(std.posix.STDIN_FILENO) == 0) return fallback;
     terminal.captureOriginalTermios() catch return fallback;
     terminal.enableRawMode() catch return fallback;
     defer terminal.disableRawMode();

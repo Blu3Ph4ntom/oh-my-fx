@@ -543,16 +543,18 @@ fn signalPidTree(root_pid: Pid) std.posix.KillError!void {
     sendSignal(root_pid, std.posix.SIG.TERM, &signaled, &first_error);
     if (!signaled) return first_error orelse error.ProcessNotFound;
 
+    // Windows has no KILL signal; the signal value is ignored there anyway.
+    const kill_sig = if (comptime builtin.os.tag == .windows) std.posix.SIG.TERM else std.posix.SIG.KILL;
     waitForProcessTreeExit(root_pid, descendants, 250);
     var force_killed = false;
     for (descendants) |pid| {
         if (!isPidRunningRaw(pid)) continue;
-        sendSignal(pid, std.posix.SIG.KILL, &force_killed, &first_error);
+        sendSignal(pid, kill_sig, &force_killed, &first_error);
     }
     if (isPidRunningRaw(root_pid)) {
         sendSignal(
             root_pid,
-            std.posix.SIG.KILL,
+            kill_sig,
             &force_killed,
             &first_error,
         );

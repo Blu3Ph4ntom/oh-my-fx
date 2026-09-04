@@ -49,7 +49,7 @@ const WinConsoleScreenBufferInfo = extern struct {
 
 pub fn queryLayout(fd: std.posix.fd_t, footer_rows: u16) !types.Layout {
     if (comptime builtin.os.tag == .windows) {
-        _ = fd;
+        _ = &fd;
         var info: WinConsoleScreenBufferInfo = undefined;
         if (termGetConsoleScreenBufferInfo(termGetStdHandle(0xFFFFFFF5), &info) == .FALSE) return error.UnableToReadTerminalSize;
         const cols: u16 = @intCast(@max(0, info.dwSize.X));

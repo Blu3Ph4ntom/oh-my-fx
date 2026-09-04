@@ -2714,7 +2714,7 @@ fn signalProcessGroup(pid: std.posix.pid_t, force: bool) !void {
     // Call sites pass `child.id`, which is already the process HANDLE on
     // Windows, so terminate it directly. There are no POSIX signals there.
     if (comptime builtin.os.tag == .windows) {
-        _ = force;
+        _ = &force;
         _ = sandboxTerminateProcess(pid, 1);
         return;
     }

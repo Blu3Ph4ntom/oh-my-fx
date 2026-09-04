@@ -35,7 +35,7 @@ extern "c" fn unlockpt(fd: c_int) c_int;
 extern "c" fn ptsname(fd: c_int) ?[*:0]u8;
 
 pub const supports_resize_signal = resize_runtime.supports_resize_signal;
-pub const ResizeHandler = if (builtin.os.tag == .wasi)
+pub const ResizeHandler = if (builtin.os.tag == .wasi or builtin.os.tag == .windows)
     *const fn () callconv(.c) void
 else
     std.posix.Sigaction.handler_fn;
