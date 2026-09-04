@@ -7226,7 +7226,8 @@ fn test_process_owner(
 ) !contracts.ProcessOwner {
     var pid_buffer: [32]u8 = undefined;
     const pid = std.c.getpid();
-    const pid_text = try std.fmt.bufPrint(&pid_buffer, "{d}", .{pid});
+    const pid_text = try std.fmt.bufPrint(&pid_buffer, "{d}", .{io_mod.currentProcessId()});
+    _ = pid;
     const token = try process_provider.captureToken(
         alloc,
         pid_text,

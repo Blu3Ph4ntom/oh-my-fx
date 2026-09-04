@@ -1312,6 +1312,8 @@ test "lazy runtime has no allocation or worker before first admission" {
 }
 
 test "stalled request cancellation emits only the targeted cancel" {
+    // POSIX socketpair plumbing has no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (!host.isSupported()) return error.SkipZigTest;
     var handles: [2]std.c.fd_t = undefined;
     if (std.c.socketpair(

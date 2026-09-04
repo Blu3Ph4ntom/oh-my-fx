@@ -2598,6 +2598,8 @@ fn forkIdentityIssuer(
     start_fd: std.c.fd_t,
     result_fd: std.c.fd_t,
 ) !std.c.pid_t {
+    // No fork on Windows; these mutation helpers serve POSIX-only tests.
+    if (comptime builtin.os.tag == .windows) return error.ProcessForkFailed;
     const pid = std.c.fork();
     if (pid < 0) return error.ProcessForkFailed;
     if (pid != 0) return pid;

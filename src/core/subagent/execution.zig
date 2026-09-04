@@ -7304,6 +7304,8 @@ test "provider and admission failures release resources and persist typed work s
 }
 
 test "process-held session lock preserves queue until explicit exactly-once retry" {
+    // Spawns python3 with POSIX flock; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
     defer env.deinit(alloc);
@@ -7516,7 +7518,8 @@ fn waitExternalExecutionProcess(pid: std.c.pid_t) !u8 {
 }
 
 test "recovery skips execution owned by another live process" {
-    if (comptime !@hasDecl(std.c, "fork")) return error.SkipZigTest;
+    // No fork, pipe, or waitpid on Windows.
+    if (comptime builtin.os.tag == .windows or !@hasDecl(std.c, "fork")) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
     defer env.deinit(alloc);
@@ -7639,6 +7642,8 @@ test "recovery does not classify a locally owned child as externally busy" {
 }
 
 test "shutdown joins while control locking and control writes are unavailable" {
+    // Spawns python3 with POSIX flock; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
     defer env.deinit(alloc);

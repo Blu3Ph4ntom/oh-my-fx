@@ -2838,11 +2838,11 @@ test "web_fetch response parser ignores pending bytes beyond content length" {
 
 test "web_fetch TLS encrypted transport buffers satisfy stdlib minimums" {
     var reader: TlsDeadlineReader = undefined;
-    reader.init(-1, .{});
+    reader.init(test_invalid_fd, .{});
     try std.testing.expect(reader.interface.buffer.len >= std.crypto.tls.Client.min_buffer_len);
 
     var writer: TlsDeadlineWriter = undefined;
-    writer.init(-1, .{});
+    writer.init(test_invalid_fd, .{});
     try std.testing.expect(writer.interface.buffer.len >= std.crypto.tls.Client.min_buffer_len);
 }
 
@@ -3608,7 +3608,7 @@ test "web_fetch transport traces stable stages and redact sensitive values" {
     };
     var scripted = ScriptedDialer{
         .errors = &.{ error.ConnectionRefused, error.NetworkUnreachable },
-        .returned_fds = &.{ -1, -1 },
+        .returned_fds = &.{ test_invalid_fd, test_invalid_fd },
     };
     try std.testing.expectError(error.NetworkUnreachable, connectAdmitted(
         &addresses,
@@ -3713,7 +3713,7 @@ test "web_fetch admitted dialing stops on control and local resource failures" {
     var cancel_flag: std.atomic.Value(bool) = .init(false);
     var canceled = ScriptedDialer{
         .errors = &.{ error.ConnectionRefused, null },
-        .returned_fds = &.{ -1, -1 },
+        .returned_fds = &.{ test_invalid_fd, test_invalid_fd },
         .cancel_after_call = 1,
         .cancel_flag = &cancel_flag,
     };
@@ -3724,7 +3724,7 @@ test "web_fetch admitted dialing stops on control and local resource failures" {
 
     var resources = ScriptedDialer{
         .errors = &.{ error.SystemResources, null },
-        .returned_fds = &.{ -1, -1 },
+        .returned_fds = &.{ test_invalid_fd, test_invalid_fd },
     };
     try std.testing.expectError(error.SystemResources, connectAdmitted(
         &addresses,
@@ -3735,7 +3735,7 @@ test "web_fetch admitted dialing stops on control and local resource failures" {
 
     var expired = ScriptedDialer{
         .errors = &.{null},
-        .returned_fds = &.{-1},
+        .returned_fds = &.{test_invalid_fd},
     };
     try std.testing.expectError(error.Timeout, connectAdmitted(&addresses, .{
         .deadline = .{ .deadline_ms = monotonicMillis() - 1 },
@@ -3744,7 +3744,7 @@ test "web_fetch admitted dialing stops on control and local resource failures" {
 
     var exhausted = ScriptedDialer{
         .errors = &.{ error.ConnectionRefused, error.HostUnreachable },
-        .returned_fds = &.{ -1, -1 },
+        .returned_fds = &.{ test_invalid_fd, test_invalid_fd },
     };
     try std.testing.expectError(error.HostUnreachable, connectAdmitted(
         &addresses,

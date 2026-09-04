@@ -1,5 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
+/// Process identifier used across session tracking. `std.posix.pid_t` is a
+/// HANDLE on Windows, so Windows tracks children by numeric DWORD id.
+const Pid = if (builtin.os.tag == .windows) u32 else std.posix.pid_t;
+
 const contracts = @import("contracts.zig");
 const monitor_core = @import("monitor.zig");
 const terminal_engine = @import("engine.zig");
@@ -91,12 +96,33 @@ const LauncherConfig = struct {
 };
 
 const LauncherWatchdog = struct {
-    child_pid: std.posix.pid_t,
+    child_pid: Pid,
     done: std.atomic.Value(bool) = .init(false),
     command_released: std.atomic.Value(bool) = .init(false),
     host_closed: std.atomic.Value(bool) = .init(false),
 
     fn run(self: *LauncherWatchdog) void {
+        // `std.posix.poll` has no ws2_32 binding in Zig 0.16, and child pids
+        // are DWORD ids here; wait on the console and terminate directly.
+        if (comptime builtin.os.tag == .windows) {
+            while (!self.done.load(.acquire)) {
+                if (!io_mod.waitForStdinEnter(control_poll_ms)) continue;
+                var byte: [1]u8 = undefined;
+                const count = io_mod.readStdinBytes(&byte) catch 0;
+                if (count != 0) {
+                    if (byte[0] == command_release_byte) {
+                        self.command_released.store(true, .release);
+                    }
+                    continue;
+                }
+                self.host_closed.store(true, .release);
+                if (!self.done.load(.acquire)) {
+                    _ = io_mod.terminateProcess(self.child_pid);
+                }
+                return;
+            }
+            return;
+        }
         var poll_fds = [_]std.posix.pollfd{.{
             .fd = std.posix.STDIN_FILENO,
             .events = std.posix.POLL.IN,
@@ -139,7 +165,7 @@ const LauncherControl = struct {
     bootstrap_path: []const u8,
     nonce: []const u8,
     command_path: ?[]const u8,
-    child_pid: std.posix.pid_t,
+    child_pid: Pid,
     watchdog: *LauncherWatchdog,
     done: std.atomic.Value(bool) = .init(false),
     phase: ControlPhase = .awaiting_shell,
@@ -565,7 +591,13 @@ pub fn runLauncher(alloc: Allocator) !void {
     }
 }
 
-fn signalLauncherProcessGroup(pid: std.c.pid_t, signal: std.c.SIG) !void {
+fn signalLauncherProcessGroup(pid: Pid, signal: std.c.SIG) !void {
+    // No process groups or signals on Windows; terminate the member.
+    if (comptime builtin.os.tag == .windows) {
+        _ = signal;
+        if (!io_mod.terminateProcess(pid)) return error.ProcessNotFound;
+        return;
+    }
     while (true) switch (std.c.errno(std.c.kill(-pid, signal))) {
         .SUCCESS => return,
         .INTR => continue,
@@ -574,6 +606,8 @@ fn signalLauncherProcessGroup(pid: std.c.pid_t, signal: std.c.SIG) !void {
 }
 
 fn launcherStatusToTerm(raw_status: u32) std.process.Child.Term {
+    // `std.c.W` has no members on Windows; the launcher never runs there.
+    if (comptime builtin.os.tag == .windows) return .{ .exited = @truncate(raw_status) };
     return if (std.c.W.IFEXITED(raw_status))
         .{ .exited = std.c.W.EXITSTATUS(raw_status) }
     else if (std.c.W.IFSIGNALED(raw_status))
@@ -585,6 +619,8 @@ fn launcherStatusToTerm(raw_status: u32) std.process.Child.Term {
 }
 
 test "launcher wait status classifies terminal results before stops" {
+    // POSIX waitpid status words do not exist on Windows.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     try std.testing.expectEqual(
         std.process.Child.Term{ .exited = 23 },
         launcherStatusToTerm(23 << 8),
@@ -603,7 +639,19 @@ test "launcher wait status classifies terminal results before stops" {
     );
 }
 
+extern "kernel32" fn WaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
+extern "kernel32" fn GetExitCodeProcess(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn TerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+
 fn waitLauncherChild(child: *std.process.Child) !std.process.Child.Term {
+    // No waitpid on Windows; `child.id` is already the process HANDLE.
+    if (comptime builtin.os.tag == .windows) {
+        const handle = child.id orelse return error.ChildIdentityMissing;
+        if (WaitForSingleObject(handle, 0xFFFFFFFF) != 0) return error.ChildWaitFailed;
+        var code: std.os.windows.DWORD = 0;
+        if (GetExitCodeProcess(handle, &code) == .FALSE) return error.ChildWaitFailed;
+        return .{ .exited = @truncate(code) };
+    }
     const pid = child.id orelse return error.ChildIdentityMissing;
     var observe_stops = true;
     while (true) {
@@ -3129,7 +3177,7 @@ fn applyMonitorSocketTimeout(stream: std.Io.net.Stream, timeout_ms: i64) void {
 }
 
 const SignalTarget = struct {
-    pid: std.posix.pid_t,
+    pid: Pid,
     token: process_supervisor.ProcessInstanceToken,
 };
 
@@ -3147,7 +3195,7 @@ const Session = struct {
     write_mutex: std.Io.Mutex = .init,
     lifecycle: contracts.Lifecycle = .starting,
     last_output_ms: i64,
-    child_pid: ?std.posix.pid_t = null,
+    child_pid: ?Pid = null,
     child_token: ?process_supervisor.ProcessInstanceToken = null,
     recovered_start_identity: bool = false,
     term: ?std.process.Child.Term = null,
@@ -3292,7 +3340,7 @@ const Session = struct {
             else => return err,
         };
         const child_pid = if (durable.record.pid) |value|
-            std.fmt.parseInt(std.posix.pid_t, value, 10) catch null
+            std.fmt.parseInt(Pid, value, 10) catch null
         else
             null;
         const child_token = if (durable.record.process_token) |value|
@@ -3699,6 +3747,8 @@ const Session = struct {
     }
 
     fn launchNative(self: *Session, request: contracts.StartRequest) !void {
+        // Native PTY sessions are macOS/Linux-only (see host capabilities).
+        if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
         var invocation = try shell_resolver.resolve(
             null,
             pinnedShell(request.shell, self.shell),
@@ -4180,6 +4230,8 @@ const Session = struct {
             pid_text,
             token.?,
         ) != .matched) return false;
+        // No signals or process groups on Windows; the pid is numeric here.
+        if (comptime builtin.os.tag == .windows) return io_mod.terminateProcess(pid.?);
         return std.c.kill(-pid.?, signal) == 0;
     }
 
@@ -4459,7 +4511,7 @@ const Session = struct {
     }
 
     fn publishStarted(self: *Session, raw_pid: u32) void {
-        const pid = std.math.cast(std.posix.pid_t, raw_pid) orelse {
+        const pid = std.math.cast(Pid, raw_pid) orelse {
             self.failClosed(.session_lost);
             return;
         };
@@ -5660,7 +5712,7 @@ extern "c" fn posix_openpt(flags: c_int) c_int;
 extern "c" fn grantpt(fd: c_int) c_int;
 extern "c" fn unlockpt(fd: c_int) c_int;
 extern "c" fn ptsname(fd: c_int) ?[*:0]u8;
-extern "c" fn tcsetpgrp(fd: c_int, pgrp: std.c.pid_t) c_int;
+extern "c" fn tcsetpgrp(fd: c_int, pgrp: Pid) c_int;
 
 fn openPty() !Pty {
     if (!isSupported()) return error.TerminalHostUnsupported;
@@ -6131,6 +6183,9 @@ fn launchFailureCode(err: anyerror) contracts.StructuredErrorCode {
 }
 
 fn signalValue(signal: contracts.Signal) std.c.SIG {
+    // Windows has no HUP/QUIT/KILL signals; every delivery terminates via
+    // TerminateProcess, so the value only needs to exist, not distinguish.
+    if (comptime builtin.os.tag == .windows) return std.c.SIG.TERM;
     return switch (signal) {
         .hangup => std.c.SIG.HUP,
         .interrupt => std.c.SIG.INT,
@@ -6248,6 +6303,8 @@ test "write payload encoding preserves text paste keys and controls" {
 }
 
 test "terminal outcomes preserve exact exit and signal status" {
+    // POSIX signal variants do not exist in the Windows Term union.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     try std.testing.expectEqual(
         contracts.ReturnOutcome{ .exited = 23 },
         outcomeFromTerm(.{ .exited = 23 }).?,
@@ -6267,6 +6324,8 @@ test "terminal outcomes preserve exact exit and signal status" {
 }
 
 test "terminal signal completion requires checked descendants and shell group" {
+    // POSIX process-group signaling has no Windows counterpart here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     try std.testing.expect(terminalSignalCompleted(.{}, true));
     try std.testing.expect(!terminalSignalCompleted(.{
         .delivered = 1,

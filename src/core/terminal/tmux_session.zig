@@ -1667,6 +1667,9 @@ fn cleanupSocketIfUnusedChecked(alloc: Allocator, socket: []const u8) !void {
 }
 
 fn privateSocketHasListener(socket: []const u8) !bool {
+    // Unix-domain probing is meaningless without a tmux server, which does
+    // not run natively on Windows.
+    if (comptime builtin.os.tag == .windows) return false;
     if (socket.len >= @sizeOf(@FieldType(std.c.sockaddr.un, "path"))) {
         return error.InvalidTmuxSocketPath;
     }
@@ -2183,6 +2186,23 @@ fn acceptBeforeDeadline(
     deadline: PeerDeadline,
     cancelled: ?*const std.atomic.Value(bool),
 ) !std.Io.net.Stream {
+    // `std.posix.poll` has no ws2_32 binding in Zig 0.16; wait on the
+    // listener socket directly instead.
+    if (comptime builtin.os.tag == .windows) {
+        while (true) {
+            if (cancelled) |value| {
+                if (value.load(.acquire)) return error.TmuxPeerCancelled;
+            }
+            const remaining_ms = try deadline.remaining();
+            const wait_ms: i32 = @intCast(@min(remaining_ms, deadline_poll_ms));
+            if (io_mod.socketWaitReadable(@intFromPtr(server.socket.handle), wait_ms)) {
+                return server.accept(io_mod.getIo()) catch |err| switch (err) {
+                    error.ConnectionAborted, error.WouldBlock => continue,
+                    else => return err,
+                };
+            }
+        }
+    }
     var poll_fds = [_]std.posix.pollfd{.{
         .fd = server.socket.handle,
         .events = std.posix.POLL.IN,
@@ -2246,7 +2266,18 @@ fn assignForegroundProcessGroup(fd: c_int, pgrp: std.posix.pid_t) bool {
     return tcsetpgrp(fd, pgrp) == 0;
 }
 
+extern "kernel32" fn TerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn WaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
+extern "kernel32" fn GetExitCodeProcess(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+
 fn signalLauncherProcessGroup(pid: std.c.pid_t, signal: std.c.SIG) !void {
+    // No process groups or signals on Windows; `pid` is already the process
+    // HANDLE here, so terminate it directly.
+    if (comptime builtin.os.tag == .windows) {
+        _ = signal;
+        if (TerminateProcess(pid, 1) == .FALSE) return error.ChildSignalFailed;
+        return;
+    }
     while (true) switch (std.c.errno(std.c.kill(-pid, signal))) {
         .SUCCESS => return,
         .INTR => continue,
@@ -2255,6 +2286,8 @@ fn signalLauncherProcessGroup(pid: std.c.pid_t, signal: std.c.SIG) !void {
 }
 
 fn launcherStatusToTerm(raw_status: u32) std.process.Child.Term {
+    // `std.c.W` has no members on Windows; the launcher never runs there.
+    if (comptime builtin.os.tag == .windows) return .{ .exited = @truncate(raw_status) };
     return if (std.c.W.IFEXITED(raw_status))
         .{ .exited = std.c.W.EXITSTATUS(raw_status) }
     else if (std.c.W.IFSIGNALED(raw_status))
@@ -2266,6 +2299,15 @@ fn launcherStatusToTerm(raw_status: u32) std.process.Child.Term {
 }
 
 fn waitLauncherChild(child: *std.process.Child) !std.process.Child.Term {
+    // No waitpid on Windows; `child.id` is already the process HANDLE.
+    if (comptime builtin.os.tag == .windows) {
+        const handle = child.id orelse return error.ChildIdentityMissing;
+        if (WaitForSingleObject(handle, 0xFFFFFFFF) != 0) return error.ChildWaitFailed;
+        var code: std.os.windows.DWORD = 0;
+        if (GetExitCodeProcess(handle, &code) == .FALSE) return error.ChildWaitFailed;
+        child.id = null;
+        return .{ .exited = @truncate(code) };
+    }
     const pid = child.id orelse return error.ChildIdentityMissing;
     var observe_stops = true;
     while (true) {
@@ -2307,6 +2349,11 @@ fn waitLauncherChild(child: *std.process.Child) !std.process.Child.Term {
 }
 
 fn requestChildTermination(child_pid: std.posix.pid_t) void {
+    // `child_pid` is the process HANDLE on Windows; terminate it directly.
+    if (comptime builtin.os.tag == .windows) {
+        _ = TerminateProcess(child_pid, 1);
+        return;
+    }
     const group_kill_succeeded =
         io_mod.getenv("FX_TERMINAL_TEST_TMUX_GROUP_KILL_FAILURE") == null and
         std.c.kill(-child_pid, std.c.SIG.KILL) == 0;
@@ -2342,6 +2389,8 @@ fn writeAll(fd: std.posix.fd_t, bytes: []const u8) !void {
 extern "c" fn tcsetpgrp(fd: c_int, pgrp: std.posix.pid_t) c_int;
 
 test "tmux launcher wait status classifies terminal results before stops" {
+    // POSIX waitpid status words do not exist on Windows.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     try std.testing.expectEqual(
         std.process.Child.Term{ .exited = 23 },
         launcherStatusToTerm(23 << 8),
@@ -2410,12 +2459,14 @@ test "tmux marker arrival deadlines follow authenticated phase transitions" {
 }
 
 test "tmux peer deadline bounds accept receive partial frames and cancellation" {
+    // Unix-socket paths and pid formatting are POSIX-only.
+    if (comptime io_mod.is_windows) return error.SkipZigTest;
     if (!supported()) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     const socket_path = try std.fmt.allocPrint(
         alloc,
         "/tmp/fx-peer-deadline-{d}.sock",
-        .{std.c.getpid()},
+        .{io_mod.currentProcessId()},
     );
     defer alloc.free(socket_path);
     std.Io.Dir.deleteFileAbsolute(std.testing.io, socket_path) catch {};

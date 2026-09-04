@@ -884,7 +884,11 @@ fn readTraceForTest(alloc: Allocator, path: []const u8) ![]u8 {
 }
 
 // Windows has no SIGWINCH; the handler takes no signal there.
-fn resizeHandlerForTest(_: if (@import("builtin").os.tag == .windows) void else std.posix.SIG) callconv(.c) void {}
+const resizeHandlerForTest: app_lifecycle.ResizeHandler = if (@import("builtin").os.tag == .windows) struct {
+    fn handle() callconv(.c) void {}
+}.handle else struct {
+    fn handle(_: std.posix.SIG) callconv(.c) void {}
+}.handle;
 
 test "app_bootstrap_runtime transfers startup state and starts a fresh session" {
     const alloc = std.testing.allocator;

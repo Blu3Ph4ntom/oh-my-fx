@@ -1506,6 +1506,8 @@ test "host identity capture and reconciliation use the injected provider" {
 }
 
 test "endpoint paths honor the native sockaddr capacity" {
+    // Unix-socket paths do not exist on Windows.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (!isSupported()) return error.SkipZigTest;
     const path_limit = comptime nativeEndpointPathLimit(builtin.os.tag).?;
     var maximum: [path_limit - 1]u8 = @splat('x');

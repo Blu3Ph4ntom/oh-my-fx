@@ -2604,11 +2604,22 @@ const TestPreparedProcess = struct {
         return waitForOwnedChild(self, timeout_ms);
     }
 
+    extern "kernel32" fn testWaitGetExitCode(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+
     fn waitForOwnedChild(self: *TestPreparedProcess, timeout_ms: i64) bool {
         const started_ms = io_mod.milliTimestamp();
         while (true) {
             const pid = self.child.id orelse return true;
-            if (std.c.waitpid(pid, null, std.c.W.NOHANG) == pid) {
+            // No waitpid on Windows; poll the process handle instead.
+            if (comptime builtin.os.tag == .windows) {
+                var code: std.os.windows.DWORD = 0;
+                if (testWaitGetExitCode(pid, &code) == .FALSE or code != 259) {
+                    self.child.id = null;
+                    self.alloc.free(self.pid);
+                    self.alloc.destroy(self);
+                    return true;
+                }
+            } else if (std.c.waitpid(pid, null, std.c.W.NOHANG) == pid) {
                 self.child.id = null;
                 self.alloc.free(self.pid);
                 self.alloc.destroy(self);

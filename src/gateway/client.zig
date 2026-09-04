@@ -5609,30 +5609,41 @@ const LoopbackGatewayFixture = struct {
 
         switch (self.mode) {
             .reset_on_accept => {
-                const reset_on_close: std.posix.linger = .{
-                    .onoff = 1,
-                    .linger = 0,
-                };
-                try std.posix.setsockopt(
-                    stream.socket.handle,
-                    std.posix.SOL.SOCKET,
-                    std.posix.SO.LINGER,
-                    std.mem.asBytes(&reset_on_close),
-                );
-                self.markStage();
+                // Winsock linger uses its own struct; see `setSocketLingerReset`.
+                if (comptime builtin.os.tag == .windows) {
+                    io_mod.setSocketLingerReset(@intFromPtr(stream.socket.handle));
+                    self.markStage();
+                } else {
+                    const reset_on_close: std.posix.linger = .{
+                        .onoff = 1,
+                        .linger = 0,
+                    };
+                    try std.posix.setsockopt(
+                        stream.socket.handle,
+                        std.posix.SOL.SOCKET,
+                        std.posix.SO.LINGER,
+                        std.mem.asBytes(&reset_on_close),
+                    );
+                    self.markStage();
+                }
             },
             .tls_handshake_stall => {
                 self.markStage();
                 self.hold();
             },
             .request_send_stall => {
-                const receive_buffer: c_int = 1024;
-                std.posix.setsockopt(
-                    stream.socket.handle,
-                    std.posix.SOL.SOCKET,
-                    std.posix.SO.RCVBUF,
-                    std.mem.asBytes(&receive_buffer),
-                ) catch {};
+                // Winsock takes a plain int for SO_RCVBUF.
+                if (comptime builtin.os.tag == .windows) {
+                    io_mod.setSocketRecvBuf(@intFromPtr(stream.socket.handle), 1024);
+                } else {
+                    const receive_buffer: c_int = 1024;
+                    std.posix.setsockopt(
+                        stream.socket.handle,
+                        std.posix.SOL.SOCKET,
+                        std.posix.SO.RCVBUF,
+                        std.mem.asBytes(&receive_buffer),
+                    ) catch {};
+                }
                 self.markStage();
                 self.hold();
             },

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const approval_persistence = @import("approval_persistence.zig");
 const authority = @import("authority.zig");
 const auto_classifier_context = @import("../permissions/auto_classifier_context.zig");
@@ -10251,6 +10252,8 @@ noinline fn resumablePageContains(
 }
 
 test "control queue admission remains available while another process owns session lock" {
+    // Spawns python3 with POSIX flock; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var env = try TestEnvironment.init(alloc);
     defer env.deinit(alloc);
@@ -11281,6 +11284,8 @@ fn forkProcessMutation(
     start_fd: std.c.fd_t,
     status_fd: ?std.c.fd_t,
 ) !std.c.pid_t {
+    // No fork on Windows; these mutation helpers serve POSIX-only tests.
+    if (comptime builtin.os.tag == .windows) return error.ProcessForkFailed;
     const pid = std.c.fork();
     if (pid < 0) return error.ProcessForkFailed;
     if (pid != 0) return pid;

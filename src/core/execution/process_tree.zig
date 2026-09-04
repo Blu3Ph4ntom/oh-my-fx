@@ -4,9 +4,16 @@ const io_mod = @import("../shared/io.zig");
 
 const Allocator = std.mem.Allocator;
 
+/// Process identifier used by the tracker. `std.posix.pid_t` is a HANDLE on
+/// Windows, so Windows tracks processes by numeric DWORD id instead.
+const Pid = if (builtin.os.tag == .windows) u32 else std.posix.pid_t;
+
 const Identity = union(enum) {
     linux_start_ticks: u64,
     macos_unique_id: u64,
+    /// Windows process creation time (100ns ticks). Unique per boot, so it
+    /// guards traversal and signaling against PID reuse like start ticks do.
+    windows_creation_time: u64,
 
     fn eql(self: Identity, other: Identity) bool {
         return switch (self) {
@@ -18,18 +25,22 @@ const Identity = union(enum) {
                 .macos_unique_id => |other_unique_id| unique_id == other_unique_id,
                 else => false,
             },
+            .windows_creation_time => |created| switch (other) {
+                .windows_creation_time => |other_created| created == other_created,
+                else => false,
+            },
         };
     }
 };
 
 const TrackedProcess = struct {
-    pid: std.posix.pid_t,
+    pid: Pid,
     identity: Identity,
 };
 
 const ProcessSnapshot = struct {
     identity: Identity,
-    parent_pid: std.posix.pid_t,
+    parent_pid: Pid,
     parent_unique_id: ?u64 = null,
 };
 
@@ -39,21 +50,27 @@ pub const DeliverySummary = struct {
 };
 
 const ProcessGroupState = union(enum) {
-    found: std.posix.pid_t,
+    found: Pid,
     vanished,
     unavailable,
 };
 
 const SystemSignalEffects = struct {
-    fn capture(alloc: Allocator, pid: std.posix.pid_t) !ProcessSnapshot {
+    fn capture(alloc: Allocator, pid: Pid) !ProcessSnapshot {
         return captureSnapshot(alloc, pid);
     }
 
-    fn processGroup(pid: std.posix.pid_t) ProcessGroupState {
+    fn processGroup(pid: Pid) ProcessGroupState {
         return inspectProcessGroup(pid);
     }
 
-    fn send(pid: std.posix.pid_t, signal: std.posix.SIG) std.posix.KillError!void {
+    fn send(pid: Pid, signal: std.posix.SIG) std.posix.KillError!void {
+        // No signals or process groups on Windows; terminate the tree member.
+        if (comptime builtin.os.tag == .windows) {
+            _ = signal;
+            if (!io_mod.terminateProcess(pid)) return error.ProcessNotFound;
+            return;
+        }
         return std.posix.kill(pid, signal);
     }
 };
@@ -65,8 +82,8 @@ pub const Tracker = struct {
     alloc: Allocator,
     root: ?TrackedProcess = null,
     processes: std.ArrayList(TrackedProcess) = .empty,
-    macos_child_buffer: []std.posix.pid_t = &.{},
-    macos_pid_buffer: []std.posix.pid_t = &.{},
+    macos_child_buffer: []Pid = &.{},
+    macos_pid_buffer: []Pid = &.{},
 
     pub fn init(alloc: Allocator) !Tracker {
         var tracker = Tracker{ .alloc = alloc };
@@ -78,7 +95,7 @@ pub const Tracker = struct {
             else
                 1024;
             tracker.macos_child_buffer = try alloc.alloc(
-                std.posix.pid_t,
+                Pid,
                 capacity,
             );
             const process_count = Darwin.proc_listallpids(null, 0);
@@ -87,7 +104,7 @@ pub const Tracker = struct {
             else
                 1024;
             tracker.macos_pid_buffer = try alloc.alloc(
-                std.posix.pid_t,
+                Pid,
                 process_capacity,
             );
         }
@@ -105,7 +122,7 @@ pub const Tracker = struct {
         self.* = undefined;
     }
 
-    pub fn refresh(self: *Tracker, root_pid: std.posix.pid_t) !void {
+    pub fn refresh(self: *Tracker, root_pid: Pid) !void {
         const root_snapshot: ?ProcessSnapshot = captureSnapshot(self.alloc, root_pid) catch |err| switch (err) {
             error.ProcessNotFound => null,
             else => return err,
@@ -139,7 +156,7 @@ pub const Tracker = struct {
 
     pub fn refreshAdditionalRoot(
         self: *Tracker,
-        root_pid: std.posix.pid_t,
+        root_pid: Pid,
     ) !void {
         const snapshot = captureSnapshot(self.alloc, root_pid) catch |err| switch (err) {
             error.ProcessNotFound => return,
@@ -164,7 +181,7 @@ pub const Tracker = struct {
         }
         const count = Darwin.proc_listallpids(
             self.macos_pid_buffer.ptr,
-            @intCast(self.macos_pid_buffer.len * @sizeOf(std.posix.pid_t)),
+            @intCast(self.macos_pid_buffer.len * @sizeOf(Pid)),
         );
         if (count <= 0) return;
         const process_count = @min(
@@ -188,7 +205,7 @@ pub const Tracker = struct {
     pub fn signalOutsideProcessGroup(
         self: *Tracker,
         signal: std.posix.SIG,
-        preserved_group: std.posix.pid_t,
+        preserved_group: Pid,
     ) usize {
         return self.signalProcessesChecked(signal, preserved_group).delivered;
     }
@@ -196,7 +213,7 @@ pub const Tracker = struct {
     pub fn signalOutsideProcessGroupChecked(
         self: *Tracker,
         signal: std.posix.SIG,
-        preserved_group: std.posix.pid_t,
+        preserved_group: Pid,
     ) DeliverySummary {
         return self.signalProcessesChecked(signal, preserved_group);
     }
@@ -204,7 +221,7 @@ pub const Tracker = struct {
     fn signalProcessesChecked(
         self: *Tracker,
         signal: std.posix.SIG,
-        preserved_group: ?std.posix.pid_t,
+        preserved_group: ?Pid,
     ) DeliverySummary {
         return self.signalProcessesWith(
             signal,
@@ -216,7 +233,7 @@ pub const Tracker = struct {
     fn signalProcessesWith(
         self: *Tracker,
         signal: std.posix.SIG,
-        preserved_group: ?std.posix.pid_t,
+        preserved_group: ?Pid,
         comptime Effects: type,
     ) DeliverySummary {
         var summary: DeliverySummary = .{};
@@ -247,7 +264,7 @@ pub const Tracker = struct {
         self: *Tracker,
         process: TrackedProcess,
         signal: std.posix.SIG,
-        preserved_group: ?std.posix.pid_t,
+        preserved_group: ?Pid,
         summary: *DeliverySummary,
         comptime Effects: type,
     ) void {
@@ -296,6 +313,7 @@ pub const Tracker = struct {
         switch (builtin.os.tag) {
             .linux => try self.appendLinuxChildren(parent),
             .macos => try self.appendMacOSChildren(parent),
+            .windows => try self.appendWindowsChildren(parent),
             else => return error.ProcessTreeUnsupported,
         }
     }
@@ -317,7 +335,7 @@ pub const Tracker = struct {
         var tasks = task_dir.iterate();
         while (try tasks.next(io_mod.getIo())) |entry| {
             const tid = std.fmt.parseInt(
-                std.posix.pid_t,
+                Pid,
                 entry.name,
                 10,
             ) catch continue;
@@ -329,7 +347,7 @@ pub const Tracker = struct {
     fn appendLinuxTaskChildren(
         self: *Tracker,
         parent: TrackedProcess,
-        tid: std.posix.pid_t,
+        tid: Pid,
     ) !void {
         const path = try std.fmt.allocPrint(
             self.alloc,
@@ -347,7 +365,7 @@ pub const Tracker = struct {
         if (!try self.parentIdentityMatches(parent)) return;
         var children = std.mem.tokenizeAny(u8, buffer[0..read_len], " \t\r\n");
         while (children.next()) |pid_text| {
-            const pid = std.fmt.parseInt(std.posix.pid_t, pid_text, 10) catch continue;
+            const pid = std.fmt.parseInt(Pid, pid_text, 10) catch continue;
             try self.trackChild(pid, parent.pid);
         }
     }
@@ -361,7 +379,7 @@ pub const Tracker = struct {
         const count = Darwin.proc_listchildpids(
             parent.pid,
             self.macos_child_buffer.ptr,
-            @intCast(self.macos_child_buffer.len * @sizeOf(std.posix.pid_t)),
+            @intCast(self.macos_child_buffer.len * @sizeOf(Pid)),
         );
         if (count <= 0) return;
         const child_count = @min(
@@ -384,8 +402,8 @@ pub const Tracker = struct {
 
     fn trackChild(
         self: *Tracker,
-        pid: std.posix.pid_t,
-        expected_parent_pid: std.posix.pid_t,
+        pid: Pid,
+        expected_parent_pid: Pid,
     ) !void {
         const snapshot = captureSnapshot(self.alloc, pid) catch |err| switch (err) {
             error.ProcessNotFound => return,
@@ -406,7 +424,7 @@ pub const Tracker = struct {
         });
     }
 
-    fn trackLineageProcess(self: *Tracker, pid: std.posix.pid_t) !bool {
+    fn trackLineageProcess(self: *Tracker, pid: Pid) !bool {
         const snapshot = captureSnapshot(self.alloc, pid) catch return false;
         const parent_unique_id = snapshot.parent_unique_id orelse return false;
         if (!self.containsMacOSUniqueId(parent_unique_id)) return false;
@@ -450,21 +468,21 @@ fn shouldTraverseParent(expected: Identity, actual: Identity) bool {
 
 fn snapshotBelongsToParent(
     snapshot: ProcessSnapshot,
-    expected_parent_pid: std.posix.pid_t,
+    expected_parent_pid: Pid,
 ) bool {
     return snapshot.parent_pid == expected_parent_pid;
 }
 
 fn shouldSignalProcess(
-    process_group: ?std.posix.pid_t,
-    preserved_group: ?std.posix.pid_t,
+    process_group: ?Pid,
+    preserved_group: ?Pid,
 ) bool {
     const preserved = preserved_group orelse return true;
     const actual = process_group orelse return false;
     return actual != preserved;
 }
 
-fn inspectProcessGroup(pid: std.posix.pid_t) ProcessGroupState {
+fn inspectProcessGroup(pid: Pid) ProcessGroupState {
     if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) {
         return .unavailable;
     }
@@ -476,7 +494,7 @@ fn inspectProcessGroup(pid: std.posix.pid_t) ProcessGroupState {
     };
 }
 
-extern "c" fn getpgid(pid: std.posix.pid_t) std.posix.pid_t;
+extern "c" fn getpgid(pid: Pid) Pid;
 
 fn readLinuxChildrenFile(file: std.Io.File, buffer: []u8) !usize {
     if (comptime builtin.os.tag != .linux) return error.ProcessTreeUnsupported;
@@ -582,7 +600,7 @@ test "macOS lineage identity matches only the same unique process" {
 
 test "checked signal delivery distinguishes vanished stale and failed targets" {
     const FakeEffects = struct {
-        fn capture(_: Allocator, pid: std.posix.pid_t) !ProcessSnapshot {
+        fn capture(_: Allocator, pid: Pid) !ProcessSnapshot {
             return switch (pid) {
                 11 => error.ProcessNotFound,
                 12 => error.ProcessIdentityUnavailable,
@@ -597,7 +615,7 @@ test "checked signal delivery distinguishes vanished stale and failed targets" {
             };
         }
 
-        fn processGroup(pid: std.posix.pid_t) ProcessGroupState {
+        fn processGroup(pid: Pid) ProcessGroupState {
             return switch (pid) {
                 14 => .vanished,
                 15 => .unavailable,
@@ -606,7 +624,7 @@ test "checked signal delivery distinguishes vanished stale and failed targets" {
             };
         }
 
-        fn send(pid: std.posix.pid_t, _: std.posix.SIG) std.posix.KillError!void {
+        fn send(pid: Pid, _: std.posix.SIG) std.posix.KillError!void {
             return switch (pid) {
                 17 => error.PermissionDenied,
                 18 => error.ProcessNotFound,
@@ -635,7 +653,7 @@ test "checked signal delivery distinguishes vanished stale and failed targets" {
 
 test "checked signal delivery keeps vanished stale and excluded targets complete" {
     const FakeEffects = struct {
-        fn capture(_: Allocator, pid: std.posix.pid_t) !ProcessSnapshot {
+        fn capture(_: Allocator, pid: Pid) !ProcessSnapshot {
             if (pid == 21) return error.ProcessNotFound;
             return .{
                 .identity = .{ .linux_start_ticks = if (pid == 22) 122 else @as(u64, @intCast(pid)) },
@@ -643,14 +661,14 @@ test "checked signal delivery keeps vanished stale and excluded targets complete
             };
         }
 
-        fn processGroup(pid: std.posix.pid_t) ProcessGroupState {
+        fn processGroup(pid: Pid) ProcessGroupState {
             return switch (pid) {
                 23 => .vanished,
                 else => .{ .found = 41 },
             };
         }
 
-        fn send(_: std.posix.pid_t, _: std.posix.SIG) std.posix.KillError!void {
+        fn send(_: Pid, _: std.posix.SIG) std.posix.KillError!void {
             return;
         }
     };
@@ -673,15 +691,97 @@ test "checked signal delivery keeps vanished stale and excluded targets complete
     try std.testing.expect(!summary.incomplete);
 }
 
-fn captureSnapshot(alloc: Allocator, pid: std.posix.pid_t) !ProcessSnapshot {
+fn captureSnapshot(alloc: Allocator, pid: Pid) !ProcessSnapshot {
     return switch (builtin.os.tag) {
         .linux => try captureLinuxSnapshot(alloc, pid),
         .macos => try captureMacOSSnapshot(pid),
+        .windows => try captureWindowsSnapshot(alloc, pid),
         else => error.ProcessTreeUnsupported,
     };
 }
 
-fn captureLinuxSnapshot(alloc: Allocator, pid: std.posix.pid_t) !ProcessSnapshot {
+const windows_TH32CS_SNAPPROCESS: std.os.windows.DWORD = 0x00000002;
+
+extern "kernel32" fn CreateToolhelp32Snapshot(dwFlags: std.os.windows.DWORD, th32ProcessID: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn Process32FirstW(hSnapshot: std.os.windows.HANDLE, lppe: *TreeProcessEntry) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn Process32NextW(hSnapshot: std.os.windows.HANDLE, lppe: *TreeProcessEntry) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn CloseHandle(hObject: std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn OpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
+extern "kernel32" fn GetProcessTimes(hProcess: std.os.windows.HANDLE, lpCreationTime: *TreeFileTime, lpExitTime: *TreeFileTime, lpKernelTime: *TreeFileTime, lpUserTime: *TreeFileTime) callconv(.winapi) std.os.windows.BOOL;
+
+const TreeFileTime = extern struct {
+    low: std.os.windows.DWORD,
+    high: std.os.windows.DWORD,
+};
+
+const TreeProcessEntry = extern struct {
+    dwSize: std.os.windows.DWORD,
+    cntUsage: std.os.windows.DWORD,
+    th32ProcessID: std.os.windows.DWORD,
+    th32DefaultHeapID: usize,
+    th32ModuleID: std.os.windows.DWORD,
+    cntThreads: std.os.windows.DWORD,
+    th32ParentProcessID: std.os.windows.DWORD,
+    pcPriClassBase: i32,
+    dwFlags: std.os.windows.DWORD,
+    szExeFile: [260]u16,
+};
+
+fn treeProcessParentPid(pid: Pid) ?Pid {
+    const snapshot = CreateToolhelp32Snapshot(windows_TH32CS_SNAPPROCESS, 0);
+    if (snapshot == std.os.windows.INVALID_HANDLE_VALUE) return null;
+    defer _ = CloseHandle(snapshot);
+    var entry: TreeProcessEntry = std.mem.zeroes(TreeProcessEntry);
+    entry.dwSize = @sizeOf(TreeProcessEntry);
+    if (Process32FirstW(snapshot, &entry) == .FALSE) return null;
+    while (true) {
+        if (entry.th32ProcessID == pid) return entry.th32ParentProcessID;
+        if (Process32NextW(snapshot, &entry) == .FALSE) break;
+    }
+    return null;
+}
+
+fn treeProcessCreationTime(pid: Pid) ?u64 {
+    const handle = OpenProcess(0x1000, .FALSE, pid) orelse return null;
+    defer _ = CloseHandle(handle);
+    var created: TreeFileTime = undefined;
+    var ignored: TreeFileTime = undefined;
+    if (GetProcessTimes(handle, &created, &ignored, &ignored, &ignored) == .FALSE) return null;
+    return (@as(u64, created.high) << 32) | created.low;
+}
+
+fn captureWindowsSnapshot(alloc: Allocator, pid: Pid) !ProcessSnapshot {
+    if (comptime builtin.os.tag != .windows) return error.ProcessTreeUnsupported;
+    _ = alloc;
+    const parent_pid = treeProcessParentPid(pid) orelse return error.ProcessNotFound;
+    // Without a creation time the identity cannot guard against PID reuse,
+    // so treat the process as vanished instead of tracking it weakly.
+    const created = treeProcessCreationTime(pid) orelse return error.ProcessNotFound;
+    return .{
+        .identity = .{ .windows_creation_time = created },
+        .parent_pid = parent_pid,
+    };
+}
+
+fn appendWindowsChildren(self: *Tracker, parent: TrackedProcess) !void {
+    if (comptime builtin.os.tag != .windows) return error.ProcessTreeUnsupported;
+    if (!try self.parentIdentityMatches(parent)) return;
+    const snapshot = CreateToolhelp32Snapshot(windows_TH32CS_SNAPPROCESS, 0);
+    if (snapshot == std.os.windows.INVALID_HANDLE_VALUE) return error.ProcessTreeInspectionFailed;
+    defer _ = CloseHandle(snapshot);
+    var entry: TreeProcessEntry = std.mem.zeroes(TreeProcessEntry);
+    entry.dwSize = @sizeOf(TreeProcessEntry);
+    if (Process32FirstW(snapshot, &entry) == .FALSE) return error.ProcessTreeInspectionFailed;
+    while (true) {
+        if (entry.th32ParentProcessID == parent.pid) {
+            // Reuse the shared admission path so identity checks stay uniform.
+            try self.trackChild(entry.th32ProcessID, parent.pid);
+        }
+        if (Process32NextW(snapshot, &entry) == .FALSE) break;
+    }
+}
+
+fn captureLinuxSnapshot(alloc: Allocator, pid: Pid) !ProcessSnapshot {
     if (comptime builtin.os.tag != .linux) return error.ProcessTreeUnsupported;
     const path = try std.fmt.allocPrint(alloc, "/proc/{d}/stat", .{pid});
     defer alloc.free(path);
@@ -694,10 +794,10 @@ fn captureLinuxSnapshot(alloc: Allocator, pid: std.posix.pid_t) !ProcessSnapshot
         return error.ProcessIdentityUnavailable;
     var fields = std.mem.tokenizeScalar(u8, stat[close_paren + 1 ..], ' ');
     var field_number: usize = 3;
-    var parent_pid: ?std.posix.pid_t = null;
+    var parent_pid: ?Pid = null;
     while (fields.next()) |field| : (field_number += 1) {
         if (field_number == 4) {
-            parent_pid = std.fmt.parseInt(std.posix.pid_t, field, 10) catch
+            parent_pid = std.fmt.parseInt(Pid, field, 10) catch
                 return error.ProcessIdentityUnavailable;
         }
         if (field_number == 22) {
@@ -730,7 +830,7 @@ fn readLinuxProcFile(file: std.Io.File, buffer: []u8) !usize {
     }
 }
 
-fn captureMacOSSnapshot(pid: std.posix.pid_t) !ProcessSnapshot {
+fn captureMacOSSnapshot(pid: Pid) !ProcessSnapshot {
     if (comptime builtin.os.tag != .macos) return error.ProcessTreeUnsupported;
     var unique: Darwin.ProcUniqueIdentifierInfo = undefined;
     const unique_len = Darwin.proc_pidinfo(

@@ -3252,7 +3252,7 @@ fn spawnForegroundSessionBootstrapForTest(
 fn expectForegroundSessionReadyForTest(child: *std.process.Child) !void {
     const ready_read = child.stderr orelse return error.TestUnexpectedResult;
     var ready: [1]u8 = undefined;
-    try std.testing.expectEqual(@as(usize, 1), try std.posix.read(ready_read.handle, &ready));
+    try std.testing.expectEqual(@as(usize, 1), try ready_read.readStreaming(io_mod.getIo(), &.{&ready}));
     try std.testing.expectEqual(foreground_session_ready_byte, ready[0]);
 }
 

@@ -460,6 +460,19 @@ const windows_std_input_handle: std.os.windows.DWORD = 0xFFFFFFF6;
 const windows_std_output_handle: std.os.windows.DWORD = 0xFFFFFFF5;
 
 extern "kernel32" fn GetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn OpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
+extern "kernel32" fn TerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn CloseHandle(hObject: std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
+
+/// Terminates a process by numeric id. Returns false when the process could
+/// not be opened or terminated. Windows-only helper shared by the sandbox
+/// reaper and the process-tree tracker.
+pub fn terminateProcess(pid: u32) bool {
+    if (comptime !is_windows) return false;
+    const handle = OpenProcess(0x0001, .FALSE, pid) orelse return false;
+    defer _ = CloseHandle(handle);
+    return TerminateProcess(handle, 1) != .FALSE;
+}
 extern "kernel32" fn WaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
 extern "kernel32" fn GetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, lpMode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
 extern "kernel32" fn SetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, dwMode: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
@@ -554,6 +567,22 @@ pub fn setSocketTimeoutMs(sock: usize, timeout_ms: u32) void {
     var ms = timeout_ms;
     _ = setsockopt(sock, 0xffff, 0x1006, @ptrCast(&ms), @sizeOf(u32));
     _ = setsockopt(sock, 0xffff, 0x1005, @ptrCast(&ms), @sizeOf(u32));
+}
+
+/// Sets SO_RCVBUF in bytes. Best-effort; failures are ignored by design.
+pub fn setSocketRecvBuf(sock: usize, bytes: u32) void {
+    if (comptime !is_windows) return;
+    var size = bytes;
+    _ = ioSetsockopt(sock, 0xffff, 0x1002, @ptrCast(&size), @sizeOf(u32));
+}
+
+/// Enables abortive close (RST on close) for listener-accepted sockets.
+/// Best-effort; failures are ignored by design.
+pub fn setSocketLingerReset(sock: usize) void {
+    if (comptime !is_windows) return;
+    const Linger = extern struct { onoff: u16, seconds: u16 };
+    var linger = Linger{ .onoff = 1, .seconds = 0 };
+    _ = ioSetsockopt(sock, 0xffff, 0x0080, @ptrCast(&linger), @sizeOf(Linger));
 }
 
 /// Waits up to `timeout_ms` for a socket to become readable. Returns false
