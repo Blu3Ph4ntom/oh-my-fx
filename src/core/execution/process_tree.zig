@@ -67,7 +67,7 @@ const SystemSignalEffects = struct {
     fn send(pid: Pid, signal: std.posix.SIG) std.posix.KillError!void {
         // No signals or process groups on Windows; terminate the tree member.
         if (comptime builtin.os.tag == .windows) {
-            _ = signal;
+            _ = &signal;
             if (!io_mod.terminateProcess(pid)) return error.ProcessNotFound;
             return;
         }
