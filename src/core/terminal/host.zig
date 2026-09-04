@@ -29,7 +29,7 @@ const listener_poll_ms = 50;
 const transport_hash_bytes: usize = 16;
 const transport_hash_context = "fx.terminal.transport.v1\x00";
 const socket_permissions: std.Io.File.Permissions = switch (builtin.os.tag) {
-    .macos, .linux => .fromMode(0o600),
+    .macos, .linux => io_mod.permissionsFromMode(0o600),
     else => .default_file,
 };
 
@@ -290,7 +290,7 @@ fn openVerifiedPrivateRuntimeDir(
             parent.createDir(
                 zio,
                 name,
-                std.Io.File.Permissions.fromMode(0o700),
+                io_mod.permissionsFromMode(0o700),
             ) catch |create_err| switch (create_err) {
                 error.PathAlreadyExists => {},
                 else => return create_err,
@@ -362,7 +362,7 @@ fn validatePrivateRuntimeDir(
 ) !void {
     if (stat.kind != .directory) return error.RuntimeDirectoryUnsafe;
     if (owner_uid != uid) return error.RuntimeDirectoryOwnerMismatch;
-    if (stat.permissions.toMode() & 0o777 != 0o700) {
+    if (!io_mod.permissionsIsPrivateDir(stat.permissions)) {
         return error.PrivateStatePermissionsUnsupported;
     }
 }
@@ -1364,7 +1364,7 @@ fn verifyEndpointPermissions(host_dir: *io_mod.VerifiedDir) !void {
         .{ .follow_symlinks = false },
     );
     if (stat.kind != .unix_domain_socket or
-        stat.permissions.toMode() & 0o777 != 0o600)
+        !io_mod.permissionsIsPrivateFile(stat.permissions))
     {
         return error.PrivateEndpointPermissionsUnsupported;
     }
@@ -1616,6 +1616,7 @@ test "endpoint selection allocation and unsupported targets fail closed" {
 }
 
 test "runtime transport directories reject symlinks non-private modes and foreign owners" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (!isSupported()) return error.SkipZigTest;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -1628,8 +1629,8 @@ test "runtime transport directories reject symlinks non-private modes and foreig
     defer private.close();
     const private_stat = try private.dir.stat(std.testing.io);
     try std.testing.expectEqual(
-        @as(std.posix.mode_t, 0o700),
-        private_stat.permissions.toMode() & 0o777,
+        io_mod.expectedTestMode(0o700),
+        io_mod.permissionsToMode(private_stat.permissions) & 0o777,
     );
     try std.testing.expectError(
         error.RuntimeDirectoryOwnerMismatch,
@@ -1643,12 +1644,12 @@ test "runtime transport directories reject symlinks non-private modes and foreig
     try tmp.dir.createDir(
         std.testing.io,
         "public",
-        std.Io.File.Permissions.fromMode(0o755),
+        io_mod.permissionsFromMode(0o755),
     );
     try tmp.dir.setFilePermissions(
         std.testing.io,
         "public",
-        std.Io.File.Permissions.fromMode(0o755),
+        io_mod.permissionsFromMode(0o755),
         .{ .follow_symlinks = false },
     );
     const public_stat = try tmp.dir.statFile(
@@ -1657,8 +1658,8 @@ test "runtime transport directories reject symlinks non-private modes and foreig
         .{ .follow_symlinks = false },
     );
     try std.testing.expectEqual(
-        @as(std.posix.mode_t, 0o755),
-        public_stat.permissions.toMode() & 0o777,
+        io_mod.expectedTestMode(0o755),
+        io_mod.permissionsToMode(public_stat.permissions) & 0o777,
     );
     try std.testing.expectError(
         error.PrivateStatePermissionsUnsupported,

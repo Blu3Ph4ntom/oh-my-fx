@@ -748,7 +748,7 @@ test "command replay capture spills without losing callback order" {
     try tmp.dir.createDir(
         io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        io_mod.permissionsFromMode(0o700),
     );
     var session_dir = try tmp.dir.openDir(io_mod.getIo(), "session", .{
         .iterate = true,
@@ -789,8 +789,8 @@ test "command replay capture spills without losing callback order" {
         .{ .follow_symlinks = false },
     );
     try std.testing.expectEqual(
-        @as(u32, 0o600),
-        replay_stat.permissions.toMode() & 0o777,
+        io_mod.expectedTestMode(0o600),
+        io_mod.permissionsToMode(replay_stat.permissions) & 0o777,
     );
     var reader = try Reader.open(alloc, &capability, descriptor);
     defer reader.deinit();
@@ -833,7 +833,7 @@ test "command replay reader rejects descriptor and frame corruption" {
     try tmp.dir.createDir(
         io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        io_mod.permissionsFromMode(0o700),
     );
     var session_dir = try tmp.dir.openDir(io_mod.getIo(), "session", .{
         .iterate = true,
@@ -919,7 +919,7 @@ test "command replay cleanup removes tentative and retained spools exactly once"
     try tmp.dir.createDir(
         io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        io_mod.permissionsFromMode(0o700),
     );
     var session_dir = try tmp.dir.openDir(io_mod.getIo(), "session", .{
         .iterate = true,

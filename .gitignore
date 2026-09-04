@@ -60,3 +60,5 @@ benchmarks/baseline.json
 .agent/
 .wsl-cache/
 tmp/
+tmp-win-*.txt
+tmp-hello*

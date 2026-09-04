@@ -367,14 +367,14 @@ pub const Store = struct {
         errdefer durable_home.close(zio);
 
         if (mode == .writable) {
-            durable_home.setPermissions(zio, std.Io.File.Permissions.fromMode(0o700)) catch {
+            durable_home.setPermissions(zio, io_mod.permissionsFromMode(0o700)) catch {
                 return error.PrivateStatePermissionsUnsupported;
             };
         }
         const stat = try durable_home.stat(zio);
         if (stat.kind != .directory) return error.DurablePathUnsafe;
-        const durable_mode = stat.permissions.toMode() & 0o777;
-        if (mode == .writable and durable_mode != 0o700) {
+        const durable_mode: u32 = io_mod.permissionsToMode(stat.permissions);
+        if (mode == .writable and !io_mod.permissionsIsPrivateDir(stat.permissions)) {
             return error.PrivateStatePermissionsUnsupported;
         }
         if (mode == .read_only and durableModeWritableByGroupOrOther(durable_mode)) {
@@ -734,13 +734,13 @@ pub const Store = struct {
         const stat = try file.stat(zio);
         try io_mod.verifyOpenedRegularFile(stat, open_mode);
         if (self.mode == .writable) {
-            file.setPermissions(zio, std.Io.File.Permissions.fromMode(0o600)) catch {
+            file.setPermissions(zio, io_mod.permissionsFromMode(0o600)) catch {
                 return error.PrivateStatePermissionsUnsupported;
             };
         }
         const verified_stat = if (self.mode == .writable) try file.stat(zio) else stat;
-        const primary_mode = verified_stat.permissions.toMode() & 0o777;
-        if (self.mode == .writable and primary_mode != 0o600) {
+        const primary_mode: u32 = io_mod.permissionsToMode(verified_stat.permissions);
+        if (self.mode == .writable and !io_mod.permissionsIsPrivateFile(verified_stat.permissions)) {
             return error.PrivateStatePermissionsUnsupported;
         }
         if (self.mode == .read_only and durableModeWritableByGroupOrOther(primary_mode)) {
@@ -2183,7 +2183,7 @@ test "user patch snapshots and removes legacy workspace copies" {
     );
     defer recovery.close(io_mod.getIo());
     const recovery_stat = try recovery.stat(io_mod.getIo());
-    try std.testing.expectEqual(@as(std.posix.mode_t, 0o600), recovery_stat.permissions.toMode() & 0o777);
+    try std.testing.expectEqual(io_mod.expectedTestMode(0o600), io_mod.permissionsToMode(recovery_stat.permissions) & 0o777);
     const recovered = try io_mod.readFileToEnd(alloc, &recovery, max_settings_bytes + 1);
     defer alloc.free(recovered);
     try std.testing.expectEqualStrings(original, recovered);
@@ -2880,7 +2880,7 @@ test "missing user settings is created through private durable commit" {
     var outcome = try store.applyUserPatch(alloc, .{ .startup_scrollback = false });
     defer outcome.deinit(alloc);
     const stat = try store.primaryStatForTest();
-    try std.testing.expectEqual(@as(std.posix.mode_t, 0o600), stat.permissions.toMode() & 0o777);
+    try std.testing.expectEqual(io_mod.expectedTestMode(0o600), io_mod.permissionsToMode(stat.permissions) & 0o777);
 }
 
 test "invalid primary is not replaced by backup or mutation" {
@@ -2915,7 +2915,7 @@ test "invalid primary is not replaced by backup or mutation" {
             corrupt_count += 1;
             try std.testing.expect(parseSequence(entry.name) != null);
             const stat = try backups.statFile(io_mod.getIo(), entry.name, .{ .follow_symlinks = false });
-            try std.testing.expectEqual(@as(std.posix.mode_t, 0o600), stat.permissions.toMode() & 0o777);
+            try std.testing.expectEqual(io_mod.expectedTestMode(0o600), io_mod.permissionsToMode(stat.permissions) & 0o777);
         }
     }
     try std.testing.expectEqual(@as(usize, 1), corrupt_count);
@@ -3100,7 +3100,7 @@ test "second settings commit creates a sequenced private backup" {
         backup_count += 1;
         try std.testing.expect(parseSequence(entry.name) != null);
         const stat = try backups.statFile(io_mod.getIo(), entry.name, .{ .follow_symlinks = false });
-        try std.testing.expectEqual(@as(std.posix.mode_t, 0o600), stat.permissions.toMode() & 0o777);
+        try std.testing.expectEqual(io_mod.expectedTestMode(0o600), io_mod.permissionsToMode(stat.permissions) & 0o777);
     }
     try std.testing.expectEqual(@as(usize, 1), backup_count);
 }
@@ -3168,7 +3168,7 @@ test "read only settings rejects group or world writable policy files" {
 
     var root_dir = try tmp.dir.openDir(io_mod.getIo(), "home/.fx", .{ .iterate = true });
     defer root_dir.close(io_mod.getIo());
-    root_dir.setPermissions(io_mod.getIo(), std.Io.File.Permissions.fromMode(0o777)) catch return error.SkipZigTest;
+    root_dir.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o777)) catch return error.SkipZigTest;
 
     const home = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "home");
     defer alloc.free(home);
@@ -3177,9 +3177,9 @@ test "read only settings rejects group or world writable policy files" {
         Store.initFromHome(alloc, home, .read_only),
     );
 
-    root_dir.setPermissions(io_mod.getIo(), std.Io.File.Permissions.fromMode(0o755)) catch return error.SkipZigTest;
+    root_dir.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o755)) catch return error.SkipZigTest;
     var file = try root_dir.openFile(io_mod.getIo(), "settings.json", .{ .mode = .read_write });
-    file.setPermissions(io_mod.getIo(), std.Io.File.Permissions.fromMode(0o666)) catch {
+    file.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o666)) catch {
         file.close(io_mod.getIo());
         return error.SkipZigTest;
     };

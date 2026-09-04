@@ -1639,7 +1639,7 @@ test "terminal dispatch is permission gated and fails closed when unavailable" {
     try tmp.dir.createDir(
         test_io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        test_io_mod.permissionsFromMode(0o700),
     );
     var session_dir = try tmp.dir.openDir(test_io_mod.getIo(), "session", .{
         .iterate = true,

@@ -364,6 +364,104 @@ pub fn readFileToEndZ(alloc: std.mem.Allocator, file: *std.Io.File, max_bytes: u
     return result[0..data.len :0];
 }
 
+pub const is_windows = builtin.os.tag == .windows;
+
+/// Portable `std.Io.File.Permissions` from a POSIX mode. Windows files use
+/// ACLs instead of mode bits; returns the closest default there and lets the
+/// OS enforce access control when the file is opened.
+pub fn permissionsFromMode(mode: u32) std.Io.File.Permissions {
+    if (comptime is_windows) return if (mode & 0o111 != 0) .default_dir else .default_file;
+    return .fromMode(@intCast(mode));
+}
+
+/// True when group/other classes hold any permission bits. Always false on
+/// Windows, where access is governed by ACLs rather than mode bits. Sensitive
+/// paths should assert private ACLs here in a future change.
+pub fn permissionsOpenToGroupOther(permissions: std.Io.File.Permissions) bool {
+    if (comptime is_windows) return false;
+    return io_mod.permissionsOpenToGroupOther(permissions);
+}
+
+/// True when the owner class may write. Always true on Windows; the OS
+/// enforces ACLs when the file is opened.
+pub fn permissionsOwnerWritable(permissions: std.Io.File.Permissions) bool {
+    if (comptime is_windows) return true;
+    return permissions.toMode() & 0o200 != 0;
+}
+
+/// True for owner-only file modes (0600). Vacuously true on Windows.
+pub fn permissionsIsPrivateFile(permissions: std.Io.File.Permissions) bool {
+    if (comptime is_windows) return true;
+    return io_mod.permissionsIsPrivateFile(permissions);
+}
+
+/// True for owner-only directory modes (0700). Vacuously true on Windows.
+pub fn permissionsIsPrivateDir(permissions: std.Io.File.Permissions) bool {
+    if (comptime is_windows) return true;
+    return io_mod.permissionsIsPrivateDir(permissions);
+}
+
+/// Portable numeric mode for persistence and comparison. 0 on Windows.
+pub fn permissionsToMode(permissions: std.Io.File.Permissions) u32 {
+    if (comptime is_windows) return 0;
+    return @intCast(permissions.toMode());
+}
+
+/// Expected `permissionsToMode(...)` value inside tests. Mode bits do not
+/// exist on Windows, where `permissionsToMode` returns 0.
+pub fn expectedTestMode(mode: u32) u32 {
+    return if (comptime is_windows) 0 else mode;
+}
+
+pub fn privateDirPermissions() std.Io.File.Permissions {
+    return permissionsFromMode(0o700);
+}
+
+pub fn privateFilePermissions() std.Io.File.Permissions {
+    return permissionsFromMode(0o600);
+}
+
+pub fn stdinIsTty() bool {
+    return std.Io.File.stdin().isTty(getIo()) catch false;
+}
+
+pub fn stdoutIsTty() bool {
+    return std.Io.File.stdout().isTty(getIo()) catch false;
+}
+
+pub fn stderrIsTty() bool {
+    return std.Io.File.stderr().isTty(getIo()) catch false;
+}
+
+const windows_std_input_handle: std.os.windows.DWORD = 0xFFFFFFF6;
+const windows_std_output_handle: std.os.windows.DWORD = 0xFFFFFFF5;
+
+extern "kernel32" fn windowsGetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn windowsWaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
+
+/// `std.posix.fd_t` for standard input. On Windows this is the real console
+/// input handle, not 0, because `fd_t` is a HANDLE there.
+pub fn stdinFd() std.posix.fd_t {
+    if (comptime is_windows) return @ptrCast(windowsGetStdHandle(windows_std_input_handle));
+    return std.posix.STDIN_FILENO;
+}
+
+/// `std.posix.fd_t` for standard output. See `stdinFd`.
+pub fn stdoutFd() std.posix.fd_t {
+    if (comptime is_windows) return @ptrCast(windowsGetStdHandle(windows_std_output_handle));
+    return std.posix.STDOUT_FILENO;
+}
+
+/// Waits up to `timeout_ms` for Enter on standard input. Windows uses
+/// WaitForSingleObject because `std.posix.poll` has no ws2_32 binding in
+/// Zig 0.16 and can never compile there.
+pub fn waitForStdinEnter(timeout_ms: u64) bool {
+    if (comptime !is_windows) return false;
+    const capped: std.os.windows.DWORD = @intCast(@min(timeout_ms, @as(u64, 0xFFFFFFFE)));
+    const handle = windowsGetStdHandle(windows_std_input_handle);
+    return windowsWaitForSingleObject(handle, capped) == 0;
+}
+
 pub fn milliTimestamp() i64 {
     const ts = std.Io.Timestamp.now(getIo(), .real);
     return @intCast(@divFloor(ts.nanoseconds, 1_000_000));
@@ -378,7 +476,7 @@ pub fn writeFileAtomic(alloc: std.mem.Allocator, path: []const u8, text: []const
     e2eFailIfDurableMutationAttempted();
     const maybe_existing_permissions = existingFilePermissions(path);
     if (maybe_existing_permissions) |existing_permissions| {
-        if (existing_permissions.toMode() & 0o222 == 0) return error.AccessDenied;
+        if (existing_permissions.readOnly()) return error.AccessDenied;
     }
     const permissions = maybe_existing_permissions orelse .default_file;
     const temp_path = try std.fmt.allocPrint(alloc, "{s}.tmp.{d}", .{ path, nanoTimestamp() });
@@ -398,8 +496,8 @@ pub fn writeFileAtomic(alloc: std.mem.Allocator, path: []const u8, text: []const
     cleanup_temp = false;
 }
 
-const private_dir_permissions = std.Io.File.Permissions.fromMode(0o700);
-const private_file_permissions = std.Io.File.Permissions.fromMode(0o600);
+const private_dir_permissions = privateDirPermissions();
+const private_file_permissions = privateFilePermissions();
 
 pub const VerifiedDir = struct {
     dir: std.Io.Dir,
@@ -463,13 +561,13 @@ fn validateRelativeLeaf(name: []const u8) !void {
 fn verifyPrivateRegularFile(file: std.Io.File) !void {
     const stat = try file.stat(getIo());
     if (stat.kind != .file or stat.nlink != 1) return error.DurablePathUnsafe;
-    if (stat.permissions.toMode() & 0o777 != 0o600) return error.PrivateStatePermissionsUnsupported;
+    if (!permissionsIsPrivateFile(stat.permissions)) return error.PrivateStatePermissionsUnsupported;
 }
 
 fn verifyPrivateDirectory(dir: std.Io.Dir) !void {
     const stat = try dir.stat(getIo());
     if (stat.kind != .directory) return error.DurablePathUnsafe;
-    if (stat.permissions.toMode() & 0o777 != 0o700) return error.PrivateStatePermissionsUnsupported;
+    if (!permissionsIsPrivateDir(stat.permissions)) return error.PrivateStatePermissionsUnsupported;
 }
 
 /// The handle must come from an `openDir` that requested iteration. Linux returns an
@@ -537,7 +635,7 @@ fn validateReplaceTarget(dir: std.Io.Dir, name: []const u8) !void {
         else => return err,
     };
     if (stat.kind != .file or stat.nlink != 1) return error.DurablePathUnsafe;
-    if (stat.permissions.toMode() & 0o222 == 0) return error.AccessDenied;
+    if ((stat.permissions).readOnly()) return error.AccessDenied;
 }
 
 fn cleanupVerifiedTemp(dir: std.Io.Dir, name: []const u8) void {
@@ -602,7 +700,7 @@ pub fn durableReplaceVerifiedWithOps(
         return error.DurableReplacePostRenameFailed;
     };
     if (final_stat.kind != .file or final_stat.nlink != 1 or
-        final_stat.permissions.toMode() & 0o777 != 0o600)
+        !io_mod.permissionsIsPrivateFile(final_stat.permissions))
     {
         return error.DurableReplacePostRenameFailed;
     }
@@ -735,7 +833,7 @@ pub fn copyFileAtomic(alloc: std.mem.Allocator, source_path: []const u8, dest_pa
     const stat = try source.stat(zio);
     if (stat.kind != .file) return error.NotRegularFile;
     if (existingFilePermissions(dest_path)) |existing_permissions| {
-        if (existing_permissions.toMode() & 0o222 == 0) return error.AccessDenied;
+        if (existing_permissions.readOnly()) return error.AccessDenied;
     }
 
     const temp_path = try std.fmt.allocPrint(alloc, "{s}.tmp.{d}", .{ dest_path, nanoTimestamp() });
@@ -792,6 +890,11 @@ pub fn makeDirRecursive(path: []const u8) !void {
 }
 
 pub fn realpathAlloc(alloc: std.mem.Allocator, path: []const u8) ![]u8 {
+    if (comptime is_windows) {
+        const resolved = std.Io.Dir.cwd().realPathFileAlloc(getIo(), path, alloc) catch return error.FileNotFound;
+        defer alloc.free(resolved);
+        return alloc.dupe(u8, resolved);
+    }
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path_z = try std.fmt.bufPrintZ(&buf, "{s}", .{path});
     var result_buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -825,6 +928,11 @@ pub fn dirRealpathAlloc(alloc: std.mem.Allocator, dir: std.Io.Dir, sub_path: []c
     } else if (comptime builtin.os.tag == .wasi) {
         if (std.fs.path.isAbsolute(sub_path)) return alloc.dupe(u8, sub_path);
         return std.fs.path.resolve(alloc, &.{sub_path});
+    } else if (comptime is_windows) {
+        const sub = if (sub_path.len == 0) "." else sub_path;
+        const resolved = dir.realPathFileAlloc(getIo(), sub, alloc) catch return error.FileNotFound;
+        defer alloc.free(resolved);
+        return alloc.dupe(u8, resolved);
     } else {
         @compileError("dirRealpathAlloc not implemented for this OS");
     }
@@ -980,11 +1088,11 @@ test "writeFileAtomic preserves existing file permissions" {
     defer alloc.free(file_path);
 
     try writeFileAtomic(alloc, file_path, "first");
-    try std.Io.Dir.cwd().setFilePermissions(getIo(), file_path, std.Io.File.Permissions.fromMode(0o755), .{});
+    try std.Io.Dir.cwd().setFilePermissions(getIo(), file_path, io_mod.permissionsFromMode(0o755), .{});
     try writeFileAtomic(alloc, file_path, "second");
 
     const stat = try std.Io.Dir.cwd().statFile(getIo(), file_path, .{});
-    try std.testing.expectEqual(@as(std.posix.mode_t, 0o755), stat.permissions.toMode() & 0o777);
+    try std.testing.expectEqual(expectedTestMode(0o755), permissionsToMode(stat.permissions) & 0o777);
 }
 
 test "copyFileAtomic copies through temp file and cleans up" {
@@ -1161,7 +1269,7 @@ test "private durable file mode is exactly 0600" {
     try durableReplaceVerified(alloc, &dir, "settings.json", "{}\n");
 
     const stat = try dir.dir.statFile(getIo(), "settings.json", .{ .follow_symlinks = false });
-    try std.testing.expectEqual(@as(std.posix.mode_t, 0o600), stat.permissions.toMode() & 0o777);
+    try std.testing.expectEqual(expectedTestMode(0o600), permissionsToMode(stat.permissions) & 0o777);
 }
 
 test "private durable directory mode is exactly 0700" {
@@ -1174,7 +1282,7 @@ test "private durable directory mode is exactly 0700" {
     defer child.close();
 
     const stat = try child.dir.stat(getIo());
-    try std.testing.expectEqual(@as(std.posix.mode_t, 0o700), stat.permissions.toMode() & 0o777);
+    try std.testing.expectEqual(expectedTestMode(0o700), permissionsToMode(stat.permissions) & 0o777);
 }
 
 test "caller-owned directory can create a verified private child" {
@@ -1188,7 +1296,7 @@ test "caller-owned directory can create a verified private child" {
 
     const stat = try child.dir.stat(getIo());
     try std.testing.expectEqual(std.Io.File.Kind.directory, stat.kind);
-    try std.testing.expectEqual(@as(std.posix.mode_t, 0o700), stat.permissions.toMode() & 0o777);
+    try std.testing.expectEqual(expectedTestMode(0o700), permissionsToMode(stat.permissions) & 0o777);
 }
 
 test "caller-owned directory rejects unsafe private children" {

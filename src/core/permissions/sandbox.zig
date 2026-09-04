@@ -3668,7 +3668,7 @@ test "managed command artifact confirms an indeterminate rename target" {
     try tmp.dir.createDir(
         io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        io_mod.permissionsFromMode(0o700),
     );
     const workspace = try io_mod.dirRealpathAlloc(
         alloc,
@@ -3750,7 +3750,7 @@ test "managed command artifact rejects an unconfirmed rename target" {
     try tmp.dir.createDir(
         io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        io_mod.permissionsFromMode(0o700),
     );
     const workspace = try io_mod.dirRealpathAlloc(
         alloc,
@@ -4057,7 +4057,7 @@ test "cancellation preserves the termination grace in an invoked script" {
         );
         try script.setPermissions(
             io_mod.getIo(),
-            std.Io.File.Permissions.fromMode(0o700),
+            io_mod.permissionsFromMode(0o700),
         );
     }
 
@@ -4137,7 +4137,7 @@ test "cancelled managed command confirms an indeterminate artifact target" {
     try tmp.dir.createDir(
         io_mod.getIo(),
         "session",
-        std.Io.File.Permissions.fromMode(0o700),
+        io_mod.permissionsFromMode(0o700),
     );
     const workspace = try io_mod.dirRealpathAlloc(
         alloc,
@@ -4892,7 +4892,7 @@ test "just_bash post-spawn cancellation does not parse or execute fallback" {
         var fake = try tmp.dir.createFile(io_mod.getIo(), "workspace/fake-just-bash", .{ .truncate = true });
         defer fake.close(io_mod.getIo());
         try fake.writeStreamingAll(io_mod.getIo(), fake_script);
-        try fake.setPermissions(io_mod.getIo(), std.Io.File.Permissions.fromMode(0o700));
+        try fake.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o700));
     }
     const fake_path = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "workspace/fake-just-bash");
     defer alloc.free(fake_path);
@@ -5025,7 +5025,7 @@ test "just_bash raw callback emits parsed inner streams without wrapper JSON" {
         var fake = try tmp.dir.createFile(io_mod.getIo(), "workspace/fake-just-bash", .{ .truncate = true });
         defer fake.close(io_mod.getIo());
         try fake.writeStreamingAll(io_mod.getIo(), script);
-        try fake.setPermissions(io_mod.getIo(), std.Io.File.Permissions.fromMode(0o700));
+        try fake.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o700));
     }
     const fake_path = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "workspace/fake-just-bash");
     defer alloc.free(fake_path);
