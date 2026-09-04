@@ -340,6 +340,11 @@ fn writeBrowserCallbackResponse(stream: std.Io.net.Stream, success: bool) !void 
 }
 
 fn setBrowserSocketTimeouts(socket: std.posix.socket_t) void {
+    // Winsock takes DWORD milliseconds (30s here), not timeval.
+    if (comptime builtin.os.tag == .windows) {
+        io_mod.setSocketTimeoutMs(@intFromPtr(socket), 30_000);
+        return;
+    }
     const timeout = std.posix.timeval{ .sec = browser_callback_io_timeout_seconds, .usec = 0 };
     const bytes = std.mem.asBytes(&timeout);
     std.posix.setsockopt(socket, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, bytes) catch |err| {

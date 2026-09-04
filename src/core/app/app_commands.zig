@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const runtime_profile = @import("../hosts/runtime_profile.zig");
 const app_permission_runtime = @import("app_permission_runtime.zig");
 const app_session_runtime = @import("app_session_runtime.zig");
