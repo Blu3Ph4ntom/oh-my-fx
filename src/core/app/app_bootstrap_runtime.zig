@@ -188,6 +188,13 @@ pub fn Runtime(comptime App: type) type {
         ) !void {
             errdefer app.deinit();
 
+            // On Windows the `TranscriptRuntime.stdout_file` struct default
+            // cannot hold `std.Io.File.stdout()` (PEB assembly is not
+            // comptime-known), so the real handle is assigned here at runtime.
+            if (comptime @import("builtin").os.tag == .windows) {
+                app.shell.stdout_file = std.Io.File.stdout();
+            }
+
             var startup = try deps.bootstrap_interactive_app(.{
                 .alloc = app.alloc,
                 .terminal = &app.terminal,

@@ -63,3 +63,4 @@ tmp/
 tmp-win-*.txt
 tmp-hello*
 tmp-w*.txt
+tmp-conpty*
