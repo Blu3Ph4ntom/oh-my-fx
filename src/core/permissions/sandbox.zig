@@ -2708,14 +2708,14 @@ fn signalChild(
     return signalProcessGroup(pid, force);
 }
 
-extern "kernel32" fn sandboxTerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn TerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
 
 fn signalProcessGroup(pid: std.posix.pid_t, force: bool) !void {
     // Call sites pass `child.id`, which is already the process HANDLE on
     // Windows, so terminate it directly. There are no POSIX signals there.
     if (comptime builtin.os.tag == .windows) {
         _ = &force;
-        _ = sandboxTerminateProcess(pid, 1);
+        _ = TerminateProcess(pid, 1);
         return;
     }
     std.posix.kill(-pid, if (force) std.posix.SIG.KILL else std.posix.SIG.TERM) catch |err| switch (err) {

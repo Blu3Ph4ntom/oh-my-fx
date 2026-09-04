@@ -33,16 +33,16 @@ const poll_events = if (is_windows) struct {
     pub const NVAL: i16 = 0x0004;
 } else posix.POLL;
 
-extern "ws2_32" fn wsaStartup(wVersionRequested: u16, lpWSAData: *anyopaque) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaSocket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
-extern "ws2_32" fn wsaIoctlsocket(s: usize, cmd: c_ulong, argp: *c_ulong) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaConnect(s: usize, name: *const anyopaque, namelen: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaRecv(s: usize, buf: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaSend(s: usize, buf: *const anyopaque, len: c_int, flags: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaGetsockopt(s: usize, level: c_int, optname: c_int, optval: [*]u8, optlen: *c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaClosesocket(s: usize) callconv(.winapi) c_int;
-extern "ws2_32" fn wsaGetLastError() callconv(.winapi) c_int;
+extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: *anyopaque) callconv(.winapi) c_int;
+extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
+extern "ws2_32" fn ioctlsocket(s: usize, cmd: c_ulong, argp: *c_ulong) callconv(.winapi) c_int;
+extern "ws2_32" fn connect(s: usize, name: *const anyopaque, namelen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn WSAPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn recv(s: usize, buf: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn send(s: usize, buf: *const anyopaque, len: c_int, flags: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn getsockopt(s: usize, level: c_int, optname: c_int, optval: [*]u8, optlen: *c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
+extern "ws2_32" fn GetLastError() callconv(.winapi) c_int;
 
 const wsa_invalid_socket: usize = std.math.maxInt(usize);
 const wsa_fionbio: c_ulong = @bitCast(@as(u32, 0x8004667E));
@@ -95,7 +95,7 @@ fn wsaEnsureStartup() void {
     if (wsa_startup_done) return;
     var wsa_data: [512]u8 = undefined;
     // Winsock 2.2; the buffer only needs to hold a WSADATA.
-    if (wsaStartup(0x0202, &wsa_data) == 0) wsa_startup_done = true;
+    if (WSAStartup(0x0202, &wsa_data) == 0) wsa_startup_done = true;
 }
 
 fn fdToSocket(fd: posix.fd_t) usize {
@@ -1329,8 +1329,8 @@ fn connectPinned(address: IpAddress, options: FetchOptions) !posix.fd_t {
     const len = addressToPosix(address, &storage);
     if (comptime is_windows) {
         while (true) {
-            if (wsaConnect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
-            switch (wsaErrorToErrno(wsaGetLastError())) {
+            if (connect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
+            switch (wsaErrorToErrno(GetLastError())) {
                 .INTR => {
                     try checkControl(options);
                     continue;
@@ -1405,7 +1405,7 @@ fn addressToPosix(address: IpAddress, storage: *PosixAddress) posix.socklen_t {
 fn openSocket(family: posix.sa_family_t) !posix.fd_t {
     if (comptime is_windows) {
         wsaEnsureStartup();
-        const sock = wsaSocket(@intCast(family), @intCast(posix.SOCK.STREAM), 0);
+        const sock = socket(@intCast(family), @intCast(posix.SOCK.STREAM), 0);
         if (sock == wsa_invalid_socket) return error.SocketOpenFailed;
         const fd: posix.fd_t = @ptrFromInt(sock);
         errdefer closeFd(fd);
@@ -1443,7 +1443,7 @@ fn setCloexec(fd: posix.fd_t) !void {
 fn setNonblocking(fd: posix.fd_t) !void {
     if (comptime is_windows) {
         var mode: c_ulong = 1;
-        if (wsaIoctlsocket(fdToSocket(fd), wsa_fionbio, &mode) != 0) return error.SocketOptionFailed;
+        if (ioctlsocket(fdToSocket(fd), wsa_fionbio, &mode) != 0) return error.SocketOptionFailed;
         return;
     }
     const current = while (true) {
@@ -1468,7 +1468,7 @@ fn checkSocketError(fd: posix.fd_t) !void {
     if (comptime is_windows) {
         var value: c_int = 0;
         var len: c_int = @sizeOf(c_int);
-        if (wsaGetsockopt(fdToSocket(fd), wsa_sol_socket, wsa_so_error, @ptrCast(&value), &len) != 0) return error.ConnectionFailed;
+        if (getsockopt(fdToSocket(fd), wsa_sol_socket, wsa_so_error, @ptrCast(&value), &len) != 0) return error.ConnectionFailed;
         if (value == 0) return;
         return classifyConnectErrno(wsaErrorToErrno(value));
     }
@@ -1482,7 +1482,7 @@ fn checkSocketError(fd: posix.fd_t) !void {
 
 fn closeFd(fd: posix.fd_t) void {
     if (comptime is_windows) {
-        _ = wsaClosesocket(fdToSocket(fd));
+        _ = closesocket(fdToSocket(fd));
         return;
     }
     while (true) switch (posix.errno(posix.system.close(fd))) {
@@ -1640,9 +1640,9 @@ fn pollDefault(_: ?*anyopaque, fds: []pollfd, timeout_ms: i32) PollError!usize {
         var out_ready: usize = 0;
         for (fds) |*pfd| {
             pfd.revents = 0;
-            const rc = wsaPoll(pfd, 1, timeout_ms);
+            const rc = WSAPoll(pfd, 1, timeout_ms);
             if (rc < 0) {
-                const err = wsaErrorToErrno(wsaGetLastError());
+                const err = wsaErrorToErrno(GetLastError());
                 return switch (err) {
                     .INTR => error.Interrupted,
                     .NOBUFS => error.SystemResources,
@@ -1691,8 +1691,8 @@ fn readDefault(_: ?*anyopaque, fd: posix.fd_t, buf: []u8) RawSyscallResult {
     if (comptime is_windows) {
         if (buf.len == 0) return .{ .count = 0 };
         const capped: c_int = @intCast(@min(buf.len, @as(usize, std.math.maxInt(c_int))));
-        const rc = wsaRecv(fdToSocket(fd), buf.ptr, capped, 0);
-        if (rc < 0) return .{ .failure = wsaErrorToErrno(wsaGetLastError()) };
+        const rc = recv(fdToSocket(fd), buf.ptr, capped, 0);
+        if (rc < 0) return .{ .failure = wsaErrorToErrno(GetLastError()) };
         return .{ .count = @intCast(rc) };
     }
     const rc = posix.system.read(fd, buf.ptr, buf.len);
@@ -1775,7 +1775,7 @@ fn rawWriteAllWith(fd: posix.fd_t, bytes: []const u8, options: FetchOptions, pol
         try pollFdWith(fd, poll_events.OUT, options, poller);
         const chunk_len: c_int = @intCast(@min(bytes.len - written, @as(usize, std.math.maxInt(c_int))));
         const rc: isize = if (comptime is_windows)
-            wsaSend(fdToSocket(fd), @ptrCast(bytes[written..].ptr), chunk_len, 0)
+            send(fdToSocket(fd), @ptrCast(bytes[written..].ptr), chunk_len, 0)
         else
             std.c.send(
                 fd,
@@ -1784,7 +1784,7 @@ fn rawWriteAllWith(fd: posix.fd_t, bytes: []const u8, options: FetchOptions, pol
                 @intCast(posix.MSG.NOSIGNAL),
             );
         const errno: posix.E = if (comptime is_windows)
-            (if (rc < 0) wsaErrorToErrno(wsaGetLastError()) else .SUCCESS)
+            (if (rc < 0) wsaErrorToErrno(GetLastError()) else .SUCCESS)
         else
             posix.errno(rc);
         if (errno != .SUCCESS) switch (classifyWriteErrno(errno)) {
@@ -1840,7 +1840,7 @@ fn pollSocketError(fd: posix.fd_t) !void {
     if (comptime is_windows) {
         var value: c_int = 0;
         var len: c_int = @sizeOf(c_int);
-        if (wsaGetsockopt(fdToSocket(fd), wsa_sol_socket, wsa_so_error, @ptrCast(&value), &len) != 0)
+        if (getsockopt(fdToSocket(fd), wsa_sol_socket, wsa_so_error, @ptrCast(&value), &len) != 0)
             return error.UnexpectedClose;
         if (value == 0) return error.UnexpectedClose;
         return switch (wsaErrorToErrno(value)) {

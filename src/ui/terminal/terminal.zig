@@ -34,8 +34,8 @@ pub fn interactiveModeEnableSequence(tmux: ?[]const u8) []const u8 {
         tmux_interactive_mode_enable_sequence;
 }
 
-extern "kernel32" fn termGetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
-extern "kernel32" fn termGetConsoleScreenBufferInfo(hConsoleOutput: std.os.windows.HANDLE, lpConsoleScreenBufferInfo: *WinConsoleScreenBufferInfo) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn GetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn GetConsoleScreenBufferInfo(hConsoleOutput: std.os.windows.HANDLE, lpConsoleScreenBufferInfo: *WinConsoleScreenBufferInfo) callconv(.winapi) std.os.windows.BOOL;
 
 const WinCoord = extern struct { X: i16, Y: i16 };
 const WinSmallRect = extern struct { Left: i16, Top: i16, Right: i16, Bottom: i16 };
@@ -51,7 +51,7 @@ pub fn queryLayout(fd: std.posix.fd_t, footer_rows: u16) !types.Layout {
     if (comptime builtin.os.tag == .windows) {
         _ = &fd;
         var info: WinConsoleScreenBufferInfo = undefined;
-        if (termGetConsoleScreenBufferInfo(termGetStdHandle(0xFFFFFFF5), &info) == .FALSE) return error.UnableToReadTerminalSize;
+        if (GetConsoleScreenBufferInfo(GetStdHandle(0xFFFFFFF5), &info) == .FALSE) return error.UnableToReadTerminalSize;
         const cols: u16 = @intCast(@max(0, info.dwSize.X));
         const rows: u16 = @intCast(@max(0, info.srWindow.Bottom - info.srWindow.Top + 1));
         if (rows == 0 or cols == 0) return error.UnableToReadTerminalSize;

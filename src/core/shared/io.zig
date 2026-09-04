@@ -429,6 +429,14 @@ pub fn privateFilePermissions() std.Io.File.Permissions {
     return permissionsFromMode(0o600);
 }
 
+/// Numeric user id for socket names and peer checks. Windows has no uid;
+/// returns 0 there because these paths already live under the user's own
+/// profile directory, which the OS isolates per user.
+pub fn currentUid() u32 {
+    if (comptime is_windows) return 0;
+    return std.c.getuid();
+}
+
 /// Numeric current-process id for filenames and logs. `std.c.getpid` is a
 /// process HANDLE on Windows, not a number, so its address value is used.
 pub fn currentProcessId() u64 {
@@ -451,10 +459,10 @@ pub fn stderrIsTty() bool {
 const windows_std_input_handle: std.os.windows.DWORD = 0xFFFFFFF6;
 const windows_std_output_handle: std.os.windows.DWORD = 0xFFFFFFF5;
 
-extern "kernel32" fn windowsGetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
-extern "kernel32" fn windowsWaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
-extern "kernel32" fn windowsGetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, lpMode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn windowsSetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, dwMode: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn GetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn WaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
+extern "kernel32" fn GetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, lpMode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn SetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, dwMode: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
 
 pub const windows_console_echo_input: std.os.windows.DWORD = 0x0004;
 pub const windows_console_line_input: std.os.windows.DWORD = 0x0002;
@@ -464,7 +472,7 @@ pub const windows_console_processed_input: std.os.windows.DWORD = 0x0001;
 pub fn windowsConsoleGetMode() ?std.os.windows.DWORD {
     if (comptime !is_windows) return null;
     var mode: std.os.windows.DWORD = 0;
-    if (windowsGetConsoleMode(windowsGetStdHandle(windows_std_input_handle), &mode) == .FALSE) return null;
+    if (GetConsoleMode(GetStdHandle(windows_std_input_handle), &mode) == .FALSE) return null;
     return mode;
 }
 
@@ -473,19 +481,19 @@ pub fn windowsConsoleGetMode() ?std.os.windows.DWORD {
 /// Null on non-Windows or when the console mode cannot be changed.
 pub fn windowsConsoleSetRaw() ?std.os.windows.DWORD {
     if (comptime !is_windows) return null;
-    const handle = windowsGetStdHandle(windows_std_input_handle);
+    const handle = GetStdHandle(windows_std_input_handle);
     var mode: std.os.windows.DWORD = 0;
-    if (windowsGetConsoleMode(handle, &mode) == .FALSE) return null;
+    if (GetConsoleMode(handle, &mode) == .FALSE) return null;
     // Clearing processed input lets Fx observe Ctrl-C itself, matching the
     // POSIX raw mode that disables ISIG.
     const raw = mode & ~(windows_console_echo_input | windows_console_line_input | windows_console_processed_input);
-    if (windowsSetConsoleMode(handle, raw) == .FALSE) return null;
+    if (SetConsoleMode(handle, raw) == .FALSE) return null;
     return mode;
 }
 
 pub fn windowsConsoleRestore(mode: std.os.windows.DWORD) void {
     if (comptime !is_windows) return;
-    _ = windowsSetConsoleMode(windowsGetStdHandle(windows_std_input_handle), mode);
+    _ = SetConsoleMode(GetStdHandle(windows_std_input_handle), mode);
 }
 
 /// Reads up to `destination.len` bytes from standard input. Mirrors the
@@ -498,13 +506,13 @@ pub fn readStdinBytes(destination: []u8) !usize {
 /// `std.posix.fd_t` for standard input. On Windows this is the real console
 /// input handle, not 0, because `fd_t` is a HANDLE there.
 pub fn stdinFd() std.posix.fd_t {
-    if (comptime is_windows) return @ptrCast(windowsGetStdHandle(windows_std_input_handle));
+    if (comptime is_windows) return @ptrCast(GetStdHandle(windows_std_input_handle));
     return std.posix.STDIN_FILENO;
 }
 
 /// `std.posix.fd_t` for standard output. See `stdinFd`.
 pub fn stdoutFd() std.posix.fd_t {
-    if (comptime is_windows) return @ptrCast(windowsGetStdHandle(windows_std_output_handle));
+    if (comptime is_windows) return @ptrCast(GetStdHandle(windows_std_output_handle));
     return std.posix.STDOUT_FILENO;
 }
 
@@ -514,20 +522,20 @@ pub fn stdoutFd() std.posix.fd_t {
 pub fn waitForStdinEnter(timeout_ms: u64) bool {
     if (comptime !is_windows) return false;
     const capped: std.os.windows.DWORD = @intCast(@min(timeout_ms, @as(u64, 0xFFFFFFFE)));
-    const handle = windowsGetStdHandle(windows_std_input_handle);
-    return windowsWaitForSingleObject(handle, capped) == 0;
+    const handle = GetStdHandle(windows_std_input_handle);
+    return WaitForSingleObject(handle, capped) == 0;
 }
 
-extern "ws2_32" fn ioSetsockopt(s: usize, level: c_int, optname: c_int, optval: *const anyopaque, optlen: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn ioWsapoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: *const anyopaque, optlen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn WSAPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
 
 /// Best-effort SO_RCVTIMEO/SO_SNDTIMEO in milliseconds. Failures are ignored
 /// by design; callers already treat timeout setup as advisory.
 pub fn setSocketTimeoutMs(sock: usize, timeout_ms: u32) void {
     if (comptime !is_windows) return;
     var ms = timeout_ms;
-    _ = ioSetsockopt(sock, 0xffff, 0x1006, @ptrCast(&ms), @sizeOf(u32));
-    _ = ioSetsockopt(sock, 0xffff, 0x1005, @ptrCast(&ms), @sizeOf(u32));
+    _ = setsockopt(sock, 0xffff, 0x1006, @ptrCast(&ms), @sizeOf(u32));
+    _ = setsockopt(sock, 0xffff, 0x1005, @ptrCast(&ms), @sizeOf(u32));
 }
 
 /// Waits up to `timeout_ms` for a socket to become readable. Returns false
@@ -536,7 +544,7 @@ pub fn setSocketTimeoutMs(sock: usize, timeout_ms: u32) void {
 pub fn socketWaitReadable(sock: usize, timeout_ms: i32) bool {
     if (comptime !is_windows) return false;
     var pfd = .{ .fd = sock, .events = @as(i16, 0x0100), .revents = @as(i16, 0) };
-    const rc = ioWsapoll(&pfd, 1, timeout_ms);
+    const rc = WSAPoll(&pfd, 1, timeout_ms);
     if (rc <= 0) return false;
     return pfd.revents & @as(i16, 0x0100) != 0;
 }

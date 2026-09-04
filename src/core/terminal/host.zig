@@ -203,7 +203,7 @@ pub const Paths = struct {
             alloc,
             builtin.os.tag,
             home,
-            std.c.getuid(),
+            io_mod.currentUid(),
         );
         var selection_owned = true;
         errdefer if (selection_owned) selection.deinit(alloc);
@@ -229,7 +229,7 @@ pub const Paths = struct {
         if (selection.uses_fallback) {
             transport_dir = try openRuntimeTransportDir(
                 selection.transport_root,
-                std.c.getuid(),
+                io_mod.currentUid(),
             );
         }
         selection_owned = false;
@@ -1182,7 +1182,7 @@ fn peerMatchesCurrentUser(handle: std.Io.net.Socket.Handle) bool {
             ) c_int;
         };
         if (Peer.getpeereid(handle, &peer_uid, &peer_gid) != 0) return false;
-        return peer_uid == std.c.getuid();
+        return peer_uid == io_mod.currentUid();
     }
     if (comptime builtin.os.tag == .linux) {
         const UCred = extern struct {
@@ -1200,7 +1200,7 @@ fn peerMatchesCurrentUser(handle: std.Io.net.Socket.Handle) bool {
             &credentials_len,
         ) != 0) return false;
         return credentials_len == @sizeOf(UCred) and
-            credentials.uid == std.c.getuid();
+            credentials.uid == io_mod.currentUid();
     }
     return false;
 }
@@ -1624,7 +1624,7 @@ test "runtime transport directories reject symlinks non-private modes and foreig
     var private = try openVerifiedPrivateRuntimeDir(
         tmp.dir,
         "private",
-        std.c.getuid(),
+        io_mod.currentUid(),
     );
     defer private.close();
     const private_stat = try private.dir.stat(std.testing.io);
@@ -1636,8 +1636,8 @@ test "runtime transport directories reject symlinks non-private modes and foreig
         error.RuntimeDirectoryOwnerMismatch,
         validatePrivateRuntimeDir(
             private_stat,
-            std.c.getuid() + 1,
-            std.c.getuid(),
+            io_mod.currentUid() + 1,
+            io_mod.currentUid(),
         ),
     );
 
@@ -1663,7 +1663,7 @@ test "runtime transport directories reject symlinks non-private modes and foreig
     );
     try std.testing.expectError(
         error.PrivateStatePermissionsUnsupported,
-        openVerifiedPrivateRuntimeDir(tmp.dir, "public", std.c.getuid()),
+        openVerifiedPrivateRuntimeDir(tmp.dir, "public", io_mod.currentUid()),
     );
 
     try tmp.dir.symLink(
@@ -1674,6 +1674,6 @@ test "runtime transport directories reject symlinks non-private modes and foreig
     );
     try std.testing.expectError(
         error.RuntimeDirectoryUnsafe,
-        openVerifiedPrivateRuntimeDir(tmp.dir, "linked", std.c.getuid()),
+        openVerifiedPrivateRuntimeDir(tmp.dir, "linked", io_mod.currentUid()),
     );
 }

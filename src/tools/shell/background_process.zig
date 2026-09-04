@@ -576,12 +576,12 @@ fn sendSignal(
 ) void {
     if (comptime builtin.os.tag == .windows) {
         _ = &signal;
-        const handle = windowsOpenProcess(windows_PROCESS_TERMINATE, .FALSE, pid) orelse {
+        const handle = OpenProcess(windows_PROCESS_TERMINATE, .FALSE, pid) orelse {
             if (first_error.* == null) first_error.* = error.ProcessNotFound;
             return;
         };
-        defer _ = windowsCloseHandle(handle);
-        if (windowsTerminateProcess(handle, 1) == .FALSE) {
+        defer _ = CloseHandle(handle);
+        if (TerminateProcess(handle, 1) == .FALSE) {
             if (first_error.* == null) first_error.* = error.ProcessNotFound;
             return;
         }
@@ -622,12 +622,12 @@ fn anyProcessTreeMemberRunning(
 
 fn isPidRunningRaw(pid: Pid) bool {
     if (comptime builtin.os.tag == .windows) {
-        const handle = windowsOpenProcess(windows_SYNCHRONIZE | windows_PROCESS_QUERY_LIMITED_INFORMATION, .FALSE, pid) orelse {
-            return windowsGetLastError() == windows_ERROR_ACCESS_DENIED;
+        const handle = OpenProcess(windows_SYNCHRONIZE | windows_PROCESS_QUERY_LIMITED_INFORMATION, .FALSE, pid) orelse {
+            return GetLastError() == windows_ERROR_ACCESS_DENIED;
         };
-        defer _ = windowsCloseHandle(handle);
+        defer _ = CloseHandle(handle);
         var code: std.os.windows.DWORD = 0;
-        if (windowsGetExitCodeProcess(handle, &code) == .FALSE) return true;
+        if (GetExitCodeProcess(handle, &code) == .FALSE) return true;
         return code == windows_STILL_ACTIVE;
     }
     std.posix.kill(pid, @enumFromInt(0)) catch |err| switch (err) {
@@ -644,14 +644,14 @@ const windows_ERROR_ACCESS_DENIED: std.os.windows.DWORD = 5;
 const windows_STILL_ACTIVE: std.os.windows.DWORD = 259;
 const windows_TH32CS_SNAPPROCESS: std.os.windows.DWORD = 0x00000002;
 
-extern "kernel32" fn windowsOpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
-extern "kernel32" fn windowsTerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn windowsCloseHandle(hObject: std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn windowsGetExitCodeProcess(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn windowsGetLastError() callconv(.winapi) std.os.windows.DWORD;
-extern "kernel32" fn windowsCreateToolhelp32Snapshot(dwFlags: std.os.windows.DWORD, th32ProcessID: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
-extern "kernel32" fn windowsProcess32FirstW(hSnapshot: std.os.windows.HANDLE, lppe: *WindowsProcessEntry) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn windowsProcess32NextW(hSnapshot: std.os.windows.HANDLE, lppe: *WindowsProcessEntry) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn OpenProcess(dwDesiredAccess: std.os.windows.DWORD, bInheritHandle: std.os.windows.BOOL, dwProcessId: std.os.windows.DWORD) callconv(.winapi) ?std.os.windows.HANDLE;
+extern "kernel32" fn TerminateProcess(hProcess: std.os.windows.HANDLE, uExitCode: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn CloseHandle(hObject: std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn GetExitCodeProcess(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn GetLastError() callconv(.winapi) std.os.windows.DWORD;
+extern "kernel32" fn CreateToolhelp32Snapshot(dwFlags: std.os.windows.DWORD, th32ProcessID: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn Process32FirstW(hSnapshot: std.os.windows.HANDLE, lppe: *WindowsProcessEntry) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn Process32NextW(hSnapshot: std.os.windows.HANDLE, lppe: *WindowsProcessEntry) callconv(.winapi) std.os.windows.BOOL;
 
 const WindowsProcessEntry = extern struct {
     dwSize: std.os.windows.DWORD,
@@ -667,17 +667,17 @@ const WindowsProcessEntry = extern struct {
 };
 
 fn collectDescendantPidsWindows(alloc: Allocator, root_pid: Pid) ![]Pid {
-    const snapshot = windowsCreateToolhelp32Snapshot(windows_TH32CS_SNAPPROCESS, 0);
+    const snapshot = CreateToolhelp32Snapshot(windows_TH32CS_SNAPPROCESS, 0);
     if (snapshot == std.os.windows.INVALID_HANDLE_VALUE) return error.ProcessListFailed;
-    defer _ = windowsCloseHandle(snapshot);
+    defer _ = CloseHandle(snapshot);
     var pairs: std.ArrayList(PidPair) = .empty;
     defer pairs.deinit(alloc);
     var entry: WindowsProcessEntry = std.mem.zeroes(WindowsProcessEntry);
     entry.dwSize = @sizeOf(WindowsProcessEntry);
-    if (windowsProcess32FirstW(snapshot, &entry) == .FALSE) return error.ProcessListFailed;
+    if (Process32FirstW(snapshot, &entry) == .FALSE) return error.ProcessListFailed;
     while (true) {
         try pairs.append(alloc, .{ .pid = entry.th32ProcessID, .ppid = entry.th32ParentProcessID });
-        if (windowsProcess32NextW(snapshot, &entry) == .FALSE) break;
+        if (Process32NextW(snapshot, &entry) == .FALSE) break;
     }
     var descendants: std.ArrayList(Pid) = .empty;
     errdefer descendants.deinit(alloc);
