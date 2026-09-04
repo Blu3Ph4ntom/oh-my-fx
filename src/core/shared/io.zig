@@ -526,8 +526,8 @@ pub fn waitForStdinEnter(timeout_ms: u64) bool {
     return WaitForSingleObject(handle, capped) == 0;
 }
 
-extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: *const anyopaque, optlen: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn WSAPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: ?*const anyopaque, optlen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
 
 /// Best-effort SO_RCVTIMEO/SO_SNDTIMEO in milliseconds. Failures are ignored
 /// by design; callers already treat timeout setup as advisory.

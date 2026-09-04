@@ -33,15 +33,15 @@ const poll_events = if (is_windows) struct {
     pub const NVAL: i16 = 0x0004;
 } else posix.POLL;
 
-extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: *anyopaque) callconv(.winapi) c_int;
+extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
 extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
 extern "ws2_32" fn ioctlsocket(s: usize, cmd: c_ulong, argp: *c_ulong) callconv(.winapi) c_int;
 // `connect` is already a method name in this file, so the ws2_32 symbol is
 // bound through `@extern` instead of a same-named declaration.
-const wsaConnect = @extern(fn (s: usize, name: *const anyopaque, namelen: c_int) callconv(.winapi) c_int, .{ .name = "connect", .library_name = "ws2_32" });
-extern "ws2_32" fn WSAPoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+const wsaConnect = @extern(fn (s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int, .{ .name = "connect", .library_name = "ws2_32" });
+extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn recv(s: usize, buf: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn send(s: usize, buf: *const anyopaque, len: c_int, flags: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn send(s: usize, buf: ?*const anyopaque, len: c_int, flags: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn getsockopt(s: usize, level: c_int, optname: c_int, optval: [*]u8, optlen: *c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
 extern "ws2_32" fn GetLastError() callconv(.winapi) c_int;

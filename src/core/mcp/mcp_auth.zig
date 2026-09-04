@@ -1793,7 +1793,7 @@ fn validateJsonContentType(content_type: ?[]const u8) !void {
     }
 }
 
-extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: *const anyopaque, optlen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: ?*const anyopaque, optlen: c_int) callconv(.winapi) c_int;
 
 fn setSocketTimeouts(socket: std.posix.socket_t, seconds: i64) void {
     if (comptime host_target.is_wasm) return;
