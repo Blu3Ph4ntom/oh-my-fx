@@ -1704,6 +1704,7 @@ fn runPasteSetup(
 }
 
 fn setupTerminalAvailableDefault(_: ?*anyopaque) bool {
+    if (comptime builtin.os.tag == .windows) return io_mod.stdinIsTty() and io_mod.stderrIsTty();
     return std.c.isatty(std.posix.STDIN_FILENO) != 0 and
         std.c.isatty(std.posix.STDERR_FILENO) != 0;
 }
@@ -1724,7 +1725,9 @@ fn readMaskedKeyDefault(
 
     while (input.items.len < 8 * 1024) {
         var byte: [1]u8 = undefined;
-        if (try std.posix.read(std.posix.STDIN_FILENO, &byte) == 0) return error.SetupCancelled;
+        if (comptime builtin.os.tag == .windows) {
+            if (try io_mod.readStdinBytes(&byte) == 0) return error.SetupCancelled;
+        } else if (try std.posix.read(std.posix.STDIN_FILENO, &byte) == 0) return error.SetupCancelled;
         switch (byte[0]) {
             '\r', '\n' => {
                 if (input.items.len == 0) continue;
@@ -1752,10 +1755,17 @@ fn readMaskedKeyDefault(
 }
 
 const MaskedKeyRawMode = struct {
-    original: std.posix.termios = undefined,
+    original: if (builtin.os.tag == .windows) std.os.windows.DWORD else std.posix.termios = undefined,
     active: bool = false,
 
     fn enable() !MaskedKeyRawMode {
+        if (comptime builtin.os.tag == .windows) {
+            if (!io_mod.stdinIsTty() or !io_mod.stderrIsTty()) return error.NotATerminal;
+            var self: MaskedKeyRawMode = .{};
+            self.original = io_mod.windowsConsoleSetRaw() orelse return error.NotATerminal;
+            self.active = true;
+            return self;
+        }
         if (std.c.isatty(std.posix.STDIN_FILENO) == 0 or
             std.c.isatty(std.posix.STDERR_FILENO) == 0)
         {
@@ -1795,7 +1805,11 @@ const MaskedKeyRawMode = struct {
 
     fn disable(self: *MaskedKeyRawMode) void {
         if (!self.active) return;
-        std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, self.original) catch {};
+        if (comptime builtin.os.tag == .windows) {
+            io_mod.windowsConsoleRestore(self.original);
+        } else {
+            std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, self.original) catch {};
+        }
         self.active = false;
     }
 };

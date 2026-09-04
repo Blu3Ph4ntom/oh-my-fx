@@ -438,6 +438,36 @@ const windows_std_output_handle: std.os.windows.DWORD = 0xFFFFFFF5;
 
 extern "kernel32" fn windowsGetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
 extern "kernel32" fn windowsWaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
+extern "kernel32" fn windowsGetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, lpMode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn windowsSetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, dwMode: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+
+pub const windows_console_echo_input: std.os.windows.DWORD = 0x0004;
+pub const windows_console_line_input: std.os.windows.DWORD = 0x0002;
+
+/// Puts the Windows console into character-by-character mode without echo
+/// for masked key prompts. Returns the previous mode for `windowsConsoleRestore`.
+/// Null on non-Windows or when the console mode cannot be changed.
+pub fn windowsConsoleSetRaw() ?std.os.windows.DWORD {
+    if (comptime !is_windows) return null;
+    const handle = windowsGetStdHandle(windows_std_input_handle);
+    var mode: std.os.windows.DWORD = 0;
+    if (windowsGetConsoleMode(handle, &mode) == 0) return null;
+    const raw = mode & ~(windows_console_echo_input | windows_console_line_input);
+    if (windowsSetConsoleMode(handle, raw) == 0) return null;
+    return mode;
+}
+
+pub fn windowsConsoleRestore(mode: std.os.windows.DWORD) void {
+    if (comptime !is_windows) return;
+    _ = windowsSetConsoleMode(windowsGetStdHandle(windows_std_input_handle), mode);
+}
+
+/// Reads up to `destination.len` bytes from standard input. Mirrors the
+/// `std.posix.read` shape used by interactive prompts so Windows can share
+/// the same call sites through the `std.Io` backend.
+pub fn readStdinBytes(destination: []u8) !usize {
+    return std.Io.File.stdin().readStreaming(getIo(), &.{destination});
+}
 
 /// `std.posix.fd_t` for standard input. On Windows this is the real console
 /// input handle, not 0, because `fd_t` is a HANDLE there.

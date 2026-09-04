@@ -64,7 +64,7 @@ pub const AlternateScreenOwner = enum {
 };
 
 pub const TerminalState = struct {
-    stdin_fd: std.posix.fd_t = std.posix.STDIN_FILENO,
+    stdin_fd: std.posix.fd_t = io_mod.stdinFd(),
     original_termios: std.posix.termios = undefined,
     raw_enabled: bool = false,
     alternate_screen_owner: AlternateScreenOwner = .none,
@@ -95,6 +95,10 @@ pub const TerminalState = struct {
 
     pub fn ensureInteractive(self: TerminalState) !void {
         if (comptime builtin.os.tag == .wasi) return;
+        if (comptime builtin.os.tag == .windows) {
+            if (!io_mod.stdinIsTty() or !io_mod.stdoutIsTty()) return error.NotATerminal;
+            return;
+        }
         if (std.c.isatty(self.stdin_fd) == 0 or std.c.isatty(std.posix.STDOUT_FILENO) == 0) {
             return error.NotATerminal;
         }

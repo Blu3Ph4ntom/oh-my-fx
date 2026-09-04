@@ -33,7 +33,7 @@ pub const Runtime = struct {
         user: types.UserTurn,
         no_color: bool,
     ) !Runtime {
-        const layout = zeroFooterLayout(try ui_terminal.queryLayout(std.posix.STDOUT_FILENO, 0));
+        const layout = zeroFooterLayout(try ui_terminal.queryLayout(io_mod.stdoutFd(), 0));
         var terminal = shell_runtime.TerminalState{};
         const cursor = probeTerminal(&terminal, layout, no_color);
         return initConfigured(
@@ -197,7 +197,7 @@ pub const Runtime = struct {
     }
 
     fn refreshGeometry(self: *Runtime) !void {
-        const queried = ui_terminal.queryLayout(std.posix.STDOUT_FILENO, 0) catch return;
+        const queried = ui_terminal.queryLayout(io_mod.stdoutFd(), 0) catch return;
         const layout = zeroFooterLayout(queried);
         if (layout.rows == self.shell.layout.rows and layout.cols == self.shell.layout.cols) return;
         try shell_runtime.applyResizeWithLayout(&self.shell, &self.metrics, layout, true);
