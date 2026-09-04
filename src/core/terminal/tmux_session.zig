@@ -405,12 +405,7 @@ pub const Backend = struct {
             killSessionAt(alloc, paths.socket, paths.session_name);
             cleanupSocketIfUnused(alloc, paths.socket);
         }
-        try std.Io.Dir.cwd().setFilePermissions(
-            io_mod.getIo(),
-            paths.socket,
-            private_file_permissions,
-            .{ .follow_symlinks = false },
-        );
+        try io_mod.setFilePermissions(std.Io.Dir.cwd(), paths.socket, private_file_permissions, .{ .follow_symlinks = false });
         if (!try privateSocketExists(paths.socket)) {
             return error.TmuxSocketMissing;
         }
@@ -564,12 +559,7 @@ pub const Backend = struct {
         const address = try std.Io.net.UnixAddress.init(self.paths.capture_socket);
         self.capture_server = try address.listen(io_mod.getIo(), .{});
         errdefer self.closeCaptureServer();
-        try std.Io.Dir.cwd().setFilePermissions(
-            io_mod.getIo(),
-            self.paths.capture_socket,
-            private_file_permissions,
-            .{ .follow_symlinks = false },
-        );
+        try io_mod.setFilePermissions(std.Io.Dir.cwd(), self.paths.capture_socket, private_file_permissions, .{ .follow_symlinks = false });
         const quoted_executable = try quoteShellWord(self.alloc, self.executable);
         defer self.alloc.free(quoted_executable);
         const quoted_socket = try quoteShellWord(self.alloc, self.paths.capture_socket);
@@ -1018,12 +1008,7 @@ pub fn runLauncher(
         io_mod.getIo(),
         parsed.value.control_path,
     ) catch {};
-    try std.Io.Dir.cwd().setFilePermissions(
-        io_mod.getIo(),
-        parsed.value.control_path,
-        private_file_permissions,
-        .{ .follow_symlinks = false },
-    );
+    try io_mod.setFilePermissions(std.Io.Dir.cwd(), parsed.value.control_path, private_file_permissions, .{ .follow_symlinks = false });
     try waitForSignal(parsed.value.manifest_ready_path);
     try writeLifecycle(parsed.value.lifecycle_path, .prepared, 0);
     try waitForSignal(parsed.value.release_path);

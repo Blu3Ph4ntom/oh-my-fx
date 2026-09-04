@@ -4066,10 +4066,7 @@ test "cancellation preserves the termination grace in an invoked script" {
                 "printf 'GRACE-READY\\n'\n" ++
                 "while :; do sleep 1; done\n",
         );
-        try script.setPermissions(
-            io_mod.getIo(),
-            io_mod.permissionsFromMode(0o700),
-        );
+        try io_mod.setPermissions(script, io_mod.permissionsFromMode(0o700));
     }
 
     var cancel = std.atomic.Value(bool).init(false);
@@ -4903,7 +4900,7 @@ test "just_bash post-spawn cancellation does not parse or execute fallback" {
         var fake = try tmp.dir.createFile(io_mod.getIo(), "workspace/fake-just-bash", .{ .truncate = true });
         defer fake.close(io_mod.getIo());
         try fake.writeStreamingAll(io_mod.getIo(), fake_script);
-        try fake.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o700));
+        try io_mod.setPermissions(fake, io_mod.permissionsFromMode(0o700));
     }
     const fake_path = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "workspace/fake-just-bash");
     defer alloc.free(fake_path);
@@ -5036,7 +5033,7 @@ test "just_bash raw callback emits parsed inner streams without wrapper JSON" {
         var fake = try tmp.dir.createFile(io_mod.getIo(), "workspace/fake-just-bash", .{ .truncate = true });
         defer fake.close(io_mod.getIo());
         try fake.writeStreamingAll(io_mod.getIo(), script);
-        try fake.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o700));
+        try io_mod.setPermissions(fake, io_mod.permissionsFromMode(0o700));
     }
     const fake_path = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "workspace/fake-just-bash");
     defer alloc.free(fake_path);

@@ -238,10 +238,7 @@ pub const Store = struct {
             };
         }
 
-        self.durable_home.?.dir.setPermissions(
-            io_mod.getIo(),
-            private_dir_permissions,
-        ) catch return error.PrivateStatePermissionsUnsupported;
+        io_mod.setPermissions(self.durable_home.?.dir, private_dir_permissions) catch return error.PrivateStatePermissionsUnsupported;
         const stat = try self.durable_home.?.dir.stat(io_mod.getIo());
         if (stat.kind != .directory) return error.DurablePathUnsafe;
         if (!io_mod.permissionsIsPrivateDir(stat.permissions)) {

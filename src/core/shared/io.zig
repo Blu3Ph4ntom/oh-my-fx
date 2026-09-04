@@ -531,6 +531,24 @@ extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) 
 
 /// Best-effort SO_RCVTIMEO/SO_SNDTIMEO in milliseconds. Failures are ignored
 /// by design; callers already treat timeout setup as advisory.
+/// `Dir.setPermissions` and `File.setPermissions` panic with a TODO on
+/// Windows, where modes are meaningless (ACLs govern). No-op there.
+pub fn setPermissions(target: anytype, permissions: std.Io.File.Permissions) !void {
+    if (comptime is_windows) return;
+    try setPermissions(target, permissions);
+}
+
+/// `Dir.setFilePermissions` panics with a TODO on Windows; no-op there.
+pub fn setFilePermissions(
+    dir: std.Io.Dir,
+    sub_path: []const u8,
+    permissions: std.Io.File.Permissions,
+    options: std.Io.Dir.SetFilePermissionsOptions,
+) !void {
+    if (comptime is_windows) return;
+    try dir.setFilePermissions(getIo(), sub_path, permissions, options);
+}
+
 pub fn setSocketTimeoutMs(sock: usize, timeout_ms: u32) void {
     if (comptime !is_windows) return;
     var ms = timeout_ms;
@@ -773,7 +791,7 @@ pub fn durableReplaceVerifiedWithOps(
     temp_exists = true;
     defer file.close(getIo());
 
-    file.setPermissions(getIo(), private_file_permissions) catch return error.PrivateStatePermissionsUnsupported;
+    setPermissions(file, private_file_permissions) catch return error.PrivateStatePermissionsUnsupported;
     verifyPrivateRegularFile(file) catch |err| switch (err) {
         error.DurablePathUnsafe, error.PrivateStatePermissionsUnsupported => return err,
         else => return error.DurableReplacePreRenameFailed,
@@ -1175,7 +1193,7 @@ test "writeFileAtomic preserves existing file permissions" {
     defer alloc.free(file_path);
 
     try writeFileAtomic(alloc, file_path, "first");
-    try std.Io.Dir.cwd().setFilePermissions(getIo(), file_path, permissionsFromMode(0o755), .{});
+    try setFilePermissions(std.Io.Dir.cwd(), file_path, permissionsFromMode(0o755), .{});
     try writeFileAtomic(alloc, file_path, "second");
 
     const stat = try std.Io.Dir.cwd().statFile(getIo(), file_path, .{});

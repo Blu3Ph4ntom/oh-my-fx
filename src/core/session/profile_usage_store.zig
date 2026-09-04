@@ -293,10 +293,7 @@ pub const Store = struct {
                 else => return error.DurableLayoutFailed,
             };
         }
-        self.durable_home.?.dir.setPermissions(
-            io_mod.getIo(),
-            private_dir_permissions,
-        ) catch return error.PrivateStatePermissionsUnsupported;
+        io_mod.setPermissions(self.durable_home.?.dir, private_dir_permissions) catch return error.PrivateStatePermissionsUnsupported;
         const stat = try self.durable_home.?.dir.stat(io_mod.getIo());
         if (stat.kind != .directory) return error.DurablePathUnsafe;
         if (!io_mod.permissionsIsPrivateDir(stat.permissions)) {
@@ -1305,7 +1302,7 @@ test "profile usage store leaves an incomplete tail intact when repair exceeds r
     );
     var profile = try tmp.dir.openDir(io_mod.getIo(), ".fx", .{ .iterate = true });
     defer profile.close(io_mod.getIo());
-    profile.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o700)) catch
+    io_mod.setPermissions(profile, io_mod.permissionsFromMode(0o700)) catch
         return error.SkipZigTest;
 
     var contents: std.Io.Writer.Allocating = .init(alloc);
@@ -1359,7 +1356,7 @@ test "profile usage store repairs an existing profile directory to private mode"
     );
     var profile = try tmp.dir.openDir(io_mod.getIo(), ".fx", .{ .iterate = true });
     defer profile.close(io_mod.getIo());
-    profile.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o755)) catch
+    io_mod.setPermissions(profile, io_mod.permissionsFromMode(0o755)) catch
         return error.SkipZigTest;
 
     const home = try io_mod.dirRealpathAlloc(alloc, tmp.dir, ".");
@@ -1393,7 +1390,7 @@ test "profile usage reads reject an unsafe profile directory without repairing i
     );
     var profile = try tmp.dir.openDir(io_mod.getIo(), ".fx", .{ .iterate = true });
     defer profile.close(io_mod.getIo());
-    profile.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o755)) catch
+    io_mod.setPermissions(profile, io_mod.permissionsFromMode(0o755)) catch
         return error.SkipZigTest;
 
     var contents: std.Io.Writer.Allocating = .init(alloc);
@@ -1440,7 +1437,7 @@ test "profile usage store decodes a large ledger with stable id indexing" {
     );
     var profile = try tmp.dir.openDir(io_mod.getIo(), ".fx", .{ .iterate = true });
     defer profile.close(io_mod.getIo());
-    profile.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o700)) catch
+    io_mod.setPermissions(profile, io_mod.permissionsFromMode(0o700)) catch
         return error.SkipZigTest;
 
     const record_count: usize = 4096;

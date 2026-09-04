@@ -411,8 +411,8 @@ fn runSupported(alloc: Allocator, config: Config) !void {
     defer server.deinit(io_mod.getIo());
     var endpoint_created = true;
     defer if (endpoint_created) cleanupEndpoint(paths.endpointDir());
-    try paths.endpointDir().dir.setFilePermissions(
-        io_mod.getIo(),
+    try io_mod.setFilePermissions(
+        paths.endpointDir().dir,
         endpoint_name,
         socket_permissions,
         .{ .follow_symlinks = false },
@@ -1646,12 +1646,15 @@ test "runtime transport directories reject symlinks non-private modes and foreig
         "public",
         io_mod.permissionsFromMode(0o755),
     );
-    try tmp.dir.setFilePermissions(
-        std.testing.io,
-        "public",
-        io_mod.permissionsFromMode(0o755),
-        .{ .follow_symlinks = false },
-    );
+    // No-op on Windows; the follow-up assertion uses `expectedTestMode`.
+    if (comptime !io_mod.is_windows) {
+        try tmp.dir.setFilePermissions(
+            std.testing.io,
+            "public",
+            io_mod.permissionsFromMode(0o755),
+            .{ .follow_symlinks = false },
+        );
+    }
     const public_stat = try tmp.dir.statFile(
         std.testing.io,
         "public",

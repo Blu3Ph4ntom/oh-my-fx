@@ -1521,10 +1521,7 @@ pub fn refreshRelationshipMigrationSnapshot(
     }) catch return error.InvalidSessionIndex;
     temp_exists = true;
     defer target.close(io_mod.getIo());
-    target.setPermissions(
-        io_mod.getIo(),
-        private_file_permissions,
-    ) catch return error.InvalidSessionIndex;
+    io_mod.setPermissions(target, private_file_permissions) catch return error.InvalidSessionIndex;
     const target_stat = target.stat(io_mod.getIo()) catch
         return error.InvalidSessionIndex;
     if (target_stat.kind != .file or
@@ -2264,6 +2261,7 @@ test "deferred cache token rejects malformed and noncanonical input" {
 }
 
 test "deferred cache token reader rejects non-private files" {
+    if (comptime io_mod.is_windows) return error.SkipZigTest; // Mode enforcement is POSIX-only.
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

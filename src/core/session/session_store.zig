@@ -4864,7 +4864,7 @@ fn loadedWriterBelongsToRoot(
 
 fn prepareWritableSessionDir(dir: std.Io.Dir) !void {
     const permissions = io_mod.permissionsFromMode(0o700);
-    dir.setPermissions(io_mod.getIo(), permissions) catch
+    io_mod.setPermissions(dir, permissions) catch
         return error.PrivateStatePermissionsUnsupported;
     const stat = try dir.stat(io_mod.getIo());
     if (stat.kind != .directory) return error.SessionPathUnsafe;
@@ -8892,7 +8892,7 @@ test "doctor reports unsafe managed child artifacts" {
         .{ .iterate = true, .follow_symlinks = false },
     );
     defer managed_dir.close(io_mod.getIo());
-    try managed_dir.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o755));
+    try io_mod.setPermissions(managed_dir, io_mod.permissionsFromMode(0o755));
 
     var diagnostics = try ctx.store.inspectForDoctor(alloc);
     defer freeDoctorDiagnostics(alloc, &diagnostics);
@@ -8973,10 +8973,7 @@ test "doctor ignores legacy task records" {
         .{ .iterate = true },
     );
     defer session_dir.close(io_mod.getIo());
-    try session_dir.setPermissions(
-        io_mod.getIo(),
-        io_mod.permissionsFromMode(0o700),
-    );
+    try io_mod.setPermissions(session_dir, io_mod.permissionsFromMode(0o700));
     try session_dir.createDir(
         io_mod.getIo(),
         "tasks",

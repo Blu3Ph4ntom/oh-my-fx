@@ -1428,7 +1428,7 @@ fn openSessionDir(
     };
     errdefer dir.close(io_mod.getIo());
     if (mode == .writable) {
-        dir.setPermissions(io_mod.getIo(), private_dir_permissions) catch
+        io_mod.setPermissions(dir, private_dir_permissions) catch
             return error.PrivateStatePermissionsUnsupported;
     }
     try verifyPrivateDir(dir, mode);
@@ -1471,7 +1471,7 @@ fn createManagedFile(
         else => return err,
     };
     errdefer file.close(io_mod.getIo());
-    file.setPermissions(io_mod.getIo(), private_file_permissions) catch
+    io_mod.setPermissions(file, private_file_permissions) catch
         return error.PrivateStatePermissionsUnsupported;
     try verifyManagedFile(file, .writable);
     return file;

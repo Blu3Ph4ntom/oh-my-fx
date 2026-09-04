@@ -3168,7 +3168,7 @@ test "read only settings rejects group or world writable policy files" {
 
     var root_dir = try tmp.dir.openDir(io_mod.getIo(), "home/.fx", .{ .iterate = true });
     defer root_dir.close(io_mod.getIo());
-    root_dir.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o777)) catch return error.SkipZigTest;
+    io_mod.setPermissions(root_dir, io_mod.permissionsFromMode(0o777)) catch return error.SkipZigTest;
 
     const home = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "home");
     defer alloc.free(home);
@@ -3177,9 +3177,9 @@ test "read only settings rejects group or world writable policy files" {
         Store.initFromHome(alloc, home, .read_only),
     );
 
-    root_dir.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o755)) catch return error.SkipZigTest;
+    io_mod.setPermissions(root_dir, io_mod.permissionsFromMode(0o755)) catch return error.SkipZigTest;
     var file = try root_dir.openFile(io_mod.getIo(), "settings.json", .{ .mode = .read_write });
-    file.setPermissions(io_mod.getIo(), io_mod.permissionsFromMode(0o666)) catch {
+    io_mod.setPermissions(file, io_mod.permissionsFromMode(0o666)) catch {
         file.close(io_mod.getIo());
         return error.SkipZigTest;
     };

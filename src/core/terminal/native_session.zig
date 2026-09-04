@@ -447,12 +447,7 @@ pub fn runLauncher(alloc: Allocator) !void {
         io_mod.getIo(),
         parsed.value.control_path,
     ) catch {};
-    try std.Io.Dir.cwd().setFilePermissions(
-        io_mod.getIo(),
-        parsed.value.control_path,
-        private_file_permissions,
-        .{ .follow_symlinks = false },
-    );
+    try io_mod.setFilePermissions(std.Io.Dir.cwd(), parsed.value.control_path, private_file_permissions, .{ .follow_symlinks = false });
 
     if (std.c.setsid() < 0) return error.SessionCreationFailed;
     if (std.c.ioctl(

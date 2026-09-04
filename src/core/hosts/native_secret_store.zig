@@ -215,6 +215,7 @@ test "stored key file round-trips byte-identically at mode 0600" {
 }
 
 test "stored key file refusal stays distinguishable from absence" {
+    if (comptime io_mod.is_windows) return error.SkipZigTest; // Mode enforcement is POSIX-only.
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var fx_dir = io_mod.VerifiedDir{

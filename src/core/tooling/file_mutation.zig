@@ -516,7 +516,7 @@ fn applyWithTestControls(
         initial_stage_stat,
     );
     if (destination_permissions) |permissions| {
-        stage.setPermissions(io_mod.getIo(), permissions) catch
+        io_mod.setPermissions(stage, permissions) catch
             return resources.reject(.io_failure);
     }
     writeStagedContent(
@@ -3248,6 +3248,7 @@ test "apply returns deepest-first bounded residue when created parents are not e
 }
 
 test "apply preserves the existing destination mode" {
+    if (comptime io_mod.is_windows) return error.SkipZigTest; // Mode enforcement is POSIX-only.
     if (builtin.os.tag == .windows) return error.SkipZigTest;
 
     var tmp = std.testing.tmpDir(.{});

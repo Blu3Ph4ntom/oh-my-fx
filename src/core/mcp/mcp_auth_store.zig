@@ -459,10 +459,7 @@ fn normalizeAndVerifyPrivateDir(dir: std.Io.Dir) !void {
     if (!io_mod.permissionsOwnerWritable(initial.permissions)) {
         return error.PrivateStatePermissionsUnsupported;
     }
-    try dir.setPermissions(
-        io_mod.getIo(),
-        io_mod.permissionsFromMode(0o700),
-    );
+    try io_mod.setPermissions(dir, io_mod.permissionsFromMode(0o700));
     const stat = try dir.stat(io_mod.getIo());
     if (stat.kind != .directory or !io_mod.permissionsIsPrivateDir(stat.permissions)) {
         return error.PrivateStatePermissionsUnsupported;

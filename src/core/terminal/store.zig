@@ -8072,6 +8072,7 @@ test "tmux recovery propagates execution scope allocation failure without durabl
 }
 
 test "tmux recovery propagates proof capability failure without durable loss" {
+    if (comptime io_mod.is_windows) return error.SkipZigTest; // Mode enforcement is POSIX-only.
     const alloc = std.testing.allocator;
     var fixture = try TestStoreFixture.init(alloc, test_options());
     defer fixture.deinit();
