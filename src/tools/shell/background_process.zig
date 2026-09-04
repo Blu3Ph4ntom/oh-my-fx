@@ -480,7 +480,7 @@ fn captureMacOSToken(
 /// Process identifier used by the background supervisor. POSIX pids do not
 /// exist on Windows (`std.posix.pid_t` is a HANDLE there), so Windows tracks
 /// processes by numeric DWORD id instead.
-const Pid = if (comptime builtin.os.tag == .windows) u32 else Pid;
+const Pid = if (builtin.os.tag == .windows) u32 else Pid;
 
 fn formatChildPid(alloc: Allocator, id: std.process.Child.Id) ![]u8 {
     if (comptime builtin.os.tag == .windows) return std.fmt.allocPrint(alloc, "{d}", .{@intFromPtr(id)});

@@ -4081,7 +4081,7 @@ pub const TranscriptRuntime = struct {
     // evaluate at comptime on Windows. The field is only ever overridden by
     // tests, so it holds a dummy handle there; every other platform keeps
     // the real default.
-    stdout_file: std.Io.File = if (comptime builtin.os.tag == .windows) .{ .handle = @ptrFromInt(1), .flags = .{ .nonblocking = false } } else std.Io.File.stdout(),
+    stdout_file: std.Io.File = if (builtin.os.tag == .windows) .{ .handle = @ptrFromInt(1), .flags = .{ .nonblocking = false } } else std.Io.File.stdout(),
     sync_updates_enabled: bool = true,
     history_reset_uses_ris: bool = false,
     layout: Layout = undefined,

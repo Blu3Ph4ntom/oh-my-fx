@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 /// Process identifier used across session tracking. `std.posix.pid_t` is a
 /// HANDLE on Windows, so Windows tracks children by numeric DWORD id.
-const Pid = if (comptime builtin.os.tag == .windows) u32 else std.posix.pid_t;
+const Pid = if (builtin.os.tag == .windows) u32 else std.posix.pid_t;
 
 const contracts = @import("contracts.zig");
 const monitor_core = @import("monitor.zig");

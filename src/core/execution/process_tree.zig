@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 
 /// Process identifier used by the tracker. `std.posix.pid_t` is a HANDLE on
 /// Windows, so Windows tracks processes by numeric DWORD id instead.
-const Pid = if (comptime builtin.os.tag == .windows) u32 else std.posix.pid_t;
+const Pid = if (builtin.os.tag == .windows) u32 else std.posix.pid_t;
 
 const Identity = union(enum) {
     linux_start_ticks: u64,

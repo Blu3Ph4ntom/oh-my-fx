@@ -1755,7 +1755,7 @@ fn readMaskedKeyDefault(
 }
 
 const MaskedKeyRawMode = struct {
-    original: if (comptime builtin.os.tag == .windows) std.os.windows.DWORD else std.posix.termios = undefined,
+    original: if (builtin.os.tag == .windows) std.os.windows.DWORD else std.posix.termios = undefined,
     active: bool = false,
 
     fn enable() !MaskedKeyRawMode {

@@ -1277,7 +1277,7 @@ fn parseEscapeTeamPickerKey(bytes: []const u8) TeamPickerKey {
 }
 
 const TeamPickerRawMode = struct {
-    original: if (comptime builtin.os.tag == .windows) std.os.windows.DWORD else std.posix.termios = undefined,
+    original: if (builtin.os.tag == .windows) std.os.windows.DWORD else std.posix.termios = undefined,
     active: bool = false,
 
     fn enable() !TeamPickerRawMode {
