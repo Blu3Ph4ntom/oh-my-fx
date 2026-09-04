@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const runtime_profile = @import("../hosts/runtime_profile.zig");
 const app_permission_runtime = @import("app_permission_runtime.zig");
 const app_session_runtime = @import("app_session_runtime.zig");
@@ -2043,7 +2042,7 @@ fn countOpenFileDescriptors() ?usize {
 
 fn processMemorySnapshot(alloc: std.mem.Allocator, pid: std.c.pid_t) ![]u8 {
     // No `ps` on Windows; the caller treats this as optional diagnostics.
-    if (comptime builtin.os.tag == .windows) return error.ProcessSnapshotFailed;
+    if (comptime @import("builtin").os.tag == .windows) return error.ProcessSnapshotFailed;
     const pid_text = try std.fmt.allocPrint(alloc, "{d}", .{io_mod.currentProcessId()});
     _ = pid;
     defer alloc.free(pid_text);
