@@ -384,6 +384,8 @@ fn reap_new_children(
 }
 
 fn reap_child(io: std.Io, pid: std.posix.pid_t) void {
+    // macOS-only helper; the tests that use it skip elsewhere.
+    if (comptime builtin.os.tag == .windows) return;
     var status: c_int = undefined;
     for (0..100) |_| {
         const result = std.posix.system.waitpid(pid, &status, std.posix.W.NOHANG);
@@ -400,6 +402,7 @@ fn reap_child(io: std.Io, pid: std.posix.pid_t) void {
 const max_tracked_fd = if (builtin.os.tag == .macos) std.c.OPEN_MAX else 256;
 
 fn open_fd_snapshot() [max_tracked_fd]bool {
+    if (comptime builtin.os.tag == .windows) return [_]bool{false} ** max_tracked_fd;
     var result = [_]bool{false} ** max_tracked_fd;
     for (&result, 0..) |*open, fd| {
         const rc = std.posix.system.fcntl(@intCast(fd), std.posix.F.GETFD, @as(usize, 0));
@@ -409,12 +412,14 @@ fn open_fd_snapshot() [max_tracked_fd]bool {
 }
 
 fn close_new_fds(before: [max_tracked_fd]bool, after: [max_tracked_fd]bool) void {
+    if (comptime builtin.os.tag == .windows) return;
     for (before, after, 0..) |was_open, is_open, fd| {
         if (!was_open and is_open) _ = std.posix.system.close(@intCast(fd));
     }
 }
 
 test "Darwin spawn resolves argv through parent PATH and replaces the child environment" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const alloc = std.testing.allocator;
     var environment = std.process.Environ.Map.init(alloc);
@@ -435,6 +440,7 @@ test "Darwin spawn resolves argv through parent PATH and replaces the child envi
 }
 
 test "Darwin spawn accepts path and directory working directories" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -463,6 +469,7 @@ test "Darwin spawn accepts path and directory working directories" {
 }
 
 test "Darwin spawn preserves pipe stdio in every direction" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const alloc = std.testing.allocator;
     var child = try std.process.spawn(io, .{
@@ -487,6 +494,7 @@ test "Darwin spawn preserves pipe stdio in every direction" {
 }
 
 test "Darwin spawn preserves inherit ignore file and close stdio modes" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
 
     var inherited = try std.process.spawn(io, .{
@@ -530,6 +538,7 @@ test "Darwin spawn preserves inherit ignore file and close stdio modes" {
 }
 
 test "Darwin spawn reports launch errors and preserves wait and kill" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const missing_before = try child_pid_snapshot();
     try std.testing.expectError(error.FileNotFound, std.process.spawn(io, .{
@@ -569,6 +578,7 @@ test "Darwin spawn reports launch errors and preserves wait and kill" {
 extern "c" fn getpgid(pid: std.posix.pid_t) std.posix.pid_t;
 
 test "Darwin spawn creates and joins a pipeline process group" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const alloc = std.testing.allocator;
     var producer = try std.process.spawn(io, .{
@@ -634,6 +644,7 @@ const ParallelSpawn = struct {
 };
 
 test "parallel Darwin spawns isolate descriptors and each output reaches EOF" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     var start: std.Io.Semaphore = .{ .permits = 0 };
     var workers = [_]ParallelSpawn{
@@ -662,6 +673,7 @@ test "parallel Darwin spawns isolate descriptors and each output reaches EOF" {
 }
 
 test "Darwin spawn partial setup failure closes every parent descriptor" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const before = open_fd_snapshot();
     const children_before = try child_pid_snapshot();
@@ -680,6 +692,7 @@ test "Darwin spawn partial setup failure closes every parent descriptor" {
 }
 
 test "Darwin spawn partial setup failure leaves no child behind" {
+    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     const io = try darwin_io();
     const before = try child_pid_snapshot();
     try std.testing.expectError(error.FileNotFound, std.process.spawn(io, .{

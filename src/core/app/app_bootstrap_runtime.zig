@@ -883,7 +883,8 @@ fn readTraceForTest(alloc: Allocator, path: []const u8) ![]u8 {
     return io_mod.readFileToEnd(alloc, &file, 8192);
 }
 
-fn resizeHandlerForTest(_: std.posix.SIG) callconv(.c) void {}
+// Windows has no SIGWINCH; the handler takes no signal there.
+fn resizeHandlerForTest(_: if (@import("builtin").os.tag == .windows) void else std.posix.SIG) callconv(.c) void {}
 
 test "app_bootstrap_runtime transfers startup state and starts a fresh session" {
     const alloc = std.testing.allocator;
