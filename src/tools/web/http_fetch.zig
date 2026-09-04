@@ -36,9 +36,7 @@ const poll_events = if (is_windows) struct {
 extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
 extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
 extern "ws2_32" fn ioctlsocket(s: usize, cmd: c_ulong, argp: *c_ulong) callconv(.winapi) c_int;
-// `connect` is already a method name in this file, so the ws2_32 symbol is
-// bound through `@extern` instead of a same-named declaration.
-const wsaConnect = @extern(fn (s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int, .{ .name = "connect", .library_name = "ws2_32" });
+extern "ws2_32" fn connect(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn recv(s: usize, buf: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn send(s: usize, buf: ?*const anyopaque, len: c_int, flags: c_int) callconv(.winapi) c_int;
@@ -1331,7 +1329,7 @@ fn connectPinned(address: IpAddress, options: FetchOptions) !posix.fd_t {
     const len = addressToPosix(address, &storage);
     if (comptime is_windows) {
         while (true) {
-            if (wsaConnect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
+            if (connect(fdToSocket(fd), &storage.any, @intCast(len)) == 0) return fd;
             switch (wsaErrorToErrno(GetLastError())) {
                 .INTR => {
                     try checkControl(options);
@@ -3658,10 +3656,10 @@ const ScriptedDialer = struct {
     cancel_flag: ?*std.atomic.Value(bool) = null,
 
     fn dialer(self: *@This()) Dialer {
-        return .{ .ctx = @ptrCast(self), .connect_fn = connect };
+        return .{ .ctx = @ptrCast(self), .connect_fn = dial };
     }
 
-    fn connect(raw: *anyopaque, address: IpAddress, options: FetchOptions) anyerror!posix.fd_t {
+    fn dial(raw: *anyopaque, address: IpAddress, options: FetchOptions) anyerror!posix.fd_t {
         const self: *@This() = @ptrCast(@alignCast(raw));
         const index = self.calls;
         self.calls += 1;
