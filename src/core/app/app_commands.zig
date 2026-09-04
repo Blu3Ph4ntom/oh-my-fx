@@ -2041,7 +2041,10 @@ fn countOpenFileDescriptors() ?usize {
 }
 
 fn processMemorySnapshot(alloc: std.mem.Allocator, pid: std.c.pid_t) ![]u8 {
-    const pid_text = try std.fmt.allocPrint(alloc, "{d}", .{pid});
+    // No `ps` on Windows; the caller treats this as optional diagnostics.
+    if (comptime builtin.os.tag == .windows) return error.ProcessSnapshotFailed;
+    const pid_text = try std.fmt.allocPrint(alloc, "{d}", .{io_mod.currentProcessId()});
+    _ = pid;
     defer alloc.free(pid_text);
     const result = try std.process.run(alloc, io_mod.getIo(), .{
         .argv = &.{ "ps", "-o", "pid,ppid,rss,vsz,etime,stat", "-p", pid_text },

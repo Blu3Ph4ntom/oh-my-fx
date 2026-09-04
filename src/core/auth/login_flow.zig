@@ -1223,14 +1223,22 @@ fn readTeamPickerKey() !TeamPickerKey {
     if (buf[0] == 0x1b) {
         while (len < buf.len) {
             if (escapeSequenceComplete(buf[0..len])) break;
-            var fds = [_]std.posix.pollfd{.{
-                .fd = std.posix.STDIN_FILENO,
-                .events = std.posix.POLL.IN,
-                .revents = 0,
-            }};
-            const ready = try std.posix.poll(&fds, 25);
-            if (ready == 0 or (fds[0].revents & std.posix.POLL.IN) == 0) break;
-            const n = try std.posix.read(std.posix.STDIN_FILENO, buf[len .. len + 1]);
+            // `std.posix.poll` has no ws2_32 binding in Zig 0.16.
+            if (comptime builtin.os.tag == .windows) {
+                if (!io_mod.waitForStdinEnter(25)) break;
+            } else {
+                var fds = [_]std.posix.pollfd{.{
+                    .fd = std.posix.STDIN_FILENO,
+                    .events = std.posix.POLL.IN,
+                    .revents = 0,
+                }};
+                const ready = try std.posix.poll(&fds, 25);
+                if (ready == 0 or (fds[0].revents & std.posix.POLL.IN) == 0) break;
+            }
+            const n = if (comptime builtin.os.tag == .windows)
+                try io_mod.readStdinBytes(buf[len .. len + 1])
+            else
+                try std.posix.read(std.posix.STDIN_FILENO, buf[len .. len + 1]);
             if (n == 0) break;
             len += n;
         }

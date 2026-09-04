@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const debug_trace = @import("../core/shared/debug_trace.zig");
 const devbox_executor = @import("../core/execution/devbox_executor.zig");
@@ -44,6 +45,11 @@ pub fn executeVercel(
 
 fn setVercelHttpTimeout(conn: *std.http.Client.Connection) void {
     const sock = conn.stream_writer.stream.socket.handle;
+    // Winsock takes DWORD milliseconds (30s here), not timeval.
+    if (comptime builtin.os.tag == .windows) {
+        io_mod.setSocketTimeoutMs(@intFromPtr(sock), 30_000);
+        return;
+    }
     const timeout = std.posix.timeval{ .sec = vercel_http_timeout_sec, .usec = 0 };
     std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&timeout)) catch |err| {
         debug_trace.logf("core", "vercel sandbox receive timeout setup failed err={s}", .{@errorName(err)});
