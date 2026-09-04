@@ -1213,7 +1213,10 @@ const TeamPickerKey = union(enum) {
 
 fn readTeamPickerKey() !TeamPickerKey {
     var buf: [8]u8 = undefined;
-    const first_read = try std.posix.read(std.posix.STDIN_FILENO, buf[0..1]);
+    const first_read = if (comptime builtin.os.tag == .windows)
+        try io_mod.readStdinBytes(buf[0..1])
+    else
+        try std.posix.read(std.posix.STDIN_FILENO, buf[0..1]);
     if (first_read == 0) return .ignored;
 
     var len = first_read;

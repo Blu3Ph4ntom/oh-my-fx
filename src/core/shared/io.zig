@@ -518,6 +518,29 @@ pub fn waitForStdinEnter(timeout_ms: u64) bool {
     return windowsWaitForSingleObject(handle, capped) == 0;
 }
 
+extern "ws2_32" fn ioSetsockopt(s: usize, level: c_int, optname: c_int, optval: *const anyopaque, optlen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn ioWsapoll(fdarray: *anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+
+/// Best-effort SO_RCVTIMEO/SO_SNDTIMEO in milliseconds. Failures are ignored
+/// by design; callers already treat timeout setup as advisory.
+pub fn setSocketTimeoutMs(sock: usize, timeout_ms: u32) void {
+    if (comptime !is_windows) return;
+    var ms = timeout_ms;
+    _ = ioSetsockopt(sock, 0xffff, 0x1006, @ptrCast(&ms), @sizeOf(u32));
+    _ = ioSetsockopt(sock, 0xffff, 0x1005, @ptrCast(&ms), @sizeOf(u32));
+}
+
+/// Waits up to `timeout_ms` for a socket to become readable. Returns false
+/// on timeout or error. Windows-only helper for code that historically used
+/// `std.posix.poll`, which has no ws2_32 binding in Zig 0.16.
+pub fn socketWaitReadable(sock: usize, timeout_ms: i32) bool {
+    if (comptime !is_windows) return false;
+    var pfd = .{ .fd = sock, .events = @as(i16, 0x0100), .revents = @as(i16, 0) };
+    const rc = ioWsapoll(&pfd, 1, timeout_ms);
+    if (rc <= 0) return false;
+    return pfd.revents & @as(i16, 0x0100) != 0;
+}
+
 pub fn milliTimestamp() i64 {
     const ts = std.Io.Timestamp.now(getIo(), .real);
     return @intCast(@divFloor(ts.nanoseconds, 1_000_000));

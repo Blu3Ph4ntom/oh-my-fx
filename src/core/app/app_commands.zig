@@ -2001,7 +2001,7 @@ fn writeCurrentStateSummary(writer: *std.Io.Writer, app: anytype, alloc: std.mem
 
 fn writeProcessSummary(writer: *std.Io.Writer, alloc: std.mem.Allocator) !void {
     const pid = std.c.getpid();
-    try writer.print("process: pid={d}", .{pid});
+    try writer.print("process: pid={d}", .{io_mod.currentProcessId()});
     if (countOpenFileDescriptors()) |fd_count| try writer.print(" open_fds={d}", .{fd_count});
     try writer.writeByte('\n');
 

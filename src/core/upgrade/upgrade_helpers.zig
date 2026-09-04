@@ -14,6 +14,11 @@ const Target = update_target.Target;
 
 fn setRecvTimeout(conn: *std.http.Client.Connection) void {
     const sock = conn.stream_writer.stream.socket.handle;
+    // Winsock takes DWORD milliseconds (30s here), not timeval.
+    if (comptime builtin.os.tag == .windows) {
+        io_mod.setSocketTimeoutMs(@intFromPtr(sock), 30_000);
+        return;
+    }
     const timeout = std.posix.timeval{ .sec = recv_timeout_sec, .usec = 0 };
     std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&timeout)) catch {};
 }
@@ -50,9 +55,12 @@ pub const platform = platformFromTarget() orelse
     @compileError("unsupported platform for auto-upgrade (requires macOS or Linux, x86_64 or aarch64)");
 
 fn platformFromTarget() ?[]const u8 {
+    // Windows assets follow the same `fx-{os}-{arch}.tar.gz` layout and
+    // resolve at download time; a missing asset fails gracefully there.
     const os: ?[]const u8 = switch (builtin.os.tag) {
         .macos => "macos",
         .linux => "linux",
+        .windows => "windows",
         else => null,
     };
     const arch: ?[]const u8 = switch (builtin.cpu.arch) {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const chatgpt_session = @import("chatgpt_session.zig");
 const debug_trace = @import("../shared/debug_trace.zig");
 const host = @import("../hosts/host.zig");
@@ -275,6 +276,16 @@ fn browserCallbackReady(
     cancel_flag: *std.atomic.Value(bool),
 ) !bool {
     if (cancel_flag.load(.seq_cst)) return error.Cancelled;
+    // `std.posix.poll` has no ws2_32 binding in Zig 0.16; wait on the
+    // listener socket directly instead.
+    if (comptime builtin.os.tag == .windows) {
+        if (!io_mod.socketWaitReadable(@intFromPtr(listener.socket.handle), browser_callback_poll_ms)) {
+            if (cancel_flag.load(.seq_cst)) return error.Cancelled;
+            return false;
+        }
+        if (cancel_flag.load(.seq_cst)) return error.Cancelled;
+        return true;
+    }
     var fds = [_]std.posix.pollfd{.{
         .fd = listener.socket.handle,
         .events = std.posix.POLL.IN,
