@@ -2712,6 +2712,8 @@ fn pipeBackedTlsBoundaryReader(
 }
 
 test "web_fetch TLS boundary completes self delimited response without reading eof" {
+    // POSIX-pipe-backed transport; the parsers have dedicated unit coverage.
+    if (comptime is_windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var transport_reader: PlainDeadlineReader = undefined;
     var boundary_reader: ScriptedTlsBoundaryReader = undefined;
@@ -2736,6 +2738,8 @@ test "web_fetch TLS boundary completes self delimited response without reading e
 }
 
 test "web_fetch TLS boundary accepts clean close delimited eof" {
+    // POSIX-pipe-backed transport; the parsers have dedicated unit coverage.
+    if (comptime is_windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var transport_reader: PlainDeadlineReader = undefined;
     var boundary_reader: ScriptedTlsBoundaryReader = undefined;
@@ -2757,6 +2761,8 @@ test "web_fetch TLS boundary accepts clean close delimited eof" {
 }
 
 test "web_fetch TLS boundary unwraps truncated close delimited eof" {
+    // POSIX-pipe-backed transport; the parsers have dedicated unit coverage.
+    if (comptime is_windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var transport_reader: PlainDeadlineReader = undefined;
     var boundary_reader: ScriptedTlsBoundaryReader = undefined;
@@ -3566,6 +3572,8 @@ fn expectAndTraceTlsTruncation(
 }
 
 test "web_fetch transport traces stable stages and redact sensitive values" {
+    // POSIX-pipe-backed transport; the parsers have dedicated unit coverage.
+    if (comptime is_windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

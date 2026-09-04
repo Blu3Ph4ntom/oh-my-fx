@@ -11328,6 +11328,8 @@ fn runProcessMutationPair(
     first: ProcessMutation,
     second: ProcessMutation,
 ) ![2]u8 {
+    // Pipe/fork mutation harness serves POSIX-only tests.
+    if (comptime builtin.os.tag == .windows) return error.ProcessPipeFailed;
     var ready_pipe: [2]std.c.fd_t = undefined;
     if (std.c.pipe(&ready_pipe) != 0) return error.ProcessPipeFailed;
     defer closeProcessFd(ready_pipe[0]);

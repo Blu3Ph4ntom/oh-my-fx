@@ -2604,7 +2604,7 @@ const TestPreparedProcess = struct {
         return waitForOwnedChild(self, timeout_ms);
     }
 
-    extern "kernel32" fn testWaitGetExitCode(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+    extern "kernel32" fn GetExitCodeProcess(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
 
     fn waitForOwnedChild(self: *TestPreparedProcess, timeout_ms: i64) bool {
         const started_ms = io_mod.milliTimestamp();
@@ -2613,7 +2613,7 @@ const TestPreparedProcess = struct {
             // No waitpid on Windows; poll the process handle instead.
             if (comptime builtin.os.tag == .windows) {
                 var code: std.os.windows.DWORD = 0;
-                if (testWaitGetExitCode(pid, &code) == .FALSE or code != 259) {
+                if (GetExitCodeProcess(pid, &code) == .FALSE or code != 259) {
                     self.child.id = null;
                     self.alloc.free(self.pid);
                     self.alloc.destroy(self);
