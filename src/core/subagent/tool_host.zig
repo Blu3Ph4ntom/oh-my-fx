@@ -2571,7 +2571,18 @@ fn closeIdentityProcessFd(fd: std.c.fd_t) void {
     file.close(io_mod.getIo());
 }
 
+extern "kernel32" fn identityGetExitCode(hProcess: std.os.windows.HANDLE, lpExitCode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn identityWaitForSingle(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
+
 fn waitIdentityProcess(pid: std.c.pid_t) !u8 {
+    // No waitpid on Windows; `pid` is already the process HANDLE in tests.
+    // (The calling test is POSIX-only and skips on Windows regardless.)
+    if (comptime builtin.os.tag == .windows) {
+        if (identityWaitForSingle(pid, 30_000) != 0) return error.ProcessWaitFailed;
+        var code: std.os.windows.DWORD = 0;
+        if (identityGetExitCode(pid, &code) == .FALSE) return error.ProcessWaitFailed;
+        return @truncate(code);
+    }
     var status: c_int = 0;
     while (true) {
         const waited = std.c.waitpid(pid, &status, 0);
@@ -2629,6 +2640,8 @@ fn forkIdentityIssuer(
 }
 
 test "independent processes receive distinct authoritative operation identities" {
+    // Fork-based identity issuers have no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (comptime !@hasDecl(std.c, "fork")) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     const root_id = "01J00000000000000000000000";

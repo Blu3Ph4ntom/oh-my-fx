@@ -752,7 +752,7 @@ fn treeProcessCreationTime(pid: Pid) ?u64 {
 
 fn captureWindowsSnapshot(alloc: Allocator, pid: Pid) !ProcessSnapshot {
     if (comptime builtin.os.tag != .windows) return error.ProcessTreeUnsupported;
-    _ = alloc;
+    _ = &alloc;
     const parent_pid = treeProcessParentPid(pid) orelse return error.ProcessNotFound;
     // Without a creation time the identity cannot guard against PID reuse,
     // so treat the process as vanished instead of tracking it weakly.

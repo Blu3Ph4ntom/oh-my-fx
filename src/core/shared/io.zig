@@ -573,7 +573,7 @@ pub fn setSocketTimeoutMs(sock: usize, timeout_ms: u32) void {
 pub fn setSocketRecvBuf(sock: usize, bytes: u32) void {
     if (comptime !is_windows) return;
     var size = bytes;
-    _ = ioSetsockopt(sock, 0xffff, 0x1002, @ptrCast(&size), @sizeOf(u32));
+    _ = setsockopt(sock, 0xffff, 0x1002, @ptrCast(&size), @sizeOf(u32));
 }
 
 /// Enables abortive close (RST on close) for listener-accepted sockets.
@@ -582,7 +582,7 @@ pub fn setSocketLingerReset(sock: usize) void {
     if (comptime !is_windows) return;
     const Linger = extern struct { onoff: u16, seconds: u16 };
     var linger = Linger{ .onoff = 1, .seconds = 0 };
-    _ = ioSetsockopt(sock, 0xffff, 0x0080, @ptrCast(&linger), @sizeOf(Linger));
+    _ = setsockopt(sock, 0xffff, 0x0080, @ptrCast(&linger), @sizeOf(Linger));
 }
 
 /// Waits up to `timeout_ms` for a socket to become readable. Returns false

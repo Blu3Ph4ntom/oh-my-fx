@@ -7225,14 +7225,13 @@ fn test_process_owner(
     process_provider: background_process_provider.Provider,
 ) !contracts.ProcessOwner {
     var pid_buffer: [32]u8 = undefined;
-    const pid = std.c.getpid();
+    // `std.c.getpid` is a HANDLE on Windows; the numeric helper works all.
     const pid_text = try std.fmt.bufPrint(&pid_buffer, "{d}", .{io_mod.currentProcessId()});
-    _ = pid;
     const token = try process_provider.captureToken(
         alloc,
         pid_text,
     );
-    return contracts.ProcessOwner.init(@intCast(pid), token.view());
+    return contracts.ProcessOwner.init(@intCast(io_mod.currentProcessId()), token.view());
 }
 
 test "owner catalog enumerates the exact durable owner without a terminal anchor" {

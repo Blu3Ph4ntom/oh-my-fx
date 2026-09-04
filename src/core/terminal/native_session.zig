@@ -594,7 +594,7 @@ pub fn runLauncher(alloc: Allocator) !void {
 fn signalLauncherProcessGroup(pid: Pid, signal: std.c.SIG) !void {
     // No process groups or signals on Windows; terminate the member.
     if (comptime builtin.os.tag == .windows) {
-        _ = signal;
+        _ = &signal;
         if (!io_mod.terminateProcess(pid)) return error.ProcessNotFound;
         return;
     }

@@ -2274,7 +2274,7 @@ fn signalLauncherProcessGroup(pid: std.c.pid_t, signal: std.c.SIG) !void {
     // No process groups or signals on Windows; `pid` is already the process
     // HANDLE here, so terminate it directly.
     if (comptime builtin.os.tag == .windows) {
-        _ = signal;
+        _ = &signal;
         if (TerminateProcess(pid, 1) == .FALSE) return error.ChildSignalFailed;
         return;
     }
