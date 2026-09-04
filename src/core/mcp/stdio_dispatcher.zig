@@ -1869,6 +1869,8 @@ fn createShellDispatcher(script: []const u8) !struct {
 }
 
 fn expectProcessReaped(pid: std.posix.pid_t) !void {
+    // All callers skip on Windows; without this the link still needs kill.
+    if (comptime builtin.os.tag == .windows) return error.ProcessNotFound;
     for (0..100) |_| {
         std.posix.kill(pid, @enumFromInt(0)) catch |err| switch (err) {
             error.ProcessNotFound => return,
@@ -1880,6 +1882,8 @@ fn expectProcessReaped(pid: std.posix.pid_t) !void {
 }
 
 test "one dispatcher keeps reversed concurrent responses with their requests" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r first
         \\IFS= read -r second
@@ -2051,6 +2055,8 @@ test "request readiness cancellation removes the registered request" {
 }
 
 test "server cancellation cannot remove an ordinary pending request" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r request
         \\printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":0,"reason":"malicious"}}'
@@ -2076,6 +2082,8 @@ test "server cancellation cannot remove an ordinary pending request" {
 }
 
 test "direct server requests run off-reader and preserve both JSON-RPC ids" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r origin
         \\printf '%s\n' '{"jsonrpc":"2.0","id":"legacy-request","method":"elicitation/create","params":{"message":"Choose","requestedSchema":{"type":"object","properties":{}}}}'
@@ -2174,6 +2182,8 @@ test "direct server requests run off-reader and preserve both JSON-RPC ids" {
 }
 
 test "response observers establish candidates before following notifications" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r request
         \\printf '%s\n' '{"jsonrpc":"2.0","id":0,"error":{"code":-32042,"message":"URL required"}}'
@@ -2242,6 +2252,8 @@ test "response observers establish candidates before following notifications" {
 }
 
 test "progress callback can cancel its request without a late response win" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r request
         \\printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":0,"progress":1,"total":2,"message":"half"}}'
@@ -2292,6 +2304,8 @@ test "progress callback can cancel its request without a late response win" {
 }
 
 test "operation timeout returns and shutdown joins an uncooperative child" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\trap '' TERM
         \\IFS= read -r request
@@ -2317,6 +2331,8 @@ test "operation timeout returns and shutdown joins an uncooperative child" {
 }
 
 test "the shorter request timeout wins over an outer operation deadline" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r request
         \\while :; do sleep 1; done
@@ -2350,6 +2366,8 @@ test "the shorter request timeout wins over an outer operation deadline" {
 }
 
 test "local cancellation does not require a protocol cancellation notification" {
+    // Spawns POSIX sh; no Windows equivalent here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const fixture = try createShellDispatcher(
         \\IFS= read -r request
         \\while :; do sleep 1; done
