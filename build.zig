@@ -82,6 +82,7 @@ pub fn build(b: *std.Build) void {
     });
     const run_exe_tests = b.addRunArtifact(exe_tests);
     run_exe_tests.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_exe_tests.addArgs(args);
     run_exe_tests.setEnvironmentVariable(
         "FX_TEST_PRODUCT_EXE",
         b.getInstallPath(.bin, "fx"),
