@@ -68,5 +68,8 @@ jobs:
           version: "0.16.0"
           cache-key: windows-test
 
+      # Debug first: ReleaseSafe test compile exceeds the hour budget with
+      # zero streamed output. Debug links in minutes and surfaces the real
+      # suite failures (panics/hangs) we need for Windows parity.
       - name: Run unit tests
-        run: zig build test -Doptimize=ReleaseSafe
+        run: zig build test
