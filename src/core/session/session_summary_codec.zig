@@ -265,10 +265,9 @@ fn readDeferredCacheTokenFromDirectory(
     deferred: *const io_mod.VerifiedDir,
     session_id: []const u8,
 ) !DeferredCacheToken {
-    var file = deferred.dir.openFile(io_mod.getIo(), session_id, .{
+    var file = io_mod.openFileNoFollow(deferred.dir, io_mod.getIo(), session_id, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.NotDir, error.SymLinkLoop, error.IsDir => {
@@ -1629,10 +1628,9 @@ fn openVerifiedSessionIndexFile(
     sessions: *const io_mod.VerifiedDir,
     name: []const u8,
 ) !std.Io.File {
-    var file = sessions.dir.openFile(io_mod.getIo(), name, .{
+    var file = io_mod.openFileNoFollow(sessions.dir, io_mod.getIo(), name, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.FileNotFound => return error.SessionIndexNotFound,
@@ -2300,9 +2298,8 @@ test "deferred cache token reader rejects non-private files" {
         "non-private-token",
         encoded,
     );
-    var file = try deferred.dir.openFile(std.testing.io, "non-private-token", .{
+    var file = try io_mod.openFileNoFollow(deferred.dir, std.testing.io, "non-private-token", .{
         .mode = .read_write,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     });
     try file.setPermissions(

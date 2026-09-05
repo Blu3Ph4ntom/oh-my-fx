@@ -1195,9 +1195,8 @@ pub const FakeAgentRuntimeDeps = struct {
             if (!std.mem.eql(u8, target.role, "image")) {
                 return error.InvalidToolArguments;
             }
-            var file = try std.Io.Dir.openFileAbsolute(io_mod.getIo(), target.path, .{
+            var file = try io_mod.openFileAbsoluteNoFollow(io_mod.getIo(), target.path, .{
                 .allow_directory = false,
-                .follow_symlinks = false,
             });
             defer file.close(io_mod.getIo());
             const stat = try file.stat(io_mod.getIo());

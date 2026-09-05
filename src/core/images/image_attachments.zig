@@ -342,10 +342,9 @@ pub fn openVisionRegularFile(canonical_path: []const u8) !VisionRegularFile {
     if (initial.kind != .file) return error.NotRegularFile;
 
     if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) {
-        var file = cwd.openFile(io_mod.getIo(), canonical_path, .{
+        var file = io_mod.openFileNoFollow(cwd, io_mod.getIo(), canonical_path, .{
             .mode = .read_only,
             .allow_directory = false,
-            .follow_symlinks = false,
         }) catch |err| switch (err) {
             error.IsDir, error.SymLinkLoop, error.NotDir => return error.NotRegularFile,
             else => return err,
@@ -734,9 +733,8 @@ fn openSnapshotFileNoFollow(path: []const u8) !std.Io.File {
 
     var parent = try openDirectoryNoFollow(parent_path);
     defer parent.close(io_mod.getIo());
-    return parent.openFile(io_mod.getIo(), name, .{
+    return io_mod.openFileNoFollow(parent, io_mod.getIo(), name, .{
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| return unsafeSnapshotPathError(err);
 }

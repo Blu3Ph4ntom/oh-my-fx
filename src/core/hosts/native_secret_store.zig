@@ -112,10 +112,9 @@ fn loadFromProfile(alloc: Allocator) LoadError!?[]u8 {
 }
 
 fn loadFromDir(alloc: Allocator, fx_dir: *std.Io.Dir) LoadError!?[]u8 {
-    var file = fx_dir.openFile(io_mod.getIo(), profile_paths.api_key_file_name, .{
+    var file = io_mod.openFileNoFollow(fx_dir, io_mod.getIo(), profile_paths.api_key_file_name, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.FileNotFound => return null,

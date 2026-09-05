@@ -514,13 +514,12 @@ fn loadStoreControlled(
 }
 
 fn loadFromDir(alloc: Allocator, dir: *io_mod.VerifiedDir) !?Store {
-    var file = dir.dir.openFile(
+    var file = io_mod.openFileNoFollow(dir.dir, 
         io_mod.getIo(),
         profile_paths.mcp_credentials_file_name,
         .{
             .mode = .read_only,
             .allow_directory = false,
-            .follow_symlinks = false,
             .resolve_beneath = true,
         },
     ) catch |err| switch (err) {

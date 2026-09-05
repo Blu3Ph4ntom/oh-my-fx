@@ -8507,9 +8507,8 @@ fn executeVisionPathForTest(
         alloc.free(targets);
     }
     for (canonical_paths, targets) |path, *target| {
-        var file = try std.Io.Dir.openFileAbsolute(io_mod.getIo(), path, .{
+        var file = try io_mod.openFileAbsoluteNoFollow(io_mod.getIo(),  path, .{
             .allow_directory = false,
-            .follow_symlinks = false,
         });
         defer file.close(io_mod.getIo());
         const stat = try file.stat(io_mod.getIo());
@@ -9059,8 +9058,7 @@ test "vision runtime returns bounded failures for unavailable approved paths" {
     defer alloc.free(workspace);
     const removed_path = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "removed.png");
     defer alloc.free(removed_path);
-    var file = try std.Io.Dir.openFileAbsolute(io_mod.getIo(), removed_path, .{
-        .follow_symlinks = false,
+    var file = try io_mod.openFileAbsoluteNoFollow(io_mod.getIo(),  removed_path, .{
     });
     const stat = try file.stat(io_mod.getIo());
     const target: command_admission.VisionPathExecutionTarget = .{

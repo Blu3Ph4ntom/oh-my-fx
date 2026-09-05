@@ -263,10 +263,9 @@ pub const Store = struct {
         if (self.durable_home == null) return null;
         const zio = io_mod.getIo();
         var created = false;
-        var file = self.durable_home.?.dir.openFile(zio, history_file, .{
+        var file = self.durable_home.?io_mod.openFileNoFollow(.dir, zio, history_file, .{
             .mode = if (writable) .read_write else .read_only,
             .allow_directory = false,
-            .follow_symlinks = false,
             .resolve_beneath = true,
         }) catch |err| switch (err) {
             error.FileNotFound => create: {

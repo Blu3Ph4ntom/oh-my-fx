@@ -351,6 +351,11 @@ fn getenvFromLibc(key: []const u8) ?[]const u8 {
 
 pub fn readFileToEnd(alloc: std.mem.Allocator, file: *std.Io.File, max_bytes: usize) ![]u8 {
     const zio = getIo();
+    // Zig 0.16 opens `follow_symlinks = false` files with ASYNC handles but
+    // flags them `.nonblocking = false`, which panics on first read. The
+    // alertable path used for `nonblocking = true` is correct for both
+    // handle kinds, so mark it unconditionally on Windows.
+    if (comptime is_windows) file.flags.nonblocking = true;
     var read_buf: [8192]u8 = undefined;
     var r = file.reader(zio, &read_buf);
     return r.interface.allocRemaining(alloc, std.Io.Limit.limited(max_bytes));
@@ -427,6 +432,35 @@ pub fn privateDirPermissions() std.Io.File.Permissions {
 
 pub fn privateFilePermissions() std.Io.File.Permissions {
     return permissionsFromMode(0o600);
+}
+
+/// Opens a file without following symlinks (security-sensitive paths).
+/// Works around a Zig 0.16 std bug where such files get ASYNC handles
+/// flagged `.nonblocking = false`, which panics on first IO; the alertable
+/// path used for `nonblocking = true` is correct for both handle kinds.
+pub fn openFileAbsoluteNoFollow(
+    io: std.Io,
+    absolute_path: []const u8,
+    options: std.Io.Dir.OpenFileOptions,
+) !std.Io.File {
+    var opts = options;
+    opts.follow_symlinks = false;
+    var file = try std.Io.Dir.openFileAbsolute(io, absolute_path, opts);
+    if (comptime is_windows) file.flags.nonblocking = true;
+    return file;
+}
+
+pub fn openFileNoFollow(
+    dir: std.Io.Dir,
+    io: std.Io,
+    sub_path: []const u8,
+    options: std.Io.Dir.OpenFileOptions,
+) !std.Io.File {
+    var opts = options;
+    opts.follow_symlinks = false;
+    var file = try dir.openFile(io, sub_path, opts);
+    if (comptime is_windows) file.flags.nonblocking = true;
+    return file;
 }
 
 /// Deletes a file, falling back to directory removal for directory symlinks.

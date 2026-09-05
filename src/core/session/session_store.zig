@@ -516,10 +516,9 @@ fn validateUsageRecoveryMarker(
     recovery: *const io_mod.VerifiedDir,
     session_id: []const u8,
 ) !?i64 {
-    var marker = recovery.dir.openFile(io_mod.getIo(), session_id, .{
+    var marker = io_mod.openFileNoFollow(recovery.dir, io_mod.getIo(), session_id, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.FileNotFound => return error.UsageRecoveryMarkerNotFound,
@@ -5274,10 +5273,9 @@ fn writeStaleWritableHistoryFixture(
     defer writable.deinit(alloc);
     var session_dir = try store.openSessionDir(id);
     defer session_dir.close();
-    var manifest_file = try session_dir.dir.openFile(io_mod.getIo(), "session.json", .{
+    var manifest_file = try io_mod.openFileNoFollow(session_dir.dir, io_mod.getIo(), "session.json", .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     });
     const stale_manifest = try io_mod.readFileToEnd(
@@ -7594,10 +7592,9 @@ test "same-workspace append defers latest cache contention and marks cache dirty
         .follow_symlinks = false,
     });
     defer deferred.close(io_mod.getIo());
-    var token = try deferred.openFile(io_mod.getIo(), state.id, .{
+    var token = try io_mod.openFileNoFollow(deferred, io_mod.getIo(), state.id, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     });
     defer token.close(io_mod.getIo());
@@ -7705,10 +7702,9 @@ test "same-workspace compaction replacement defers latest cache contention" {
         .follow_symlinks = false,
     });
     defer deferred.close(io_mod.getIo());
-    var token = try deferred.openFile(io_mod.getIo(), state.id, .{
+    var token = try io_mod.openFileNoFollow(deferred, io_mod.getIo(), state.id, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     });
     defer token.close(io_mod.getIo());
@@ -7805,10 +7801,9 @@ test "read-only session page replays canonical state for a deferred token" {
     warm.deinit(alloc);
     var session_dir = try ctx.store.openSessionDir(state.id);
     defer session_dir.close();
-    var manifest_file = try session_dir.dir.openFile(io_mod.getIo(), "session.json", .{
+    var manifest_file = try io_mod.openFileNoFollow(session_dir.dir, io_mod.getIo(), "session.json", .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     });
     const stale_manifest = try io_mod.readFileToEnd(
@@ -8079,10 +8074,9 @@ test "writable picker returns canonical results while deferred repair is busy" {
         .follow_symlinks = false,
     });
     defer deferred.close(io_mod.getIo());
-    var token = try deferred.openFile(io_mod.getIo(), "dirty-writable-picker", .{
+    var token = try io_mod.openFileNoFollow(deferred, io_mod.getIo(), "dirty-writable-picker", .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     });
     token.close(io_mod.getIo());
@@ -8092,10 +8086,9 @@ test "writable picker returns canonical results while deferred repair is busy" {
     repaired.deinit(alloc);
     try std.testing.expectError(
         error.FileNotFound,
-        deferred.openFile(io_mod.getIo(), "dirty-writable-picker", .{
+        io_mod.openFileNoFollow(deferred, io_mod.getIo(), "dirty-writable-picker", .{
             .mode = .read_only,
             .allow_directory = false,
-            .follow_symlinks = false,
             .resolve_beneath = true,
         }),
     );

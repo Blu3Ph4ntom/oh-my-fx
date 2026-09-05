@@ -66,9 +66,8 @@ fn cueFileMatches(path: []const u8, expected: []const u8) bool {
     const stat = std.Io.Dir.cwd().statFile(io, path, .{ .follow_symlinks = false }) catch return false;
     if (stat.kind != .file or stat.size != expected.len) return false;
 
-    var file = std.Io.Dir.openFileAbsolute(io, path, .{
+    var file = io_mod.openFileAbsoluteNoFollow(io, path, .{
         .allow_directory = false,
-        .follow_symlinks = false,
     }) catch return false;
     defer file.close(io);
     const opened_stat = file.stat(io) catch return false;

@@ -547,16 +547,14 @@ fn loadRule(arena: Allocator, path: []const u8, limit: context_limits.Resolved) 
             return .{ .omitted = .symlink };
         };
         defer parent_dir.close(io_mod.getIo());
-        break :blk parent_dir.openFile(io_mod.getIo(), target_name, .{
+        break :blk io_mod.openFileNoFollow(parent_dir, io_mod.getIo(), target_name, .{
             .allow_directory = false,
-            .follow_symlinks = false,
         }) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             return .{ .omitted = .symlink };
         };
-    } else std.Io.Dir.openFileAbsolute(io_mod.getIo(), path, .{
+    } else io_mod.openFileAbsoluteNoFollow(io_mod.getIo(), path, .{
         .allow_directory = false,
-        .follow_symlinks = false,
     }) catch |err| {
         return switch (err) {
             error.FileNotFound, error.NotDir => .missing,

@@ -246,10 +246,9 @@ const KeychainObservation = union(enum) {
 };
 
 fn observeAuthFile(alloc: Allocator, fx_dir: *std.Io.Dir) !FileObservation {
-    var file = fx_dir.openFile(io_mod.getIo(), auth_file_name, .{
+    var file = io_mod.openFileNoFollow(fx_dir, io_mod.getIo(), auth_file_name, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.FileNotFound => return .absent,
@@ -614,10 +613,9 @@ fn loadFromHost(alloc: Allocator, store: js_host_auth.SessionStore) !?Session {
 }
 
 fn loadFromDir(alloc: Allocator, fx_dir: *std.Io.Dir, mode: LoadMode) !?Session {
-    var file = fx_dir.openFile(io_mod.getIo(), auth_file_name, .{
+    var file = io_mod.openFileNoFollow(fx_dir, io_mod.getIo(), auth_file_name, .{
         .mode = .read_only,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.FileNotFound => return null,

@@ -699,9 +699,8 @@ pub const Store = struct {
         for (names.items) |name| {
             const stat = backups.statFile(io_mod.getIo(), name, .{ .follow_symlinks = false }) catch continue;
             if (stat.kind != .file or stat.nlink != 1 or stat.size > max_settings_bytes) continue;
-            var file = backups.openFile(io_mod.getIo(), name, .{
+            var file = io_mod.openFileNoFollow(backups, io_mod.getIo(), name, .{
                 .allow_directory = false,
-                .follow_symlinks = false,
                 .resolve_beneath = true,
             }) catch continue;
             defer file.close(io_mod.getIo());
@@ -1885,9 +1884,8 @@ fn containsCopyWithFingerprint(
         if (!std.mem.startsWith(u8, entry.name, prefix)) continue;
         const stat = dir.statFile(io_mod.getIo(), entry.name, .{ .follow_symlinks = false }) catch continue;
         if (stat.kind != .file or stat.nlink != 1 or stat.size > max_settings_bytes) continue;
-        var file = dir.openFile(io_mod.getIo(), entry.name, .{
+        var file = io_mod.openFileNoFollow(dir, io_mod.getIo(), entry.name, .{
             .allow_directory = false,
-            .follow_symlinks = false,
             .resolve_beneath = true,
         }) catch continue;
         defer file.close(io_mod.getIo());

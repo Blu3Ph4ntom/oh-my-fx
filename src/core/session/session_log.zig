@@ -1441,16 +1441,18 @@ fn openManagedFile(
     mode: std.Io.Dir.OpenFileOptions.Mode,
 ) !std.Io.File {
     try validateLeaf(name);
-    var file = dir.dir.openFile(io_mod.getIo(), name, .{
+    var file = io_mod.openFileNoFollow(dir.dir, io_mod.getIo(), name, .{
         .mode = mode,
         .allow_directory = false,
-        .follow_symlinks = false,
         .resolve_beneath = true,
     }) catch |err| switch (err) {
         error.IsDir, error.NotDir, error.SymLinkLoop => return error.SessionPathUnsafe,
         else => return err,
     };
     errdefer file.close(io_mod.getIo());
+    // Zig 0.16 opens no-follow files with ASYNC handles flagged sync, which
+    // panics on first IO; the alertable path is correct for both kinds.
+    if (comptime io_mod.is_windows) file.flags.nonblocking = true;
     try verifyManagedFile(file, if (mode == .read_only) .read_only else .writable);
     return file;
 }
