@@ -547,9 +547,14 @@ fn resolveSavedDirectory(
             var arena_state = std.heap.ArenaAllocator.init(alloc);
             defer arena_state.deinit();
             const arena = arena_state.allocator();
+            // Containment boundary is the filesystem root. On Windows that
+            // is the path's own volume root (`C:\`); hardcoding "/" would
+            // reject every absolute path there.
+            var root_components = std.fs.path.componentIterator(normalized);
+            const fs_root = root_components.root() orelse return error.InvalidPath;
             const identity = pathing.resolveCreateTargetFromNearestExisting(
                 arena,
-                "/",
+                fs_root,
                 normalized,
             ) catch |resolve_err| switch (resolve_err) {
                 error.OutOfMemory => return error.OutOfMemory,
