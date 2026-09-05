@@ -1,19 +1,20 @@
 name: Publish libfx
 
-on:
-  workflow_run:
-    workflows: [CI, Release]
-    types: [completed]
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      channel:
-        description: npm channel to publish
-        required: true
-        type: choice
-        options:
-          - dev
-          - stable
+# oh-my-fx: disabled — Windows-native first.
+# on:
+#   workflow_run:
+#     workflows: [CI, Release]
+#     types: [completed]
+#     branches: [main]
+#   workflow_dispatch:
+#     inputs:
+#       channel:
+#         description: npm channel to publish
+#         required: true
+#         type: choice
+#         options:
+#           - dev
+#           - stable
 
 permissions:
   contents: read

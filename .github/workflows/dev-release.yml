@@ -1,10 +1,11 @@
 name: Dev Release
 
-on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+# oh-my-fx: disabled — Windows-native first.
+# on:
+#   workflow_run:
+#     workflows: [CI]
+#     types: [completed]
+#     branches: [main]
 
 permissions:
   contents: read

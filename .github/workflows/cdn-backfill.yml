@@ -1,20 +1,21 @@
 name: CDN Backfill
 
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to backfill (e.g. "v0.3.0") or "all" for every release'
-        required: true
-        default: "all"
-      update-latest:
-        description: "Update latest.txt to this version (ignored when version is 'all')"
-        type: boolean
-        default: false
-      dry-run:
-        description: "List what would be uploaded without actually uploading"
-        type: boolean
-        default: false
+# oh-my-fx: disabled — Windows-native first.
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       version:
+#         description: 'Version to backfill (e.g. "v0.3.0") or "all" for every release'
+#         required: true
+#         default: "all"
+#       update-latest:
+#         description: "Update latest.txt to this version (ignored when version is 'all')"
+#         type: boolean
+#         default: false
+#       dry-run:
+#         description: "List what would be uploaded without actually uploading"
+#         type: boolean
+#         default: false
 
 permissions:
   contents: read

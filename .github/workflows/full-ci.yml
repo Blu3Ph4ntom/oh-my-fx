@@ -1,10 +1,11 @@
 name: Full CI
 
-on:
-  workflow_dispatch:
-  push:
-    branches-ignore:
-      - main
+# oh-my-fx: disabled — Windows-native first.
+# on:
+#   workflow_dispatch:
+#   push:
+#     branches-ignore:
+#       - main
 
 concurrency:
   group: full-ci-${{ github.ref }}

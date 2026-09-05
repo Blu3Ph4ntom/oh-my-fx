@@ -1,9 +1,10 @@
 name: Release
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+# oh-my-fx: disabled — Windows-native first.
+# on:
+#   push:
+#     branches: [main]
+#   workflow_dispatch:
 
 permissions:
   contents: read

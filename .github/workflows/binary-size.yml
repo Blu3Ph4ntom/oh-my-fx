@@ -1,7 +1,8 @@
 name: Binary Size
 
-on:
-  pull_request:
+# oh-my-fx: disabled — Windows-native first.
+# on:
+#   pull_request:
 
 concurrency:
   group: binary-size-${{ github.event.pull_request.number }}

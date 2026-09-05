@@ -1,10 +1,11 @@
 name: Benchmarks
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-  pull_request:
+# oh-my-fx: all non-Windows workflows disabled — Windows-native first.
+# on:
+#   workflow_dispatch:
+#   push:
+#     branches: [main]
+#   pull_request:
 
 concurrency:
   group: bench-${{ github.ref }}
