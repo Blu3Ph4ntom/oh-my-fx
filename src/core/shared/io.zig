@@ -524,6 +524,17 @@ pub fn terminateProcess(pid: u32) bool {
 extern "kernel32" fn WaitForSingleObject(hHandle: std.os.windows.HANDLE, dwMilliseconds: std.os.windows.DWORD) callconv(.winapi) std.os.windows.DWORD;
 extern "kernel32" fn GetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, lpMode: *std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
 extern "kernel32" fn SetConsoleMode(hConsoleHandle: std.os.windows.HANDLE, dwMode: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn SetConsoleCP(wCodePageID: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn SetConsoleOutputCP(wCodePageID: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+
+/// Makes byte-oriented terminal I/O interpret UTF-8 on native Windows
+/// consoles. Redirected output is unaffected when no console is attached.
+pub fn windows_console_enable_utf8() void {
+    if (comptime !is_windows) return;
+    const utf8_code_page: std.os.windows.UINT = 65001;
+    _ = SetConsoleCP(utf8_code_page);
+    _ = SetConsoleOutputCP(utf8_code_page);
+}
 
 pub const windows_console_echo_input: std.os.windows.DWORD = 0x0004;
 pub const windows_console_line_input: std.os.windows.DWORD = 0x0002;
