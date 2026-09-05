@@ -99,6 +99,7 @@ jobs:
             provider = "opencode_go"
             model = $selectedModel
             max_agent_steps = 1
+            first_call_tool_choice = "none"
             permission_mode = "yolo"
             yolo_acknowledged = $true
           } | ConvertTo-Json -Compress
