@@ -1,0 +1,72 @@
+name: Windows
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    name: Windows native build (ReleaseSafe)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      AI_GATEWAY_API_KEY: ""
+      VERCEL_OIDC_TOKEN: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: "0.16.0"
+          cache-key: windows-native-ReleaseSafe
+
+      - name: Check formatting
+        run: zig fmt --check src/
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Smoke test fresh binary
+        shell: pwsh
+        run: |
+          $env:FX_BENCH = "1"
+          & ./zig-out/bin/fx.exe help
+          if ($LASTEXITCODE -ne 0) { throw "fx help (bench) failed" }
+
+      - name: Upload fx.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-windows-x86_64
+          path: zig-out/bin/fx.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  test:
+    name: Windows unit tests
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Informational while Windows test parity lands; the build job above is
+    # the required gate. Flip to required once the suite is green.
+    continue-on-error: true
+    env:
+      AI_GATEWAY_API_KEY: ""
+      VERCEL_OIDC_TOKEN: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: "0.16.0"
+          cache-key: windows-test
+
+      - name: Run unit tests
+        run: zig build test -Doptimize=ReleaseSafe
