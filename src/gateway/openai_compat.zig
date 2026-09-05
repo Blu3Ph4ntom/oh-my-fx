@@ -151,11 +151,10 @@ pub fn streamCompletion(
 
     while (true) {
         if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
-        const line = reader.takeDelimiterExclusive('\n') catch |err| switch (err) {
+        const line = (reader.takeDelimiter('\n') catch |err| switch (err) {
             error.StreamTooLong => return error.StreamTooLong,
-            error.EndOfStream => break,
             else => return err,
-        };
+        }) orelse break;
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0) continue;
         if (!std.mem.startsWith(u8, trimmed, "data:")) continue;

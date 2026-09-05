@@ -4,7 +4,6 @@ const Allocator = std.mem.Allocator;
 const stream_provider = @import("../core/agent/stream_provider.zig");
 const io_mod = @import("../core/shared/io.zig");
 const types = @import("../core/shared/types.zig");
-const debug_trace = @import("../core/shared/debug_trace.zig");
 const gateway_client = @import("client.zig");
 const openai = @import("openai.zig");
 
@@ -123,7 +122,6 @@ pub fn streamCompletion(
         return error.OpenCodeGoModelRequiresDifferentEndpoint;
     }
 
-    debug_trace.eventf("gateway", "opencode_go_before_request", request.trace_ctx, "payload_bytes={d} model={s}", .{ request.payload.len, request.model });
     var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
     defer client.deinit();
 
@@ -156,22 +154,18 @@ pub fn streamCompletion(
         .redirect_behavior = .unhandled,
     });
     defer req.deinit();
-    debug_trace.eventf("gateway", "opencode_go_after_request_open", request.trace_ctx, "payload_bytes={d}", .{request.payload.len});
-
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
 
     req.transfer_encoding = .{ .content_length = request.payload.len };
     var send_buf: [8192]u8 = undefined;
+    request.delivery.markPossiblySent();
     var body_writer = try req.sendBodyUnflushed(&send_buf);
     try body_writer.writer.writeAll(request.payload);
     try body_writer.end();
     try req.connection.?.flush();
-    debug_trace.eventf("gateway", "opencode_go_after_request_send", request.trace_ctx, "payload_bytes={d}", .{request.payload.len});
 
-    debug_trace.eventf("gateway", "opencode_go_before_receive_head", request.trace_ctx, "", .{});
     var response = try req.receiveHead(&.{});
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
-    debug_trace.eventf("gateway", "opencode_go_after_receive_head", request.trace_ctx, "status={d}", .{@intFromEnum(response.head.status)});
 
     if (response.head.status != .ok) {
         var buf: [4096]u8 = undefined;
@@ -198,20 +192,13 @@ pub fn streamCompletion(
 
     var sse_buffer: [32 * 1024]u8 = undefined;
     var reader = response.reader(&sse_buffer);
-    debug_trace.eventf("gateway", "opencode_go_before_sse_consume", request.trace_ctx, "", .{});
-    var sse_line_count: usize = 0;
 
     while (true) {
         if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
-        const line = reader.takeDelimiterExclusive('\n') catch |err| switch (err) {
+        const line = (reader.takeDelimiter('\n') catch |err| switch (err) {
             error.StreamTooLong => return error.StreamTooLong,
-            error.EndOfStream => break,
             else => return err,
-        };
-        sse_line_count += 1;
-        if (sse_line_count <= 3) {
-            debug_trace.eventf("gateway", "opencode_go_sse_line", request.trace_ctx, "line={d} bytes={d}", .{ sse_line_count, line.len });
-        }
+        }) orelse break;
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0) continue;
         if (!std.mem.startsWith(u8, trimmed, "data:")) continue;
@@ -219,9 +206,6 @@ pub fn streamCompletion(
 
         const chunk = try parser.parseDataLine(data);
         if (chunk == null) continue;
-        if (sse_line_count <= 3) {
-            debug_trace.eventf("gateway", "opencode_go_sse_chunk", request.trace_ctx, "line={d} kind={s}", .{ sse_line_count, @tagName(chunk.?) });
-        }
         switch (chunk.?) {
             .done => break,
             .text_delta => |text| {
@@ -251,7 +235,6 @@ pub fn streamCompletion(
             },
         }
     }
-    debug_trace.eventf("gateway", "opencode_go_after_sse_consume", request.trace_ctx, "lines={d}", .{sse_line_count});
 
     var final_calls: std.ArrayList(types.ToolCall) = .empty;
     defer final_calls.deinit(alloc);
