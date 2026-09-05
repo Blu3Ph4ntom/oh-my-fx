@@ -252,6 +252,7 @@ const AcpContext = struct {
                 .codex => self.state.cfg.codex_permission_reviewer_provider,
                 .grok => null,
                 .openai_compatible => null,
+                .opencode_go => null,
             },
             .auto_classifier = self.auto_classifier,
             .subagent_host = self.state.subagent_host,
@@ -716,6 +717,10 @@ pub fn runSubagentChild(
             },
             .openai_compatible = .{
                 .agent_stream_provider = server.streamProviderFor(state, .openai_compatible),
+                .permission_reviewer_provider = null,
+            },
+            .opencode_go = .{
+                .agent_stream_provider = server.streamProviderFor(state, .opencode_go),
                 .permission_reviewer_provider = null,
             },
         },

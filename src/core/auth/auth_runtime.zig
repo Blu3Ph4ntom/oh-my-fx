@@ -1364,6 +1364,15 @@ pub const Runtime = struct {
                     self,
                     loadRuntimeCredentialSource,
                 ),
+            .opencode_go => if (self.credentialSource() == .opencode_go_subscription)
+                false
+            else
+                self.selectSourceWithLoader(
+                    alloc,
+                    .opencode_go_subscription,
+                    self,
+                    loadRuntimeCredentialSource,
+                ),
             .gateway => if (self.credentialSource() != .chatgpt_subscription and self.credentialSource() != .grok_subscription)
                 false
             else

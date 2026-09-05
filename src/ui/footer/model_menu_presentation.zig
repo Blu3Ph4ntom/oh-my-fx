@@ -346,6 +346,7 @@ fn loadedCatalogStatusText(state: model_cache_runtime.ModelMenuCatalogState) ?[]
             .authenticated_credential_rejected => "Your Gateway credential was rejected; using the public model catalog.",
             .chatgpt_subscription => "Codex models require an authenticated Codex catalog.",
             .grok_subscription => "Grok models require an authenticated Grok catalog.",
+            .opencode_go_subscription => "OpenCode Go models require an OpenCode Go API key.",
         };
     }
     if (state.access_level == .authenticated) {
@@ -358,6 +359,7 @@ fn loadedCatalogStatusText(state: model_cache_runtime.ModelMenuCatalogState) ?[]
             .chatgpt_subscription => "Codex catalog: authenticated with a subscription.",
             .grok_subscription => "Grok catalog: authenticated with a subscription.",
             .custom_provider => "Custom provider: authenticated with custom endpoint.",
+            .opencode_go_subscription => "OpenCode Go catalog: authenticated with an API key.",
         };
     }
     return null;

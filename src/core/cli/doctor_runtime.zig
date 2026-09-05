@@ -129,6 +129,7 @@ pub fn collect(
             .codex => detailed.settings.codex_model,
             .grok => detailed.settings.model,
             .openai_compatible => detailed.settings.model,
+            .opencode_go => detailed.settings.model,
         },
         .permission_mode = detailed.settings.permission_mode,
         .max_agent_steps = detailed.settings.max_agent_steps,

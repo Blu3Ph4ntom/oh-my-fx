@@ -1124,6 +1124,7 @@ fn configuredProviderSelection(
         .codex => settings.codex_model orelse return error.CodexModelNotSelected,
         .grok => settings.model orelse default_model,
         .openai_compatible => settings.model orelse default_model,
+        .opencode_go => settings.model orelse default_model,
     };
     return .{ .provider = provider, .model = model };
 }

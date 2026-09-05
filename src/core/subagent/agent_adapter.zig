@@ -41,6 +41,7 @@ pub const ProviderRoutes = struct {
     codex: ProviderRoute,
     grok: ProviderRoute,
     openai_compatible: ProviderRoute,
+    opencode_go: ProviderRoute,
 
     pub fn select(self: ProviderRoutes, provider: model_provider.ProviderId) ProviderRoute {
         return switch (provider) {
@@ -48,6 +49,7 @@ pub const ProviderRoutes = struct {
             .codex => self.codex,
             .grok => self.grok,
             .openai_compatible => self.openai_compatible,
+            .opencode_go => self.opencode_go,
         };
     }
 };
@@ -84,6 +86,7 @@ test "provider routes select independent streams and reviewers" {
         .codex = .{ .agent_stream_provider = codex_stream, .permission_reviewer_provider = codex_reviewer },
         .grok = .{ .agent_stream_provider = grok_stream, .permission_reviewer_provider = grok_reviewer },
         .openai_compatible = .{ .agent_stream_provider = compat_stream, .permission_reviewer_provider = compat_reviewer },
+        .opencode_go = .{ .agent_stream_provider = compat_stream, .permission_reviewer_provider = compat_reviewer },
     };
 
     try std.testing.expect(routes.select(.gateway).agent_stream_provider.context.? == @as(*anyopaque, @ptrCast(&gateway_tag)));

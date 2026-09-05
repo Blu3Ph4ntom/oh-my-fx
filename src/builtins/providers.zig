@@ -8,6 +8,8 @@ const xai_grok = @import("../gateway/xai_grok.zig");
 const xai_grok_models = @import("../gateway/xai_grok_models.zig");
 const openai_compat = @import("../gateway/openai_compat.zig");
 const openai_compat_models = @import("../gateway/openai_compat_models.zig");
+const opencode_go = @import("../gateway/opencode_go.zig");
+const opencode_go_models = @import("../gateway/opencode_go_models.zig");
 
 pub fn agentStream(provider: model_provider.ProviderId) stream_provider.Provider {
     return switch (provider) {
@@ -15,6 +17,7 @@ pub fn agentStream(provider: model_provider.ProviderId) stream_provider.Provider
         .codex => openai_codex.agent_stream_provider,
         .grok => xai_grok.agent_stream_provider,
         .openai_compatible => openai_compat.agent_stream_provider,
+        .opencode_go => opencode_go.agent_stream_provider,
     };
 }
 
@@ -24,5 +27,6 @@ pub fn modelCatalog(provider: model_provider.ProviderId) model_catalog.Provider 
         .codex => openai_codex_models.model_catalog_provider,
         .grok => xai_grok_models.model_catalog_provider,
         .openai_compatible => openai_compat_models.model_catalog_provider,
+        .opencode_go => opencode_go_models.model_catalog_provider,
     };
 }

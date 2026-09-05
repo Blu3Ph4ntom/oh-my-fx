@@ -287,6 +287,10 @@ fn runAskChild(
                 .agent_stream_provider = agent_stream_provider.unavailable_provider,
                 .permission_reviewer_provider = null,
             },
+            .opencode_go = .{
+                .agent_stream_provider = agent_stream_provider.unavailable_provider,
+                .permission_reviewer_provider = null,
+            },
         },
         .system_prompt = ctx.cfg.prompt_policy.system_prompt,
         .model_prompt_overlay = ctx.cfg.prompt_policy.modelPromptOverlay(admission.model),
@@ -1067,6 +1071,7 @@ const AskContext = struct {
             .codex => self.cfg.codex_permission_reviewer_provider,
             .grok => null,
             .openai_compatible => null,
+            .opencode_go => null,
         } orelse
             return permission_auto_classifier.Classifier.disabled();
         return permission_auto_classifier.Classifier.withProvider(provider, .{
@@ -1085,6 +1090,7 @@ const AskContext = struct {
             .codex => self.cfg.codex_agent_stream orelse agent_stream_provider.unavailable_provider,
             .grok => agent_stream_provider.unavailable_provider,
             .openai_compatible => agent_stream_provider.unavailable_provider,
+            .opencode_go => agent_stream_provider.unavailable_provider,
         };
     }
 

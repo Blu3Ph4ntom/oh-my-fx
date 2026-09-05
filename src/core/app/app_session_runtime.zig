@@ -354,6 +354,7 @@ pub const SessionPreferencePatch = struct {
                 .codex => patch.codex_model = self.model,
                 .grok => patch.model = self.model,
                 .openai_compatible => patch.model = self.model,
+                .opencode_go => patch.model = self.model,
             }
         } else {
             patch.model = self.model;
