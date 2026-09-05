@@ -69,20 +69,53 @@ jobs:
             [System.Text.UTF8Encoding]::new($false)
           )
 
-          $modelsStderrPath = Join-Path $env:RUNNER_TEMP "fx-opencode-go-models.stderr"
-          $modelsJson = & ./zig-out/bin/omfx.exe models --json 2> $modelsStderrPath | Out-String
-          $modelsExit = $LASTEXITCODE
-          $modelsStderr = if (Test-Path -LiteralPath $modelsStderrPath) {
-            Get-Content -LiteralPath $modelsStderrPath -Raw
-          } else {
-            ""
+          function Invoke-BoundedFx([string]$name, [string[]]$arguments, [int]$timeoutSeconds) {
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = (Resolve-Path "./zig-out/bin/omfx.exe").Path
+            $startInfo.WorkingDirectory = (Get-Location).Path
+            $startInfo.UseShellExecute = $false
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+            foreach ($argument in $arguments) { [void]$startInfo.ArgumentList.Add($argument) }
+
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $startInfo
+            [void]$process.Start()
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit($timeoutSeconds * 1000)) {
+              try { $process.Kill($true) } catch { $process.Kill() }
+              $process.WaitForExit()
+              $trace = Join-Path $env:RUNNER_TEMP "fx-opencode-go.trace"
+              $traceTail = if (Test-Path -LiteralPath $trace) {
+                (Get-Content -LiteralPath $trace -Tail 80 -ErrorAction SilentlyContinue) -join "`n"
+              } else {
+                ""
+              }
+              throw "$name timed out after $timeoutSeconds seconds (trace=$traceTail)"
+            }
+            [pscustomobject]@{
+              ExitCode = $process.ExitCode
+              Stdout = $stdoutTask.GetAwaiter().GetResult()
+              Stderr = $stderrTask.GetAwaiter().GetResult()
+            }
           }
+
+          $env:FX_TRACE_LOG = Join-Path $env:RUNNER_TEMP "fx-opencode-go.trace"
+          $env:FX_TRACE_SCOPES = "agent,gateway"
+
+          Write-Output "OpenCode Go model catalog request started"
+          $modelsResult = Invoke-BoundedFx "OpenCode Go model catalog" @("models", "--json") 60
+          $modelsJson = $modelsResult.Stdout
+          $modelsExit = $modelsResult.ExitCode
+          $modelsStderr = $modelsResult.Stderr
           if ($modelsExit -ne 0) {
             $modelsDiagnostic = ($modelsStderr + $modelsJson).Trim()
             if ($modelsDiagnostic.Length -gt 2048) { $modelsDiagnostic = $modelsDiagnostic.Substring(0, 2048) }
             throw "OpenCode Go model catalog failed with exit code $modelsExit (diagnostic=$modelsDiagnostic)"
           }
           if (-not [string]::IsNullOrWhiteSpace($modelsStderr)) { throw "OpenCode Go model catalog wrote to stderr: $modelsStderr" }
+          Write-Output "OpenCode Go model catalog request returned successfully"
 
           $models = $modelsJson | ConvertFrom-Json
           if ($models.count -lt 1 -or $null -eq $models.ids -or [string]::IsNullOrWhiteSpace([string]$models.ids[0])) {
@@ -109,14 +142,11 @@ jobs:
             [System.Text.UTF8Encoding]::new($false)
           )
 
-          $askStderrPath = Join-Path $env:RUNNER_TEMP "fx-opencode-go-ask.stderr"
-          $askJson = & ./zig-out/bin/omfx.exe ask --no-save --json --yolo -- "Reply with exactly FX_OPENCODE_GO_SMOKE." 2> $askStderrPath | Out-String
-          $askExit = $LASTEXITCODE
-          $askStderr = if (Test-Path -LiteralPath $askStderrPath) {
-            Get-Content -LiteralPath $askStderrPath -Raw
-          } else {
-            ""
-          }
+          Write-Output "OpenCode Go chat request started with model $selectedModel"
+          $askResult = Invoke-BoundedFx "OpenCode Go chat smoke" @("ask", "--no-save", "--json", "--yolo", "--", "Reply with exactly FX_OPENCODE_GO_SMOKE.") 120
+          $askJson = $askResult.Stdout
+          $askExit = $askResult.ExitCode
+          $askStderr = $askResult.Stderr
           if ($askExit -ne 0) {
             $askDiagnostic = ($askStderr + $askJson).Trim()
             if ($askDiagnostic.Length -gt 2048) { $askDiagnostic = $askDiagnostic.Substring(0, 2048) }
