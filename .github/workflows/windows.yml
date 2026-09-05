@@ -92,6 +92,7 @@ jobs:
               } else {
                 ""
               }
+              $traceTail = $traceTail -replace "\r?\n", " | "
               throw "$name timed out after $timeoutSeconds seconds (trace=$traceTail)"
             }
             [pscustomobject]@{
