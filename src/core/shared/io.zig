@@ -451,7 +451,7 @@ pub fn openFileAbsoluteNoFollow(
 }
 
 pub fn openFileNoFollow(
-    dir: std.Io.Dir,
+    dir: anytype,
     io: std.Io,
     sub_path: []const u8,
     options: std.Io.Dir.OpenFileOptions,
