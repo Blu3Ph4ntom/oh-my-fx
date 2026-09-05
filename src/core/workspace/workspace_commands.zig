@@ -676,7 +676,7 @@ test "workspace access reconciliation rejects a retargeted durable source" {
     );
     defer alloc.free(fixture);
     try writeFixtureFile(tmp.dir, "home/.fx/settings.json", fixture);
-    try tmp.dir.deleteFile(std.testing.io, "saved-link");
+    try io_mod.deleteFileOrDirLink(tmp.dir, "saved-link");
     try tmp.dir.symLink(std.testing.io, "second", "saved-link", .{ .is_directory = true });
 
     var result = try reconcileWorkspaceAccess(alloc, primary, &current, &intended);

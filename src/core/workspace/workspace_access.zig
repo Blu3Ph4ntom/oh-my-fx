@@ -937,7 +937,7 @@ test "workspace access rejects an availability refresh that splits past capacity
 
     try tmp.dir.createDir(std.testing.io, "real-a/shared", .default_dir);
     try tmp.dir.createDir(std.testing.io, "real-b/shared", .default_dir);
-    try tmp.dir.deleteFile(std.testing.io, "link-b");
+    try io_mod.deleteFileOrDirLink(tmp.dir, "link-b");
     try tmp.dir.symLink(std.testing.io, "real-b", "link-b", .{ .is_directory = true });
 
     try std.testing.expectError(
@@ -1009,7 +1009,7 @@ test "workspace access preserves observed source identity across retarget and la
     try std.testing.expectEqualStrings(source, access.saved_sources[0].source);
     try std.testing.expectEqualStrings(first, access.saved_sources[0].identity);
 
-    try tmp.dir.deleteFile(std.testing.io, "saved-link");
+    try io_mod.deleteFileOrDirLink(tmp.dir, "saved-link");
     try tmp.dir.symLink(std.testing.io, "second", "saved-link", .{ .is_directory = true });
 
     var cloned = try access.clone(alloc);
@@ -1042,7 +1042,7 @@ test "workspace access removes a disappeared saved source by its spelling" {
 
     var access = try WorkspaceAccess.init(alloc, primary, &.{source}, &.{}, false);
     defer access.deinit(alloc);
-    try tmp.dir.deleteFile(std.testing.io, "saved-link");
+    try io_mod.deleteFileOrDirLink(tmp.dir, "saved-link");
 
     var removed = try access.stageRemove(alloc, primary, source);
     defer removed.deinit(alloc);

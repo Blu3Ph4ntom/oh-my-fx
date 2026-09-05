@@ -429,6 +429,17 @@ pub fn privateFilePermissions() std.Io.File.Permissions {
     return permissionsFromMode(0o600);
 }
 
+/// Deletes a file, falling back to directory removal for directory symlinks.
+/// On Windows `deleteFile` reports `IsDir` for those while `deleteDir`
+/// removes just the link (never the target); on POSIX the first call already
+/// removes the link, so the fallback never runs there.
+pub fn deleteFileOrDirLink(dir: std.Io.Dir, sub_path: []const u8) !void {
+    dir.deleteFile(getIo(), sub_path) catch |err| switch (err) {
+        error.IsDir => try dir.deleteDir(getIo(), sub_path),
+        else => return err,
+    };
+}
+
 /// Numeric user id for socket names and peer checks. Windows has no uid;
 /// returns 0 there because these paths already live under the user's own
 /// profile directory, which the OS isolates per user.
@@ -707,7 +718,11 @@ fn verifyPrivateDirectory(dir: std.Io.Dir) !void {
 /// The handle must come from an `openDir` that requested iteration. Linux returns an
 /// `O_PATH` descriptor otherwise, and `fsync` rejects those with `EBADF`.
 pub fn syncVerifiedDir(dir: std.Io.Dir) !void {
-    if (comptime builtin.os.tag == .windows) return error.OperationUnsupported;
+    // Windows has no directory fsync; NTFS metadata journaling plus the file
+    // syncs callers still perform are the platform's durability story.
+    // Returning success (rather than OperationUnsupported) keeps every
+    // durable-write path working instead of failing it outright.
+    if (comptime builtin.os.tag == .windows) return;
     while (true) {
         const rc = std.c.fsync(dir.handle);
         if (rc == 0) return;
