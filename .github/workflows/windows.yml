@@ -51,6 +51,7 @@ jobs:
 
       - name: Smoke test OpenCode Go with omfx.exe
         shell: pwsh
+        timeout-minutes: 10
         env:
           OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
         run: |
@@ -87,10 +88,17 @@ jobs:
           if ($models.count -lt 1 -or $null -eq $models.ids -or [string]::IsNullOrWhiteSpace([string]$models.ids[0])) {
             throw "OpenCode Go returned no models"
           }
-          $selectedModel = [string]$models.ids[0]
+          $preferredModels = @("glm-5.3-flash", "deepseek-v4-flash", "mimo-v2.5", "omen-alpha")
+          $selectedModel = $preferredModels |
+            Where-Object { $models.ids -contains $_ } |
+            Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace([string]$selectedModel)) {
+            $selectedModel = [string]$models.ids[0]
+          }
           $settings = [ordered]@{
             provider = "opencode_go"
             model = $selectedModel
+            max_agent_steps = 1
             permission_mode = "yolo"
             yolo_acknowledged = $true
           } | ConvertTo-Json -Compress
