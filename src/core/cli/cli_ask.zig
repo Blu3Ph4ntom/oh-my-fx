@@ -15,6 +15,7 @@ const process_supervisor = @import("../background/process_supervisor.zig");
 const context_contract = @import("../workspace/context_contract.zig");
 const devbox_executor = @import("../execution/devbox_executor.zig");
 const gateway_provider = @import("../gateway/gateway_provider.zig");
+const model_catalog = @import("../gateway/model_catalog.zig");
 const background_process_provider = @import(
     "../execution/background_process_provider.zig",
 );
@@ -224,6 +225,8 @@ pub const Config = struct {
     gateway_models_path: []const u8,
     gateway_provider: gateway_provider.Provider,
     codex_agent_stream: ?agent_stream_provider.Provider = null,
+    opencode_go_agent_stream: ?agent_stream_provider.Provider = null,
+    opencode_go_model_catalog: ?model_catalog.Provider = null,
     background_process_provider: background_process_provider.Provider =
         background_process_provider.unavailable_provider,
     secret_store: host.SecretStore,
@@ -288,7 +291,7 @@ fn runAskChild(
                 .permission_reviewer_provider = null,
             },
             .opencode_go = .{
-                .agent_stream_provider = agent_stream_provider.unavailable_provider,
+                .agent_stream_provider = ctx.cfg.opencode_go_agent_stream orelse agent_stream_provider.unavailable_provider,
                 .permission_reviewer_provider = null,
             },
         },
@@ -1090,7 +1093,7 @@ const AskContext = struct {
             .codex => self.cfg.codex_agent_stream orelse agent_stream_provider.unavailable_provider,
             .grok => agent_stream_provider.unavailable_provider,
             .openai_compatible => agent_stream_provider.unavailable_provider,
-            .opencode_go => agent_stream_provider.unavailable_provider,
+            .opencode_go => self.cfg.opencode_go_agent_stream orelse agent_stream_provider.unavailable_provider,
         };
     }
 
@@ -1999,7 +2002,10 @@ fn resolveModelCapabilities(raw_ctx: *anyopaque, _: Allocator, model: []const u8
     const ctx: *AskContext = @ptrCast(@alignCast(raw_ctx));
     return ctx.capability_resolver.resolve(
         ctx.alloc,
-        ctx.cfg.gateway_provider.model_catalog,
+        switch (ctx.provider) {
+            .opencode_go => ctx.cfg.opencode_go_model_catalog orelse ctx.cfg.gateway_provider.model_catalog,
+            else => ctx.cfg.gateway_provider.model_catalog,
+        },
         .{
             .access = ctx.model_catalog_access,
             .endpoint = ctx.cfg.gateway_models_path,

@@ -181,6 +181,9 @@ pub const Config = struct {
     codex_agent_stream: ?agent_stream_provider.Provider = null,
     codex_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
     codex_model_catalog: ?model_catalog.Provider = null,
+    opencode_go_agent_stream: ?agent_stream_provider.Provider = null,
+    opencode_go_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
+    opencode_go_model_catalog: ?model_catalog.Provider = null,
     background_process_provider: background_process_provider.Provider =
         background_process_provider.unavailable_provider,
     url_opener: host.UrlOpener,
@@ -729,6 +732,8 @@ fn runNonInteractiveWithDeps(
                 .gateway_provider = cfg.gateway_provider,
                 .codex_agent_stream = cfg.codex_agent_stream,
                 .codex_model_catalog = cfg.codex_model_catalog,
+                .opencode_go_agent_stream = cfg.opencode_go_agent_stream,
+                .opencode_go_model_catalog = cfg.opencode_go_model_catalog,
                 .background_process_provider = cfg.background_process_provider,
                 .secret_store = cfg.secret_store,
                 .prompt_policy = cfg.prompt_policy,
@@ -861,13 +866,17 @@ fn runNonInteractiveWithDeps(
         },
         .provider => |rest| {
             if (rest.len != 1) {
-                try writeStderr(deps, "usage: fx provider <gateway|codex>\n");
+                try writeStderr(deps, "usage: fx provider <gateway|codex|opencode_go>\n");
                 return .handled_failure;
             }
             const target = model_provider.parse(rest[0]) orelse {
-                try writeStderr(deps, "fx provider: expected gateway or codex\n");
+                try writeStderr(deps, "fx provider: expected gateway, codex, or opencode_go\n");
                 return .handled_failure;
             };
+            if (target != .gateway and target != .codex and target != .opencode_go) {
+                try writeStderr(deps, "fx provider: expected gateway, codex, or opencode_go\n");
+                return .handled_failure;
+            }
             const workspace_root = try io_mod.realpathAlloc(alloc, ".");
             defer alloc.free(workspace_root);
             var settings = config_runtime.loadMergedSettings(alloc, workspace_root) catch |err| {
@@ -877,7 +886,12 @@ fn runNonInteractiveWithDeps(
             };
             defer settings.deinit(alloc);
             if ((settings.provider orelse .gateway) == target) {
-                try writeStdout(deps, if (target == .codex) "Codex is already selected.\n" else "Gateway is already selected.\n");
+                try writeStdout(deps, switch (target) {
+                    .gateway => "Gateway is already selected.\n",
+                    .codex => "Codex is already selected.\n",
+                    .opencode_go => "OpenCode Go is already selected.\n",
+                    else => unreachable,
+                });
                 return .handled_success;
             }
 
@@ -906,19 +920,26 @@ fn runNonInteractiveWithDeps(
                 );
             }
             const credential = if (resolution.credential) |*value| value else {
-                try writeStderr(deps, if (target == .codex)
-                    "fx provider: run fx login codex first\n"
-                else
-                    "fx provider: configure a Gateway credential first\n");
+                try writeStderr(deps, switch (target) {
+                    .codex => "fx provider: run fx login codex first\n",
+                    .opencode_go => "fx provider: set OPENCODE_GO_API_KEY first\n",
+                    .gateway => "fx provider: configure a Gateway credential first\n",
+                    else => unreachable,
+                });
                 return .handled_failure;
             };
-            const catalog_provider = if (target == .codex)
-                cfg.codex_model_catalog orelse {
+            const catalog_provider = switch (target) {
+                .gateway => cfg.gateway_provider.model_catalog,
+                .codex => cfg.codex_model_catalog orelse {
                     try writeStderr(deps, "fx provider: Codex model catalog is unavailable\n");
                     return .handled_failure;
-                }
-            else
-                cfg.gateway_provider.model_catalog;
+                },
+                .opencode_go => cfg.opencode_go_model_catalog orelse {
+                    try writeStderr(deps, "fx provider: OpenCode Go model catalog is unavailable\n");
+                    return .handled_failure;
+                },
+                else => unreachable,
+            };
             const fetch_result = model_catalog.fetchWithPublicFallback(catalog_provider, alloc, .{
                 .access = credentials.catalogAccessAt(credential.*, io_mod.milliTimestamp()),
                 .endpoint = cfg.models_path,
@@ -957,7 +978,12 @@ fn runNonInteractiveWithDeps(
                 },
                 .outcome => {},
             }
-            try writeStdout(deps, if (target == .codex) "Provider set to Codex.\n" else "Provider set to Gateway.\n");
+            try writeStdout(deps, switch (target) {
+                .gateway => "Provider set to Gateway.\n",
+                .codex => "Provider set to Codex.\n",
+                .opencode_go => "Provider set to OpenCode Go.\n",
+                else => unreachable,
+            });
             return .handled_success;
         },
         .setup => |rest| {
@@ -1035,13 +1061,18 @@ fn runNonInteractiveWithDeps(
             try writeConfigDiagnostics(alloc, deps, startup.config_diagnostics);
 
             const catalog_access = startup.modelCatalogAccess();
-            const catalog_provider = if (startup.provider == .codex)
-                cfg.codex_cli_model_catalog orelse {
+            const catalog_provider = switch (startup.provider) {
+                .gateway => cfg.gateway_provider.cli_model_catalog,
+                .codex => cfg.codex_cli_model_catalog orelse {
                     try writeStderr(deps, "fx models: Codex model catalog is unavailable\n");
                     return .handled_failure;
-                }
-            else
-                cfg.gateway_provider.cli_model_catalog;
+                },
+                .opencode_go => cfg.opencode_go_cli_model_catalog orelse {
+                    try writeStderr(deps, "fx models: OpenCode Go model catalog is unavailable\n");
+                    return .handled_failure;
+                },
+                else => cfg.gateway_provider.cli_model_catalog,
+            };
             const loaded = switch (catalog_provider.fetch(alloc, .{
                 .access = catalog_access,
                 .endpoint = cfg.models_path,
@@ -2871,6 +2902,8 @@ fn workflowConfig(cfg: Config) @import("cli_ask.zig").Config {
         .gateway_models_path = cfg.models_path,
         .gateway_provider = cfg.gateway_provider,
         .codex_agent_stream = cfg.codex_agent_stream,
+        .opencode_go_agent_stream = cfg.opencode_go_agent_stream,
+        .opencode_go_model_catalog = cfg.opencode_go_model_catalog,
         .background_process_provider = cfg.background_process_provider,
         .secret_store = cfg.secret_store,
         .prompt_policy = cfg.prompt_policy,

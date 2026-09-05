@@ -375,7 +375,8 @@ pub fn streamProviderFor(
             @import("../core/agent/stream_provider.zig").unavailable_provider,
         .grok => @import("../core/agent/stream_provider.zig").unavailable_provider,
         .openai_compatible => @import("../core/agent/stream_provider.zig").unavailable_provider,
-        .opencode_go => @import("../core/agent/stream_provider.zig").unavailable_provider,
+        .opencode_go => state.cfg.opencode_go_agent_stream orelse
+            @import("../core/agent/stream_provider.zig").unavailable_provider,
     };
 }
 
@@ -388,7 +389,7 @@ pub fn catalogProviderFor(
         .codex => state.cfg.codex_model_catalog,
         .grok => null,
         .openai_compatible => null,
-        .opencode_go => null,
+        .opencode_go => state.cfg.opencode_go_model_catalog,
     };
 }
 

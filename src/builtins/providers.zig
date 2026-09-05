@@ -1,5 +1,6 @@
 const model_provider = @import("../core/config/model_provider.zig");
 const model_catalog = @import("../core/gateway/model_catalog.zig");
+const gateway_provider = @import("../core/gateway/gateway_provider.zig");
 const stream_provider = @import("../core/agent/stream_provider.zig");
 const gateway = @import("gateway.zig");
 const openai_codex = @import("../gateway/openai_codex.zig");
@@ -10,6 +11,38 @@ const openai_compat = @import("../gateway/openai_compat.zig");
 const openai_compat_models = @import("../gateway/openai_compat_models.zig");
 const opencode_go = @import("../gateway/opencode_go.zig");
 const opencode_go_models = @import("../gateway/opencode_go_models.zig");
+
+pub const opencode_go_cli_model_catalog = gateway_provider.CliModelCatalogProvider{
+    .fetch_fn = fetchOpenCodeGoCliModelCatalog,
+};
+
+fn fetchOpenCodeGoCliModelCatalog(
+    _: ?*anyopaque,
+    alloc: std.mem.Allocator,
+    input: gateway_provider.CliModelCatalogInput,
+) gateway_provider.CliModelCatalogResult {
+    return switch (model_catalog.fetchWithPublicFallback(opencode_go_models.model_catalog_provider, alloc, .{
+        .access = input.access,
+        .endpoint = input.endpoint,
+        .cancel_flag = input.cancel_flag,
+        .view = .full,
+    })) {
+        .loaded => |loaded| blk: {
+            var catalog = loaded.catalog;
+            defer model_catalog.freeModelCatalog(alloc, &catalog);
+            const ids = model_catalog.projectModelIds(alloc, catalog.items) catch return .{ .failure = .{
+                .access = loaded.provenance.access,
+                .anonymous_fallback_used = loaded.provenance.anonymous_fallback_used,
+                .failure = .{ .category = .resource_exhausted },
+            } };
+            break :blk .{ .loaded = .{
+                .ids = ids,
+                .provenance = loaded.provenance,
+            } };
+        },
+        .failed => |failure| .{ .failure = failure },
+    };
+}
 
 pub fn agentStream(provider: model_provider.ProviderId) stream_provider.Provider {
     return switch (provider) {

@@ -49,6 +49,62 @@ jobs:
           & ./zig-out/bin/omfx.exe help
           if ($LASTEXITCODE -ne 0) { throw "omfx help (bench) failed" }
 
+      - name: Smoke test OpenCode Go with omfx.exe
+        shell: pwsh
+        env:
+          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:OPENCODE_GO_API_KEY)) {
+            throw "OPENCODE_GO_API_KEY Actions secret is not configured"
+          }
+
+          $smokeHome = Join-Path $env:RUNNER_TEMP "fx-opencode-go-home"
+          $fxProfile = Join-Path $smokeHome ".fx"
+          New-Item -ItemType Directory -Force -Path $fxProfile | Out-Null
+          $env:HOME = $smokeHome
+
+          $modelsStderrPath = Join-Path $env:RUNNER_TEMP "fx-opencode-go-models.stderr"
+          $modelsJson = & ./zig-out/bin/omfx.exe models --json 2> $modelsStderrPath | Out-String
+          $modelsExit = $LASTEXITCODE
+          $modelsStderr = if (Test-Path -LiteralPath $modelsStderrPath) {
+            Get-Content -LiteralPath $modelsStderrPath -Raw
+          } else {
+            ""
+          }
+          if ($modelsExit -ne 0) { throw "OpenCode Go model catalog failed with exit code $modelsExit" }
+          if (-not [string]::IsNullOrWhiteSpace($modelsStderr)) { throw "OpenCode Go model catalog wrote to stderr: $modelsStderr" }
+
+          $models = $modelsJson | ConvertFrom-Json
+          if ($models.count -lt 1 -or $null -eq $models.ids -or [string]::IsNullOrWhiteSpace([string]$models.ids[0])) {
+            throw "OpenCode Go returned no models"
+          }
+          $selectedModel = [string]$models.ids[0]
+          $settings = [ordered]@{
+            provider = "opencode_go"
+            model = $selectedModel
+          } | ConvertTo-Json -Compress
+          [System.IO.File]::WriteAllText(
+            (Join-Path $fxProfile "settings.json"),
+            $settings,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+          $askStderrPath = Join-Path $env:RUNNER_TEMP "fx-opencode-go-ask.stderr"
+          $askJson = & ./zig-out/bin/omfx.exe ask --no-save --json --yolo -- "Reply with exactly FX_OPENCODE_GO_SMOKE." 2> $askStderrPath | Out-String
+          $askExit = $LASTEXITCODE
+          $askStderr = if (Test-Path -LiteralPath $askStderrPath) {
+            Get-Content -LiteralPath $askStderrPath -Raw
+          } else {
+            ""
+          }
+          if ($askExit -ne 0) { throw "OpenCode Go chat smoke failed with exit code $askExit" }
+          if (-not [string]::IsNullOrWhiteSpace($askStderr)) { throw "OpenCode Go chat smoke wrote to stderr: $askStderr" }
+
+          $ask = $askJson | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace([string]$ask.output)) { throw "OpenCode Go chat smoke returned empty output" }
+          if ([string]$ask.model -ne $selectedModel) { throw "OpenCode Go chat used an unexpected model" }
+          Write-Output "OpenCode Go catalog and chat smoke passed with model $selectedModel"
+
       - name: Upload fx.exe
         uses: actions/upload-artifact@v4
         with:
