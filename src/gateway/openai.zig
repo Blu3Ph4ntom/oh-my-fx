@@ -62,11 +62,11 @@ pub fn buildRequestBody(
     }
     try w.writeAll("]");
 
-    // Tools (if any)
-    if (serialized_tools.len > 0 and !std.mem.eql(u8, serialized_tools, "[]")) {
-        try w.writeAll(",\"tools\":");
-        try w.writeAll(serialized_tools);
-        try w.writeAll(",\"tool_choice\":\"auto\"");
+    // Tools (if any). The shared projection uses the Gateway's flattened
+    // function envelope; Chat Completions needs the nested OpenAI shape.
+    if (serialized_tools.len > 0) {
+        const tool_count = try writeTools(w, alloc, serialized_tools);
+        if (tool_count > 0) try w.writeAll(",\"tool_choice\":\"auto\"");
     }
 
     try w.writeAll("}");
@@ -139,6 +139,68 @@ fn writeJsonString(w: *std.Io.Writer, s: []const u8) !void {
         }
     }
     try w.writeAll("\"");
+}
+
+fn writeTools(
+    writer: *std.Io.Writer,
+    alloc: Allocator,
+    serialized_tools: []const u8,
+) !usize {
+    var parsed = std.json.parseFromSlice(std.json.Value, alloc, serialized_tools, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return error.InvalidToolSchema,
+    };
+    defer parsed.deinit();
+    if (parsed.value != .array) return error.InvalidToolSchema;
+
+    var tools_out: std.Io.Writer.Allocating = .init(alloc);
+    defer tools_out.deinit();
+    try tools_out.writer.writeByte('[');
+    var count: usize = 0;
+    for (parsed.value.array.items) |tool| {
+        if (try writeFunctionTool(&tools_out.writer, tool, count != 0)) count += 1;
+    }
+    try tools_out.writer.writeByte(']');
+
+    if (count > 0) {
+        try writer.writeAll(",\"tools\":");
+        try writer.writeAll(tools_out.written());
+    }
+    return count;
+}
+
+fn writeFunctionTool(writer: *std.Io.Writer, value: std.json.Value, comma: bool) !bool {
+    if (value != .object) return false;
+    const kind = value.object.get("type") orelse return false;
+    if (kind != .string or !std.mem.eql(u8, kind.string, "function")) return false;
+
+    // Preserve an already-normalized OpenAI function tool.
+    if (value.object.get("function")) |function| {
+        if (function != .object) return false;
+        const name = function.object.get("name") orelse return false;
+        if (name != .string or name.string.len == 0) return false;
+        if (comma) try writer.writeByte(',');
+        try std.json.Stringify.value(value, .{}, writer);
+        return true;
+    }
+
+    // Convert fx's Gateway function envelope to Chat Completions format.
+    const name = value.object.get("name") orelse return false;
+    if (name != .string or name.string.len == 0) return false;
+    const parameters = value.object.get("inputSchema") orelse value.object.get("parameters") orelse return false;
+    if (parameters != .object) return false;
+
+    if (comma) try writer.writeByte(',');
+    try writer.writeAll("{\"type\":\"function\",\"function\":{\"name\":");
+    try std.json.Stringify.value(name.string, .{}, writer);
+    if (value.object.get("description")) |description| if (description == .string) {
+        try writer.writeAll(",\"description\":");
+        try std.json.Stringify.value(description.string, .{}, writer);
+    };
+    try writer.writeAll(",\"parameters\":");
+    try std.json.Stringify.value(parameters, .{}, writer);
+    try writer.writeAll("}}");
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +399,25 @@ test "buildRequestBody serializes tool calls and tool results" {
     defer alloc.free(body);
     try std.testing.expect(std.mem.indexOf(u8, body, "call_1") != null);
     try std.testing.expect(std.mem.indexOf(u8, body, "tool_call_id") != null);
+}
+
+test "buildRequestBody converts gateway tools to OpenAI function tools" {
+    const alloc = std.testing.allocator;
+    const gateway_tools =
+        "[{\"type\":\"function\",\"name\":\"read_file\",\"description\":\"Read a file\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}," ++
+        "{\"type\":\"provider\",\"id\":\"gateway.perplexity_search\",\"name\":\"perplexity_search\",\"args\":{}}]";
+    const body = try buildRequestBody(alloc, "test/model", &[_]types.ChatMessage{
+        .{ .role = .user, .content = "hello" },
+    }, gateway_tools, null, true);
+    defer alloc.free(body);
+
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        body,
+        "\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}]",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "gateway.perplexity_search") == null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_choice\":\"auto\"") != null);
 }
 
 test "parseDataLine handles text delta" {
