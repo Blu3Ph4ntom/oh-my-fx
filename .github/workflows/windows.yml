@@ -84,8 +84,12 @@ jobs:
           version: "0.16.0"
           cache-key: windows-test
 
-      # Fast signal only: the full suite exceeds the 60-min cap with zero
-      # streamed output. Filter to provider/auth/model tests (build.zig
-      # forwards b.args to the test runner). Full suite stays informational.
+      # Fast signal only: the full suite hangs past the 60-min cap with zero
+      # streamed output, and the 0.16 test binary rejects --test-filter.
+      # Direct `zig test` on provider files compiles in ~1 min and runs the
+      # unit tests that guard this area. Full suite stays a future parity job.
       - name: Run unit tests
-        run: zig build test -- --test-filter "provider"
+        run: |
+          zig test src/gateway/opencode_go.zig
+          zig test src/gateway/opencode_go_models.zig
+          zig test src/core/config/model_provider.zig
