@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const stream_provider = @import("../core/agent/stream_provider.zig");
 const io_mod = @import("../core/shared/io.zig");
 const types = @import("../core/shared/types.zig");
+const debug_trace = @import("../core/shared/debug_trace.zig");
 const gateway_client = @import("client.zig");
 const openai = @import("openai.zig");
 
@@ -122,6 +123,7 @@ pub fn streamCompletion(
         return error.OpenCodeGoModelRequiresDifferentEndpoint;
     }
 
+    debug_trace.eventf("gateway", "opencode_go_before_request", request.trace_ctx, "payload_bytes={d} model={s}", .{ request.payload.len, request.model });
     var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
     defer client.deinit();
 
@@ -129,13 +131,15 @@ pub fn streamCompletion(
 
     var auth_header: ?[]u8 = null;
     defer if (auth_header) |v| alloc.free(v);
-    var extra_headers_buf: [2]std.http.Header = undefined;
+    var extra_headers_buf: [3]std.http.Header = undefined;
     var extra_len: usize = 0;
     if (request.api_key.len > 0) {
         auth_header = try std.fmt.allocPrint(alloc, "Bearer {s}", .{request.api_key});
         extra_headers_buf[extra_len] = .{ .name = "Authorization", .value = auth_header.? };
         extra_len += 1;
     }
+    extra_headers_buf[extra_len] = .{ .name = "Accept", .value = "text/event-stream" };
+    extra_len += 1;
     if (request.session_id) |session_id| if (session_id.len > 0) {
         extra_headers_buf[extra_len] = .{ .name = "x-opencode-session", .value = session_id };
         extra_len += 1;
@@ -148,9 +152,11 @@ pub fn streamCompletion(
             .user_agent = .{ .override = gateway_client.user_agent },
         },
         .extra_headers = extra_headers_buf[0..extra_len],
+        .keep_alive = false,
         .redirect_behavior = .unhandled,
     });
     defer req.deinit();
+    debug_trace.eventf("gateway", "opencode_go_after_request_open", request.trace_ctx, "payload_bytes={d}", .{request.payload.len});
 
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
 
@@ -160,9 +166,12 @@ pub fn streamCompletion(
     try body_writer.writer.writeAll(request.payload);
     try body_writer.end();
     try req.connection.?.flush();
+    debug_trace.eventf("gateway", "opencode_go_after_request_send", request.trace_ctx, "payload_bytes={d}", .{request.payload.len});
 
+    debug_trace.eventf("gateway", "opencode_go_before_receive_head", request.trace_ctx, "", .{});
     var response = try req.receiveHead(&.{});
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
+    debug_trace.eventf("gateway", "opencode_go_after_receive_head", request.trace_ctx, "status={d}", .{@intFromEnum(response.head.status)});
 
     if (response.head.status != .ok) {
         var buf: [4096]u8 = undefined;
@@ -189,6 +198,7 @@ pub fn streamCompletion(
 
     var sse_buffer: [32 * 1024]u8 = undefined;
     var reader = response.reader(&sse_buffer);
+    debug_trace.eventf("gateway", "opencode_go_before_sse_consume", request.trace_ctx, "", .{});
 
     while (true) {
         if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
