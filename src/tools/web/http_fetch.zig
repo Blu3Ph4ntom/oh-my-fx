@@ -23,7 +23,7 @@ const WindowsPollFd = extern struct {
     events: i16,
     revents: i16,
 };
-const pollfd = if (is_windows) WindowsPollFd else pollfd;
+const pollfd = if (is_windows) WindowsPollFd else posix.pollfd;
 const poll_events = if (is_windows) struct {
     // WSAPOLLFD event flags (Winsock2), not POSIX poll flags.
     pub const IN: i16 = 0x0100;
