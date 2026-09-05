@@ -514,7 +514,8 @@ fn loadStoreControlled(
 }
 
 fn loadFromDir(alloc: Allocator, dir: *io_mod.VerifiedDir) !?Store {
-    var file = io_mod.openFileNoFollow(dir.dir, 
+    var file = io_mod.openFileNoFollow(
+        dir.dir,
         io_mod.getIo(),
         profile_paths.mcp_credentials_file_name,
         .{
