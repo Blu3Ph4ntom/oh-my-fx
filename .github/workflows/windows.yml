@@ -76,7 +76,10 @@ jobs:
           } else {
             ""
           }
-          if ($modelsExit -ne 0) { throw "OpenCode Go model catalog failed with exit code $modelsExit" }
+          if ($modelsExit -ne 0) {
+            $modelsFailure = $modelsJson | ConvertFrom-Json
+            throw "OpenCode Go model catalog failed with exit code $modelsExit (code=$($modelsFailure.code), error=$($modelsFailure.error))"
+          }
           if (-not [string]::IsNullOrWhiteSpace($modelsStderr)) { throw "OpenCode Go model catalog wrote to stderr: $modelsStderr" }
 
           $models = $modelsJson | ConvertFrom-Json
