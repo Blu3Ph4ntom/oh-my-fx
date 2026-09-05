@@ -175,6 +175,9 @@ pub fn openExistingRegularFile(
             .follow_symlinks = false,
         });
         errdefer file.close(getIo());
+        // See `openFileNoFollow`: no-follow opens get ASYNC handles flagged
+        // sync, which panics on first IO.
+        if (comptime is_windows) file.flags.nonblocking = true;
         const stat = try file.stat(getIo());
         try verifyOpenedRegularFile(stat, mode);
         return file;
