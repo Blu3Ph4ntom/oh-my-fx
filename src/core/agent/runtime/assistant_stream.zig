@@ -1335,7 +1335,7 @@ test "streamed presentation preserves ANSI OSC 8 code fence and table spans" {
     const cwd = try std.process.currentPathAlloc(std.testing.io, alloc);
     defer alloc.free(cwd);
     const result = try std.process.run(alloc, std.testing.io, .{
-        .argv = &.{ "zig", "test", "-lc", "-Mroot=src/main.zig", "--test-filter", ansi_span_test_name },
+        .argv = &.{ "zig", "test", "-lc", "src/main.zig", "--test-filter", ansi_span_test_name },
         .cwd = .{ .path = cwd },
         .environ_map = &environ,
         .stdout_limit = .limited(64 * 1024),

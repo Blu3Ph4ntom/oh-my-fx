@@ -3889,6 +3889,8 @@ test {
     _ = @import("gateway/openai_codex_models.zig");
     _ = @import("gateway/openai_codex.zig");
     _ = @import("gateway/openai_codex_permission_reviewer.zig");
+    _ = @import("gateway/opencode_go_models.zig");
+    _ = @import("gateway/opencode_go.zig");
     _ = credentials;
     _ = @import("core/auth/oauth.zig");
     _ = @import("core/auth/oauth_session.zig");

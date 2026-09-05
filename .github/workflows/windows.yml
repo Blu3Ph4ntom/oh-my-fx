@@ -85,11 +85,11 @@ jobs:
           cache-key: windows-test
 
       # Fast signal only: the full suite hangs past the 60-min cap with zero
-      # streamed output. `zig test -Mroot` compiles the app once per line and
-      # --test-filter runs only the matching unit tests. Full suite stays a
-      # future parity job.
+      # streamed output. Directly testing the app root keeps imports under the
+      # src module path, and --test-filter narrows execution to the changed
+      # unit tests. Full suite stays a future parity job.
       - name: Run unit tests
         run: |
-          zig test -lc -Mroot=src/main.zig --test-filter "go endpoint accepts"
-          zig test -lc -Mroot=src/main.zig --test-filter "Go catalog parser"
-          zig test -lc -Mroot=src/main.zig --test-filter "provider"
+          zig test -lc src/main.zig --test-filter "go endpoint accepts"
+          zig test -lc src/main.zig --test-filter "Go catalog parser"
+          zig test -lc src/main.zig --test-filter "provider"
