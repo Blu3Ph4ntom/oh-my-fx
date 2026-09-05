@@ -3102,6 +3102,22 @@ fn parseColumnCount(value: []const u8) ?usize {
 
 fn cliArgsFromRaw(raw_args: []const [*:0]const u8, stack_buf: [][:0]const u8) ![]const [:0]const u8 {
     @setRuntimeSafety(false);
+    if (comptime builtin.os.tag == .windows) {
+        if (raw_args.len <= 1) return &.{};
+        const cli_len = raw_args.len - 1;
+        if (cli_len <= stack_buf.len) {
+            for (raw_args[1..], 0..) |arg, i| {
+                stack_buf[i] = std.mem.sliceTo(arg, 0);
+            }
+            return stack_buf[0..cli_len];
+        }
+
+        const args = try processAllocator().alloc([:0]const u8, cli_len);
+        for (raw_args[1..], 0..) |arg, i| {
+            args[i] = std.mem.sliceTo(arg, 0);
+        }
+        return args;
+    }
     if (comptime hasPosixArgVector()) {
         if (raw_args.len <= 1) return &.{};
         const cli_len = raw_args.len - 1;
