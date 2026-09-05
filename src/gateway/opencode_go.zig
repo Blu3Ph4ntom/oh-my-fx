@@ -199,6 +199,7 @@ pub fn streamCompletion(
     var sse_buffer: [32 * 1024]u8 = undefined;
     var reader = response.reader(&sse_buffer);
     debug_trace.eventf("gateway", "opencode_go_before_sse_consume", request.trace_ctx, "", .{});
+    var sse_line_count: usize = 0;
 
     while (true) {
         if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
@@ -207,6 +208,10 @@ pub fn streamCompletion(
             error.EndOfStream => break,
             else => return err,
         };
+        sse_line_count += 1;
+        if (sse_line_count <= 3) {
+            debug_trace.eventf("gateway", "opencode_go_sse_line", request.trace_ctx, "line={d} bytes={d}", .{ sse_line_count, line.len });
+        }
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0) continue;
         if (!std.mem.startsWith(u8, trimmed, "data:")) continue;
@@ -214,6 +219,9 @@ pub fn streamCompletion(
 
         const chunk = try parser.parseDataLine(data);
         if (chunk == null) continue;
+        if (sse_line_count <= 3) {
+            debug_trace.eventf("gateway", "opencode_go_sse_chunk", request.trace_ctx, "line={d} kind={s}", .{ sse_line_count, @tagName(chunk.?) });
+        }
         switch (chunk.?) {
             .done => break,
             .text_delta => |text| {
@@ -243,6 +251,7 @@ pub fn streamCompletion(
             },
         }
     }
+    debug_trace.eventf("gateway", "opencode_go_after_sse_consume", request.trace_ctx, "lines={d}", .{sse_line_count});
 
     var final_calls: std.ArrayList(types.ToolCall) = .empty;
     defer final_calls.deinit(alloc);
