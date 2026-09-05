@@ -87,6 +87,8 @@ jobs:
             if (-not $process.WaitForExit($timeoutSeconds * 1000)) {
               try { $process.Kill($true) } catch { $process.Kill() }
               $process.WaitForExit()
+              $timeoutStderr = $stderrTask.GetAwaiter().GetResult().Trim()
+              if ($timeoutStderr.Length -gt 4096) { $timeoutStderr = $timeoutStderr.Substring(0, 4096) }
               $trace = Join-Path $env:RUNNER_TEMP "fx-opencode-go.trace"
               $traceTail = if (Test-Path -LiteralPath $trace) {
                 (Get-Content -LiteralPath $trace -Tail 80 -ErrorAction SilentlyContinue) -join "`n"
@@ -94,7 +96,7 @@ jobs:
                 ""
               }
               $traceTail = $traceTail -replace "\r?\n", " | "
-              throw "$name timed out after $timeoutSeconds seconds (trace=$traceTail)"
+              throw "$name timed out after $timeoutSeconds seconds (stderr=$timeoutStderr trace=$traceTail)"
             }
             [pscustomobject]@{
               ExitCode = $process.ExitCode
