@@ -82,6 +82,8 @@ jobs:
           $settings = [ordered]@{
             provider = "opencode_go"
             model = $selectedModel
+            permission_mode = "yolo"
+            yolo_acknowledged = $true
           } | ConvertTo-Json -Compress
           [System.IO.File]::WriteAllText(
             (Join-Path $fxProfile "settings.json"),
