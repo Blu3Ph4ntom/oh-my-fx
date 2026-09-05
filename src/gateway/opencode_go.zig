@@ -96,13 +96,14 @@ pub fn buildRequest(
     if (request.budget) |budget| {
         if (budget.cancel_flag) |flag| if (flag.load(.seq_cst)) return error.Cancelled;
     }
-    return openai.buildRequestBody(
+    return openai.buildRequestBodyWithToolChoice(
         alloc,
         request.model,
         request.messages,
         request.serialized_tools,
         request.max_output_tokens,
         true,
+        request.tool_choice,
     );
 }
 

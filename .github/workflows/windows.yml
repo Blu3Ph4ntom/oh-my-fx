@@ -202,4 +202,5 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "route guard distinguishes"
           zig test -lc src/test_root.zig --test-filter "Go catalog parser"
           zig test -lc src/test_root.zig --test-filter "converts gateway tools"
+          zig test -lc src/test_root.zig --test-filter "omits tools for none"
           zig test -lc src/test_root.zig --test-filter "provider"

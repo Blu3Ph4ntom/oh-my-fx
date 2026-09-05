@@ -40,6 +40,26 @@ pub fn buildRequestBody(
     max_output_tokens: ?u32,
     stream: bool,
 ) ![]u8 {
+    return buildRequestBodyWithToolChoice(
+        alloc,
+        model,
+        messages,
+        serialized_tools,
+        max_output_tokens,
+        stream,
+        .auto,
+    );
+}
+
+pub fn buildRequestBodyWithToolChoice(
+    alloc: Allocator,
+    model: []const u8,
+    messages: []const types.ChatMessage,
+    serialized_tools: []const u8,
+    max_output_tokens: ?u32,
+    stream: bool,
+    tool_choice: types.ToolChoice,
+) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(alloc);
     defer out.deinit();
     var w = &out.writer;
@@ -64,9 +84,12 @@ pub fn buildRequestBody(
 
     // Tools (if any). The shared projection uses the Gateway's flattened
     // function envelope; Chat Completions needs the nested OpenAI shape.
-    if (serialized_tools.len > 0) {
+    if (serialized_tools.len > 0 and tool_choice != .none) {
         const tool_count = try writeTools(w, alloc, serialized_tools);
-        if (tool_count > 0) try w.writeAll(",\"tool_choice\":\"auto\"");
+        if (tool_count > 0) {
+            try w.writeAll(",\"tool_choice\":");
+            try writeJsonString(w, tool_choice.label());
+        }
     }
 
     try w.writeAll("}");
@@ -418,6 +441,25 @@ test "buildRequestBody converts gateway tools to OpenAI function tools" {
     ) != null);
     try std.testing.expect(std.mem.indexOf(u8, body, "gateway.perplexity_search") == null);
     try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_choice\":\"auto\"") != null);
+}
+
+test "buildRequestBody omits tools for none tool choice" {
+    const alloc = std.testing.allocator;
+    const gateway_tools =
+        "[{\"type\":\"function\",\"name\":\"read_file\",\"description\":\"Read a file\",\"inputSchema\":{\"type\":\"object\"}}]";
+    const body = try buildRequestBodyWithToolChoice(
+        alloc,
+        "test/model",
+        &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        gateway_tools,
+        null,
+        true,
+        .none,
+    );
+    defer alloc.free(body);
+
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"tools\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_choice\"") == null);
 }
 
 test "parseDataLine handles text delta" {
