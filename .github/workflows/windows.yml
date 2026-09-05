@@ -69,9 +69,6 @@ jobs:
     name: Windows unit tests
     runs-on: windows-latest
     timeout-minutes: 60
-    # Informational while Windows test parity lands; the build job above is
-    # the required gate. Flip to required once the suite is green.
-    continue-on-error: true
     env:
       AI_GATEWAY_API_KEY: ""
       VERCEL_OIDC_TOKEN: ""
