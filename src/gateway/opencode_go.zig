@@ -17,6 +17,28 @@ pub const default_models_url = "https://opencode.ai/zen/go/v1/models";
 pub const e2e_chat_url_env = "FX_E2E_OPENCODE_GO_CHAT_URL";
 pub const e2e_models_url_env = "FX_E2E_OPENCODE_GO_MODELS_URL";
 
+// OpenCode Go exposes different models through Chat Completions, Responses,
+// and Anthropic Messages. This provider intentionally owns the
+// OpenAI-compatible Chat Completions route.
+const chat_completions_model_ids = [_][]const u8{
+    "glm-5.3-flash",
+    "glm-5.3",
+    "glm-5.2",
+    "glm-5.1",
+    "kimi-k3",
+    "kimi-k2.7-code",
+    "kimi-k2.6",
+    "longcat-2.0",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+    "mimo-v2.5",
+    "mimo-v2.5-pro",
+    "hy4-preview",
+    "hy3",
+    "omen-alpha",
+};
+
 const max_error_body_bytes: usize = 64 * 1024;
 
 pub const agent_stream_provider = stream_provider.Provider{
@@ -59,6 +81,13 @@ pub fn resolveModelsUrl() []const u8 {
     return default_models_url;
 }
 
+pub fn supportsChatCompletionsModel(model: []const u8) bool {
+    for (chat_completions_model_ids) |supported| {
+        if (std.mem.eql(u8, model, supported)) return true;
+    }
+    return false;
+}
+
 pub fn buildRequest(
     _: ?*anyopaque,
     alloc: Allocator,
@@ -88,6 +117,9 @@ pub fn streamCompletion(
     }
     const url = resolveChatUrl();
     if (!isGoChatUrl(url)) return error.InvalidEndpoint;
+    if (!gateway_client.isLoopbackHttpUrl(url) and !supportsChatCompletionsModel(request.model)) {
+        return error.OpenCodeGoModelRequiresDifferentEndpoint;
+    }
 
     var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
     defer client.deinit();
@@ -96,18 +128,23 @@ pub fn streamCompletion(
 
     var auth_header: ?[]u8 = null;
     defer if (auth_header) |v| alloc.free(v);
-    var extra_headers_buf: [1]std.http.Header = undefined;
+    var extra_headers_buf: [2]std.http.Header = undefined;
     var extra_len: usize = 0;
     if (request.api_key.len > 0) {
         auth_header = try std.fmt.allocPrint(alloc, "Bearer {s}", .{request.api_key});
         extra_headers_buf[extra_len] = .{ .name = "Authorization", .value = auth_header.? };
         extra_len += 1;
     }
+    if (request.session_id) |session_id| if (session_id.len > 0) {
+        extra_headers_buf[extra_len] = .{ .name = "x-opencode-session", .value = session_id };
+        extra_len += 1;
+    };
 
     var req = try client.request(.POST, uri, .{
         .headers = .{
             .content_type = .{ .override = "application/json" },
             .accept_encoding = .omit,
+            .user_agent = .{ .override = gateway_client.user_agent },
         },
         .extra_headers = extra_headers_buf[0..extra_len],
         .redirect_behavior = .unhandled,
@@ -240,4 +277,11 @@ test "go endpoint accepts fixed host and loopback, rejects impostors" {
     try std.testing.expect(!isGoChatUrl("http://opencode.ai/zen/go/v1/chat/completions"));
     try std.testing.expect(!isGoChatUrl("https://opencode.ai/zen/v1/chat/completions"));
     try std.testing.expect(!isGoChatUrl("https://user@opencode.ai/zen/go/v1/chat/completions"));
+}
+
+test "Go route guard distinguishes Chat Completions models" {
+    try std.testing.expect(supportsChatCompletionsModel("glm-5.2"));
+    try std.testing.expect(supportsChatCompletionsModel("omen-alpha"));
+    try std.testing.expect(!supportsChatCompletionsModel("minimax-m3"));
+    try std.testing.expect(!supportsChatCompletionsModel("gpt-5.6-luna"));
 }

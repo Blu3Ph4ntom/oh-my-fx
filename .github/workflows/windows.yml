@@ -160,6 +160,7 @@ jobs:
       - name: Run unit tests
         run: |
           zig test -lc src/test_root.zig --test-filter "go endpoint accepts"
+          zig test -lc src/test_root.zig --test-filter "route guard distinguishes"
           zig test -lc src/test_root.zig --test-filter "Go catalog parser"
           zig test -lc src/test_root.zig --test-filter "converts gateway tools"
           zig test -lc src/test_root.zig --test-filter "provider"
