@@ -1,3 +1,4 @@
+const std = @import("std");
 const model_provider = @import("../core/config/model_provider.zig");
 const model_catalog = @import("../core/gateway/model_catalog.zig");
 const gateway_provider = @import("../core/gateway/gateway_provider.zig");
