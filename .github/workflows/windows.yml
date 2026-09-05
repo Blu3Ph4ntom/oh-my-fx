@@ -108,7 +108,11 @@ jobs:
           } else {
             ""
           }
-          if ($askExit -ne 0) { throw "OpenCode Go chat smoke failed with exit code $askExit" }
+          if ($askExit -ne 0) {
+            $askDiagnostic = ($askStderr + $askJson).Trim()
+            if ($askDiagnostic.Length -gt 2048) { $askDiagnostic = $askDiagnostic.Substring(0, 2048) }
+            throw "OpenCode Go chat smoke failed with exit code $askExit (diagnostic=$askDiagnostic)"
+          }
           if (-not [string]::IsNullOrWhiteSpace($askStderr)) { throw "OpenCode Go chat smoke wrote to stderr: $askStderr" }
 
           $ask = $askJson | ConvertFrom-Json
