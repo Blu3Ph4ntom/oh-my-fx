@@ -102,9 +102,6 @@ jobs:
             }
           }
 
-          $env:FX_TRACE_LOG = Join-Path $env:RUNNER_TEMP "fx-opencode-go.trace"
-          $env:FX_TRACE_SCOPES = "agent,gateway"
-
           Write-Output "OpenCode Go model catalog request started"
           $modelsResult = Invoke-BoundedFx "OpenCode Go model catalog" @("models", "--json") 60
           $modelsJson = $modelsResult.Stdout
