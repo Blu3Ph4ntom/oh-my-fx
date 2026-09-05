@@ -1,0 +1,11 @@
+# Normalize line endings so `zig fmt` behaves identically on every OS.
+# Zig sources must be LF: `zig fmt --check` fails on CRLF checkouts.
+*.zig text eol=lf
+*.zon text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.sh text eol=lf
+*.ts text eol=lf
