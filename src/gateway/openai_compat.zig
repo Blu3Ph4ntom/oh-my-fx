@@ -143,8 +143,7 @@ pub fn streamCompletion(
     var content_parts: std.ArrayList(u8) = .empty;
     defer content_parts.deinit(alloc);
 
-    var finish_reason: ?[]u8 = null;
-    defer if (finish_reason) |v| alloc.free(v);
+    var finish_reason: ?types.ProviderFinishReason = null;
 
     var sse_buffer: [32 * 1024]u8 = undefined;
     var reader = response.reader(&sse_buffer);
@@ -181,8 +180,7 @@ pub fn streamCompletion(
             },
             .finish_reason => |fr| {
                 defer alloc.free(fr);
-                if (finish_reason) |old| alloc.free(old);
-                finish_reason = try alloc.dupe(u8, fr);
+                finish_reason = openai.parse_provider_finish_reason(fr);
             },
             .usage => {},
             .err => |e| {
@@ -222,6 +220,7 @@ pub fn streamCompletion(
         .completion = .{
             .content = content_slice,
             .tool_calls = calls_slice,
+            .finish_reason = finish_reason orelse if (final_calls.items.len > 0) .tool_calls else .stop,
         },
         .ownership = .owned,
     };

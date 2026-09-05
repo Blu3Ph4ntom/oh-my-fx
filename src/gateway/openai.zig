@@ -30,6 +30,14 @@ pub const StreamChunk = union(enum) {
     err: []const u8,
 };
 
+/// Maps OpenAI Chat Completions finish reasons into Fx's canonical domain.
+/// Unknown wire values remain terminal as `other` instead of looking like an
+/// interrupted stream.
+pub fn parse_provider_finish_reason(raw: []const u8) types.ProviderFinishReason {
+    if (std.mem.eql(u8, raw, "function_call")) return .tool_calls;
+    return types.ProviderFinishReason.parse_legacy(raw) orelse .other;
+}
+
 /// Builds an OpenAI-compatible Chat Completions request body.
 /// The caller owns the returned slice.
 pub fn buildRequestBody(
@@ -470,6 +478,33 @@ test "parseDataLine handles text delta" {
     try std.testing.expect(chunk.? == .text_delta);
     try std.testing.expectEqualStrings("hello", chunk.?.text_delta);
     std.testing.allocator.free(chunk.?.text_delta);
+}
+
+test "parse_provider_finish_reason maps OpenAI wire values" {
+    try std.testing.expectEqual(
+        types.ProviderFinishReason.stop,
+        parse_provider_finish_reason("stop"),
+    );
+    try std.testing.expectEqual(
+        types.ProviderFinishReason.length,
+        parse_provider_finish_reason("length"),
+    );
+    try std.testing.expectEqual(
+        types.ProviderFinishReason.tool_calls,
+        parse_provider_finish_reason("tool_calls"),
+    );
+    try std.testing.expectEqual(
+        types.ProviderFinishReason.tool_calls,
+        parse_provider_finish_reason("function_call"),
+    );
+    try std.testing.expectEqual(
+        types.ProviderFinishReason.content_filter,
+        parse_provider_finish_reason("content_filter"),
+    );
+    try std.testing.expectEqual(
+        types.ProviderFinishReason.other,
+        parse_provider_finish_reason("future_reason"),
+    );
 }
 
 test "parseDataLine handles [DONE]" {

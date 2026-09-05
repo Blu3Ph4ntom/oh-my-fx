@@ -54,7 +54,6 @@ jobs:
         timeout-minutes: 10
         env:
           OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
-          FX_OPENCODE_GO_DIAGNOSTICS: "1"
         run: |
           if ([string]::IsNullOrWhiteSpace($env:OPENCODE_GO_API_KEY)) {
             throw "OPENCODE_GO_API_KEY Actions secret is not configured"

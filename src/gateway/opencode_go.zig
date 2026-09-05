@@ -41,12 +41,6 @@ const chat_completions_model_ids = [_][]const u8{
 
 const max_error_body_bytes: usize = 64 * 1024;
 
-fn diagnostic(comptime format: []const u8, args: anytype) void {
-    if (io_mod.getenv("FX_OPENCODE_GO_DIAGNOSTICS") != null) {
-        std.debug.print("opencode_go: " ++ format ++ "\n", args);
-    }
-}
-
 pub const agent_stream_provider = stream_provider.Provider{
     .build_fn = buildRequest,
     .stream_fn = streamCompletion,
@@ -118,11 +112,6 @@ pub fn streamCompletion(
     alloc: Allocator,
     request: stream_provider.Request,
 ) !stream_provider.Result {
-    diagnostic("stream_start model={s} payload_bytes={d} session_bytes={d}", .{
-        request.model,
-        request.payload.len,
-        if (request.session_id) |session_id| session_id.len else 0,
-    });
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
     if (request.credential_source != .opencode_go_subscription) {
         return error.OpenCodeGoSubscriptionCredentialRequired;
@@ -134,11 +123,7 @@ pub fn streamCompletion(
     }
 
     var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
-    defer {
-        diagnostic("client_deinit_start", .{});
-        client.deinit();
-        diagnostic("client_deinit_end", .{});
-    }
+    defer client.deinit();
 
     const uri = try std.Uri.parse(url);
 
@@ -168,12 +153,7 @@ pub fn streamCompletion(
         .keep_alive = false,
         .redirect_behavior = .unhandled,
     });
-    defer {
-        diagnostic("request_deinit_start", .{});
-        req.deinit();
-        diagnostic("request_deinit_end", .{});
-    }
-    diagnostic("request_opened", .{});
+    defer req.deinit();
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
 
     req.transfer_encoding = .{ .content_length = request.payload.len };
@@ -183,10 +163,8 @@ pub fn streamCompletion(
     try body_writer.writer.writeAll(request.payload);
     try body_writer.end();
     try req.connection.?.flush();
-    diagnostic("request_sent", .{});
 
     var response = try req.receiveHead(&.{});
-    diagnostic("response_head status={d}", .{@intFromEnum(response.head.status)});
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
 
     if (response.head.status != .ok) {
@@ -209,14 +187,10 @@ pub fn streamCompletion(
     var content_parts: std.ArrayList(u8) = .empty;
     defer content_parts.deinit(alloc);
 
-    var finish_reason: ?[]u8 = null;
-    defer if (finish_reason) |v| alloc.free(v);
+    var finish_reason: ?types.ProviderFinishReason = null;
 
     var sse_buffer: [32 * 1024]u8 = undefined;
     var reader = response.reader(&sse_buffer);
-    var line_count: usize = 0;
-    var event_count: usize = 0;
-    var callback_count: usize = 0;
 
     while (true) {
         if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
@@ -224,7 +198,6 @@ pub fn streamCompletion(
             error.StreamTooLong => return error.StreamTooLong,
             else => return err,
         }) orelse break;
-        line_count += 1;
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0) continue;
         if (!std.mem.startsWith(u8, trimmed, "data:")) continue;
@@ -232,22 +205,11 @@ pub fn streamCompletion(
 
         const chunk = try parser.parseDataLine(data);
         if (chunk == null) continue;
-        event_count += 1;
         switch (chunk.?) {
-            .done => {
-                diagnostic("sse_done lines={d} events={d}", .{ line_count, event_count });
-                break;
-            },
+            .done => break,
             .text_delta => |text| {
                 defer alloc.free(text);
-                callback_count += 1;
-                if (callback_count <= 8) {
-                    diagnostic("callback_start index={d} bytes={d}", .{ callback_count, text.len });
-                }
                 request.on_content_chunk(request.callback_ctx, text);
-                if (callback_count <= 8) {
-                    diagnostic("callback_end index={d}", .{callback_count});
-                }
                 try content_parts.appendSlice(alloc, text);
             },
             .tool_call_delta => |tc| {
@@ -262,8 +224,7 @@ pub fn streamCompletion(
             },
             .finish_reason => |fr| {
                 defer alloc.free(fr);
-                if (finish_reason) |old| alloc.free(old);
-                finish_reason = try alloc.dupe(u8, fr);
+                finish_reason = openai.parse_provider_finish_reason(fr);
             },
             .usage => {},
             .err => |e| {
@@ -272,13 +233,6 @@ pub fn streamCompletion(
             },
         }
     }
-    diagnostic("sse_loop_end lines={d} events={d} callbacks={d} content_bytes={d}", .{
-        line_count,
-        event_count,
-        callback_count,
-        content_parts.items.len,
-    });
-
     var final_calls: std.ArrayList(types.ToolCall) = .empty;
     defer final_calls.deinit(alloc);
     var it = parser.tool_arg_buffers.iterator();
@@ -304,16 +258,12 @@ pub fn streamCompletion(
     else
         &[_]types.ToolCall{};
 
-    diagnostic("stream_result content_bytes={d} tool_calls={d}", .{
-        content_parts.items.len,
-        final_calls.items.len,
-    });
-
     return .{
         .status = .ok,
         .completion = .{
             .content = content_slice,
             .tool_calls = calls_slice,
+            .finish_reason = finish_reason orelse if (final_calls.items.len > 0) .tool_calls else .stop,
         },
         .ownership = .owned,
     };
