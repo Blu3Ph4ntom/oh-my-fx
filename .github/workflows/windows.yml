@@ -207,6 +207,8 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "terminal decoder key matrix"
           zig test -lc src/test_root.zig --test-filter "bare Escape emits once"
           zig test -lc src/test_root.zig --test-filter "provider picker exposes OpenCode Go"
+          zig test -lc src/test_root.zig --test-filter "provider credential guidance names"
+          zig test -lc src/test_root.zig --test-filter "auth status snapshot names the selected OpenCode Go credential"
           zig test -lc src/test_root.zig --test-filter "provider"
           zig test -lc src/test_root.zig --test-filter "ChatGPT browser authorization URL"
           zig test -lc src/test_root.zig --test-filter "Codex request originator"

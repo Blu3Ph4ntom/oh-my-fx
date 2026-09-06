@@ -194,6 +194,47 @@ pub const missing_opencode_go_credential_message = "fx needs an OpenCode Go API 
 pub const missing_opencode_go_interactive_credential_message = "OpenCode Go needs an API key. Set OPENCODE_GO_API_KEY.";
 pub const unreadable_store_message = "Fx could not read the stored API key from " ++ stored_key_backend_label ++ ". A key may be saved but unreadable. Set FX_TRACE_LOG for the failing step, or set AI_GATEWAY_API_KEY.";
 
+pub fn required_credential_source_for_provider(provider: model_provider.ProviderId) ?Source {
+    return switch (provider) {
+        .codex => .chatgpt_subscription,
+        .grok => .grok_subscription,
+        .opencode_go => .opencode_go_subscription,
+        .gateway, .openai_compatible => null,
+    };
+}
+
+pub fn missing_credential_message_for_source(source: Source, interactive: bool) []const u8 {
+    return switch (source) {
+        .chatgpt_subscription => if (interactive)
+            missing_chatgpt_interactive_credential_message
+        else
+            missing_chatgpt_credential_message,
+        .grok_subscription => if (interactive)
+            missing_grok_interactive_credential_message
+        else
+            missing_grok_credential_message,
+        .opencode_go_subscription => if (interactive)
+            missing_opencode_go_interactive_credential_message
+        else
+            missing_opencode_go_credential_message,
+        .vercel_oidc_token,
+        .ai_gateway_api_key,
+        .fx_login,
+        .stored_key,
+        .custom_provider,
+        => if (interactive) missing_interactive_credential_message else missing_credential_message,
+    };
+}
+
+pub fn missing_credential_message_for_provider(
+    provider: model_provider.ProviderId,
+    interactive: bool,
+) []const u8 {
+    const source = required_credential_source_for_provider(provider) orelse
+        return if (interactive) missing_interactive_credential_message else missing_credential_message;
+    return missing_credential_message_for_source(source, interactive);
+}
+
 pub const Credential = struct {
     token: []u8,
     source: Source,
@@ -689,6 +730,26 @@ test "missing credential messages use surface commands in preferred order" {
 
     try std.testing.expect(tui_login < tui_setup);
     try std.testing.expect(tui_setup < tui_env);
+}
+
+test "provider credential guidance names the selected subscription source" {
+    try std.testing.expectEqual(
+        Source.opencode_go_subscription,
+        required_credential_source_for_provider(.opencode_go).?,
+    );
+    try std.testing.expectEqual(
+        Source.chatgpt_subscription,
+        required_credential_source_for_provider(.codex).?,
+    );
+    try std.testing.expect(required_credential_source_for_provider(.gateway) == null);
+    try std.testing.expectEqualStrings(
+        missing_opencode_go_credential_message,
+        missing_credential_message_for_provider(.opencode_go, false),
+    );
+    try std.testing.expectEqualStrings(
+        missing_opencode_go_interactive_credential_message,
+        missing_credential_message_for_provider(.opencode_go, true),
+    );
 }
 
 test "credential gateway team prefers team id" {

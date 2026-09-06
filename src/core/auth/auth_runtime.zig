@@ -567,11 +567,11 @@ pub const StatusSnapshot = struct {
     pub fn missingHelp(self: StatusSnapshot, surface: MissingHelpSurface) ?[]const u8 {
         if (self.active_source != null) return null;
         if (self.stored_key_status == .unavailable) return credentials.unreadable_store_message;
-        if (self.required_source == .chatgpt_subscription) {
-            return switch (surface) {
-                .cli => credentials.missing_chatgpt_credential_message,
-                .interactive => credentials.missing_chatgpt_interactive_credential_message,
-            };
+        if (self.required_source) |source| {
+            return credentials.missing_credential_message_for_source(
+                source,
+                surface == .interactive,
+            );
         }
         return switch (surface) {
             .cli => credentials.missing_credential_message,
@@ -674,7 +674,10 @@ pub fn loadStatusSnapshotForProvider(
         };
     }
     return .{
-        .required_source = if (provider == .codex) .chatgpt_subscription else null,
+        .required_source = if (provider) |selected_provider|
+            credentials.required_credential_source_for_provider(selected_provider)
+        else
+            null,
         .stored_key_status = resolution.stored_key_status,
         .gateway_connected = gateway_connected,
         .chatgpt_connected = chatgpt_connected,
@@ -819,6 +822,17 @@ pub const Runtime = struct {
 
     pub fn statusSnapshot(self: *const Self) StatusSnapshot {
         return self.statusSnapshotAt(io_mod.milliTimestamp());
+    }
+
+    pub fn statusSnapshotForProvider(
+        self: *const Self,
+        provider: model_provider.ProviderId,
+    ) StatusSnapshot {
+        var snapshot = self.statusSnapshot();
+        if (snapshot.active_source == null) {
+            snapshot.required_source = credentials.required_credential_source_for_provider(provider);
+        }
+        return snapshot;
     }
 
     fn statusSnapshotAt(self: *const Self, now_ms: i64) StatusSnapshot {
@@ -1951,6 +1965,21 @@ test "auth status snapshot preserves display team and surface-specific missing h
     const selected = runtime.statusSnapshot();
     try std.testing.expectEqualStrings("vercel-labs", selected.team.?);
     try std.testing.expect(selected.missingHelp(.cli) == null);
+}
+
+test "auth status snapshot names the selected OpenCode Go credential when missing" {
+    const runtime = StatusSnapshot{
+        .required_source = .opencode_go_subscription,
+    };
+
+    try std.testing.expectEqualStrings(
+        credentials.missing_opencode_go_credential_message,
+        runtime.missingHelp(.cli).?,
+    );
+    try std.testing.expectEqualStrings(
+        credentials.missing_opencode_go_interactive_credential_message,
+        runtime.missingHelp(.interactive).?,
+    );
 }
 
 test "auth status snapshot distinguishes an absent store from an unreadable one" {

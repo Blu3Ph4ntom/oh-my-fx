@@ -271,7 +271,7 @@ pub fn Commands(comptime App: type) type {
         }
 
         pub fn showStatus(app: *App) !void {
-            const auth = app.auth.statusSnapshot();
+            const auth = app.auth.statusSnapshotForProvider(provider_runtime.provider(app));
             const text = try (output_contracts.StatusSnapshot{
                 .model = provider_runtime.model(app),
                 .provider = provider_runtime.provider(app),

@@ -44,9 +44,7 @@ pub fn Runtime(comptime App: type) type {
                 @hasDecl(@TypeOf(app.auth), "selectForProvider"))
             {
                 const provider = provider_runtime.provider(app);
-                const required_source: credentials.Source = if (provider == .codex)
-                    .chatgpt_subscription
-                else
+                const required_source: credentials.Source = credentials.required_credential_source_for_provider(provider) orelse
                     app.auth.credentialSource() orelse .fx_login;
                 const route_change = app.auth.selectForProvider(app.alloc, provider) catch |err| switch (err) {
                     error.OutOfMemory => return err,
@@ -54,26 +52,30 @@ pub fn Runtime(comptime App: type) type {
                 };
                 if (route_change) |changed| {
                     applyCredentialChange(app, changed);
-                } else if (provider == .codex and
-                    app.auth.credentialSource() != .chatgpt_subscription)
-                {
-                    try app.writeDomainNotice(.{
-                        .topic = "auth",
-                        .tone = .warning,
-                        .body = credentials.missing_chatgpt_interactive_credential_message,
-                    }, true);
-                    app.shell.render_requests.request(.footer);
-                    return false;
+                } else if (credentials.required_credential_source_for_provider(provider)) |provider_source| {
+                    if (app.auth.credentialSource() != provider_source) {
+                        try app.writeDomainNotice(.{
+                            .topic = "auth",
+                            .tone = .warning,
+                            .body = credentials.missing_credential_message_for_source(provider_source, true),
+                        }, true);
+                        app.shell.render_requests.request(.footer);
+                        return false;
+                    }
                 }
             }
             if (app.auth.credentialSource() != null) return true;
 
             const auth_view = app.auth.view();
             if (auth_view.onboarding_skipped) {
+                const provider = if (comptime provider_runtime.supported(App))
+                    provider_runtime.provider(app)
+                else
+                    .gateway;
                 try app.writeDomainNotice(.{
                     .topic = "auth",
                     .tone = .@"error",
-                    .body = credentials.missing_interactive_credential_message,
+                    .body = credentials.missing_credential_message_for_provider(provider, true),
                 }, true);
             } else if (!app.auth.pickerView().active) {
                 try app.auth.refreshSourceInventory(app.alloc);
@@ -676,7 +678,7 @@ pub fn Runtime(comptime App: type) type {
                     .body = if (target == .codex)
                         "Run fx login codex, then try switching again."
                     else
-                        credentials.missing_interactive_credential_message,
+                        credentials.missing_credential_message_for_provider(target, true),
                 }, true);
                 return;
             };
