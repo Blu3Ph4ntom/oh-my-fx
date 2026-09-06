@@ -410,6 +410,19 @@ fn streamCompletionCore(alloc: Allocator, request: stream_provider.Request) !str
     };
 }
 
+test "Codex request originator is sent exactly once for streaming requests" {
+    var headers_buf: [7]std.http.Header = undefined;
+    const headers = codexRequestExtraHeaders(&headers_buf, "account", "session");
+    var originator_count: usize = 0;
+    var originator_value: ?[]const u8 = null;
+    for (headers) |header| if (std.ascii.eqlIgnoreCase(header.name, "originator")) {
+        originator_count += 1;
+        originator_value = header.value;
+    };
+    try std.testing.expectEqual(@as(usize, 1), originator_count);
+    try std.testing.expectEqualStrings("codex_cli_rs", originator_value.?);
+}
+
 const ToolAccumulator = struct {
     output_index: i64,
     id: []u8,
