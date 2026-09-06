@@ -34,7 +34,9 @@ fn rootDirWithOverride(alloc: Allocator, home: []const u8, override: ?[]const u8
 }
 
 fn rootOverride() ?[]const u8 {
-    return io_mod.getenv("OMFX_HOME");
+    const path = io_mod.getenv("OMFX_HOME") orelse return null;
+    if (path.len == 0 or !std.fs.path.isAbsolute(path)) return null;
+    return path;
 }
 
 /// Opens the active profile root. With no override this is `$HOME/.fx`; with
@@ -50,7 +52,7 @@ pub fn openOrCreateRootDir(home: *io_mod.VerifiedDir) !io_mod.VerifiedDir {
 }
 
 pub fn rootDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return rootDirWithOverride(alloc, home, io_mod.getenv("OMFX_HOME"));
+    return rootDirWithOverride(alloc, home, rootOverride());
 }
 
 pub fn settingsPath(alloc: Allocator, home: []const u8) ![]u8 {
