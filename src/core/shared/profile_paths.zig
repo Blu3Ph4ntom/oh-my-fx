@@ -25,10 +25,9 @@ const logs_dir_name = "logs";
 const trace_log_file_name = "trace.log";
 const recordings_dir_name = "recordings";
 
-fn rootDirWithOverride(alloc: Allocator, home: []const u8, override: ?[]const u8) ![]u8 {
+fn rootDirWithOverride(alloc: Allocator, home: []const u8, override: ?[]const u8) Allocator.Error![]u8 {
     if (override) |path| {
-        if (path.len == 0 or !std.fs.path.isAbsolute(path)) return error.InvalidPath;
-        return alloc.dupe(u8, path);
+        if (path.len > 0 and std.fs.path.isAbsolute(path)) return alloc.dupe(u8, path);
     }
     return std.fs.path.join(alloc, &.{ home, root_dir_name });
 }
@@ -42,7 +41,12 @@ fn rootOverride() ?[]const u8 {
 /// Opens the active profile root. With no override this is `$HOME/.fx`; with
 /// `OMFX_HOME` it is the exact absolute directory supplied by the user.
 pub fn openRootDir(home: std.Io.Dir, options: anytype) !std.Io.Dir {
-    if (rootOverride()) |path| return io_mod.openDirAbsoluteNoFollow(path, options);
+    if (rootOverride()) |path| {
+        return io_mod.openDirAbsoluteNoFollow(path, .{
+            .iterate = options.iterate,
+            .follow_symlinks = options.follow_symlinks,
+        });
+    }
     return home.openDir(io_mod.getIo(), root_dir_name, options);
 }
 
