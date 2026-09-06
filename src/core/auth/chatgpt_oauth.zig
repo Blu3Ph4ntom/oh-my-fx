@@ -19,6 +19,7 @@ const e2e_token_url_env = "FX_E2E_CHATGPT_TOKEN_URL";
 const e2e_issuer_url_env = "FX_E2E_CHATGPT_ISSUER_URL";
 const jwt_auth_claim = "https://api.openai.com/auth";
 const browser_scope = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+const codex_protocol_originator = "codex_cli_rs";
 const browser_callback_ports = [_]u16{ 1455, 1457 };
 const browser_login_timeout_seconds: i64 = 5 * 60;
 const browser_callback_poll_ms: i32 = 100;
@@ -795,7 +796,7 @@ fn buildBrowserAuthorizationUrl(
     try form.append(&out.writer, "id_token_add_organizations", "true");
     try form.append(&out.writer, "codex_cli_simplified_flow", "true");
     try form.append(&out.writer, "state", state);
-    try form.append(&out.writer, "originator", "fx");
+    try form.append(&out.writer, "originator", codex_protocol_originator);
     return out.toOwnedSlice();
 }
 

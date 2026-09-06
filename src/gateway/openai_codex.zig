@@ -295,7 +295,7 @@ fn codexRequestExtraHeaders(
     var extra_count: usize = 0;
     buf[extra_count] = .{ .name = "chatgpt-account-id", .value = account_id };
     extra_count += 1;
-    buf[extra_count] = .{ .name = "originator", .value = "fx" };
+    buf[extra_count] = .{ .name = "originator", .value = "codex_cli_rs" };
     extra_count += 1;
     buf[extra_count] = .{ .name = "OpenAI-Beta", .value = "responses=experimental" };
     extra_count += 1;

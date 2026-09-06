@@ -172,7 +172,7 @@ const FetchOperation = struct {
 fn codexModelCatalogExtraHeaders(account_id: []const u8) [3]std.http.Header {
     return .{
         .{ .name = "chatgpt-account-id", .value = account_id },
-        .{ .name = "originator", .value = "fx" },
+        .{ .name = "originator", .value = "codex_cli_rs" },
         .{ .name = "accept", .value = "application/json" },
     };
 }
