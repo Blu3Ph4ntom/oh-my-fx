@@ -956,7 +956,8 @@ test "ChatGPT browser authorization URL uses PKCE without device authentication"
     try std.testing.expect(std.mem.find(u8, url, "code_challenge=challenge-value") != null);
     try std.testing.expect(std.mem.find(u8, url, "code_challenge_method=S256") != null);
     try std.testing.expect(std.mem.find(u8, url, "state=state-value") != null);
-    try std.testing.expect(std.mem.find(u8, url, "originator=fx") != null);
+    try std.testing.expect(std.mem.find(u8, url, "originator=codex_cli_rs") != null);
+    try std.testing.expect(std.mem.find(u8, url, "originator=fx") == null);
     try std.testing.expect(std.mem.find(u8, url, "device") == null);
 }
 

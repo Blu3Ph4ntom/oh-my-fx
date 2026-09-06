@@ -287,6 +287,29 @@ const OpenRequestOperation = struct {
     }
 };
 
+fn codexRequestExtraHeaders(
+    buf: []std.http.Header,
+    account_id: []const u8,
+    session_id: ?[]const u8,
+) []const std.http.Header {
+    var extra_count: usize = 0;
+    buf[extra_count] = .{ .name = "chatgpt-account-id", .value = account_id };
+    extra_count += 1;
+    buf[extra_count] = .{ .name = "originator", .value = "fx" };
+    extra_count += 1;
+    buf[extra_count] = .{ .name = "OpenAI-Beta", .value = "responses=experimental" };
+    extra_count += 1;
+    buf[extra_count] = .{ .name = "accept", .value = "text/event-stream" };
+    extra_count += 1;
+    if (session_id) |value| if (value.len > 0) {
+        buf[extra_count] = .{ .name = "session-id", .value = value };
+        extra_count += 1;
+        buf[extra_count] = .{ .name = "x-client-request-id", .value = value };
+        extra_count += 1;
+    };
+    return buf[0..extra_count];
+}
+
 fn streamCompletionCore(alloc: Allocator, request: stream_provider.Request) !stream_provider.Result {
     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
     if (request.credential_source != .chatgpt_subscription) {
@@ -304,21 +327,7 @@ fn streamCompletionCore(alloc: Allocator, request: stream_provider.Request) !str
     const uri = try std.Uri.parse(request_endpoint);
 
     var extra_headers_buf: [7]std.http.Header = undefined;
-    var extra_count: usize = 0;
-    extra_headers_buf[extra_count] = .{ .name = "chatgpt-account-id", .value = account_id };
-    extra_count += 1;
-    extra_headers_buf[extra_count] = .{ .name = "originator", .value = "fx" };
-    extra_count += 1;
-    extra_headers_buf[extra_count] = .{ .name = "OpenAI-Beta", .value = "responses=experimental" };
-    extra_count += 1;
-    extra_headers_buf[extra_count] = .{ .name = "accept", .value = "text/event-stream" };
-    extra_count += 1;
-    if (request.session_id) |session_id| if (session_id.len > 0) {
-        extra_headers_buf[extra_count] = .{ .name = "session-id", .value = session_id };
-        extra_count += 1;
-        extra_headers_buf[extra_count] = .{ .name = "x-client-request-id", .value = session_id };
-        extra_count += 1;
-    };
+    const extra_headers = codexRequestExtraHeaders(&extra_headers_buf, account_id, request.session_id);
 
     var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
     defer client.deinit();
@@ -326,7 +335,7 @@ fn streamCompletionCore(alloc: Allocator, request: stream_provider.Request) !str
         .client = &client,
         .uri = uri,
         .auth_header = auth_header,
-        .extra_headers = extra_headers_buf[0..extra_count],
+        .extra_headers = extra_headers,
     };
     const connect_deadline = std.Io.Clock.Timestamp.fromNow(io_mod.getIo(), .{
         .clock = .awake,

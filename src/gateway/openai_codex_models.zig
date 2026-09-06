@@ -144,6 +144,7 @@ const FetchOperation = struct {
         const body_buffer = try self.alloc.alloc(u8, max_catalog_bytes + 1);
         defer secret.zeroAndFree(self.alloc, body_buffer);
         var response_writer = std.Io.Writer.fixed(body_buffer);
+        const extra_headers = codexModelCatalogExtraHeaders(self.account_id);
         const result = client.fetch(.{
             .location = .{ .url = self.url },
             .method = .GET,
@@ -152,11 +153,7 @@ const FetchOperation = struct {
                 .user_agent = .{ .override = gateway_client.user_agent },
                 .accept_encoding = .omit,
             },
-            .extra_headers = &.{
-                .{ .name = "chatgpt-account-id", .value = self.account_id },
-                .{ .name = "originator", .value = "fx" },
-                .{ .name = "accept", .value = "application/json" },
-            },
+            .extra_headers = &extra_headers,
             .response_writer = &response_writer,
             .redirect_behavior = .unhandled,
         }) catch |err| switch (err) {
@@ -171,6 +168,14 @@ const FetchOperation = struct {
         };
     }
 };
+
+fn codexModelCatalogExtraHeaders(account_id: []const u8) [3]std.http.Header {
+    return .{
+        .{ .name = "chatgpt-account-id", .value = account_id },
+        .{ .name = "originator", .value = "fx" },
+        .{ .name = "accept", .value = "application/json" },
+    };
+}
 
 fn modelsUrl(alloc: std.mem.Allocator) ![]u8 {
     const base = io_mod.getenv(e2e_models_endpoint_env) orelse default_models_endpoint;
@@ -323,4 +328,16 @@ test "Codex catalog URL uses the live-validated protocol compatibility version" 
     defer std.testing.allocator.free(url);
     try std.testing.expect(std.mem.find(u8, url, "client_version=0.148.0") != null);
     try std.testing.expect(std.mem.find(u8, url, "client_version=0.0.4") == null);
+}
+
+test "Codex request originator is sent exactly once for model catalog requests" {
+    const headers = codexModelCatalogExtraHeaders("account");
+    var originator_count: usize = 0;
+    var originator_value: ?[]const u8 = null;
+    for (headers) |header| if (std.ascii.eqlIgnoreCase(header.name, "originator")) {
+        originator_count += 1;
+        originator_value = header.value;
+    };
+    try std.testing.expectEqual(@as(usize, 1), originator_count);
+    try std.testing.expectEqualStrings("codex_cli_rs", originator_value.?);
 }
