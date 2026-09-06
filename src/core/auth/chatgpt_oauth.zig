@@ -1016,7 +1016,7 @@ test "browser login cancellation releases callback listener" {
     try std.testing.expectEqual(login_flow.SignInTransition.cancelled, runtime.pollTransition(alloc));
 
     var address = try std.Io.net.IpAddress.parse("127.0.0.1", callback_port);
-    var rebound = try address.listen(io_mod.getIo(), .{ .reuse_address = true });
+    var rebound = try address.listen(io_mod.getIo(), .{ .reuse_address = false });
     defer rebound.deinit(io_mod.getIo());
     try std.testing.expectEqual(callback_port, rebound.socket.address.getPort());
 }
