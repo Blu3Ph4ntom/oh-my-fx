@@ -1,4 +1,6 @@
 const std = @import("std");
+const builtin = @import("builtin");
+const io_mod = @import("io.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -23,73 +25,106 @@ const logs_dir_name = "logs";
 const trace_log_file_name = "trace.log";
 const recordings_dir_name = "recordings";
 
-pub fn rootDir(alloc: Allocator, home: []const u8) ![]u8 {
+fn rootDirWithOverride(alloc: Allocator, home: []const u8, override: ?[]const u8) ![]u8 {
+    if (override) |path| {
+        if (path.len == 0 or !std.fs.path.isAbsolute(path)) return error.InvalidPath;
+        return alloc.dupe(u8, path);
+    }
     return std.fs.path.join(alloc, &.{ home, root_dir_name });
 }
 
+pub fn rootDir(alloc: Allocator, home: []const u8) ![]u8 {
+    return rootDirWithOverride(alloc, home, io_mod.getenv("OMFX_HOME"));
+}
+
 pub fn settingsPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, settings_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, settings_file_name });
 }
 
 pub fn mcpConfigPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, mcp_config_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, mcp_config_file_name });
 }
 
 pub fn mcpCredentialsDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, mcp_credentials_dir_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, mcp_credentials_dir_name });
 }
 
 pub fn mcpCredentialsPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{
-        home,
-        root_dir_name,
-        mcp_credentials_dir_name,
-        mcp_credentials_file_name,
-    });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, mcp_credentials_dir_name, mcp_credentials_file_name });
 }
 
 pub fn managedSkillsDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, managed_skills_dir_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, managed_skills_dir_name });
 }
 
 pub fn authPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, auth_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, auth_file_name });
 }
 
 pub fn chatgptAuthPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, chatgpt_auth_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, chatgpt_auth_file_name });
 }
 
 pub fn apiKeyPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, api_key_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, api_key_file_name });
 }
 
 pub fn sessionsDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, sessions_dir_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, sessions_dir_name });
 }
 
 pub fn promptHistoryPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, prompt_history_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, prompt_history_file_name });
 }
 
 pub fn memoriesPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, memories_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, memories_file_name });
 }
 
 pub fn backupsDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, backups_dir_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, backups_dir_name });
 }
 
 pub fn logsDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, logs_dir_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, logs_dir_name });
 }
 
 pub fn traceLogPath(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, logs_dir_name, trace_log_file_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, logs_dir_name, trace_log_file_name });
 }
 
 pub fn recordingsDir(alloc: Allocator, home: []const u8) ![]u8 {
-    return std.fs.path.join(alloc, &.{ home, root_dir_name, recordings_dir_name });
+    const root = try rootDir(alloc, home);
+    defer alloc.free(root);
+    return std.fs.path.join(alloc, &.{ root, recordings_dir_name });
 }
 
 test "profile path helpers preserve current default locations" {
@@ -164,4 +199,20 @@ test "profile path helpers preserve current default locations" {
     const recordings = try recordingsDir(alloc, "/tmp/fake-home");
     defer alloc.free(recordings);
     try std.testing.expectEqualStrings("/tmp/fake-home/.fx/recordings", recordings);
+}
+
+test "OMFX_HOME overrides legacy profile root" {
+    const alloc = std.testing.allocator;
+    const override = if (builtin.os.tag == .windows)
+        "C:\\omfx-profile"
+    else
+        "/tmp/omfx-profile";
+
+    const root = try rootDirWithOverride(
+        alloc,
+        "/tmp/fake-home",
+        override,
+    );
+    defer alloc.free(root);
+    try std.testing.expectEqualStrings(override, root);
 }

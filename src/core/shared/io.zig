@@ -319,6 +319,14 @@ pub fn getenv(key: []const u8) ?[]const u8 {
     return null;
 }
 
+/// Resolves a product-owned environment variable with a legacy fallback.
+/// The new name wins whenever it is present, including an explicitly empty
+/// value, so callers retain control over whether empty means disabled or
+/// invalid.
+pub fn getenvProduct(primary: []const u8, legacy: []const u8) ?[]const u8 {
+    return getenv(primary) orelse getenv(legacy);
+}
+
 pub fn e2eFailIfDurableMutationAttempted() void {
     const enabled = getenv("FX_E2E_FAIL_ON_DURABLE_MUTATION") orelse return;
     if (!std.mem.eql(u8, enabled, "1")) return;
@@ -1195,6 +1203,28 @@ test "getenv returns set value after setEnvironMap" {
     setEnvironMap(&environ);
     try std.testing.expectEqualStrings("present", getenv("FX_IO_TEST").?);
     global_environ = null;
+}
+
+test "getenvProduct prefers the omfx name and preserves the legacy name" {
+    const previous = global_environ;
+    global_environ = null;
+    defer global_environ = previous;
+
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("OMFX_IO_TEST", "new-value");
+    try environ.put("FX_IO_TEST", "legacy-value");
+
+    setEnvironMap(&environ);
+    try std.testing.expectEqualStrings(
+        "new-value",
+        getenvProduct("OMFX_IO_TEST", "FX_IO_TEST").?,
+    );
+    global_environ = null;
+    try std.testing.expectEqualStrings(
+        "legacy-value",
+        getenvProduct("OMFX_IO_TEST", "FX_IO_TEST").?,
+    );
 }
 
 test "environMap returns borrowed process environment map" {
