@@ -350,12 +350,20 @@ test "terminal decoder key matrix" {
     try expectDecodedRawByte(0x7f, .delete_backward);
     try expectDecodedRawByte('\t', null);
 
-    // Once Core declares paste ownership, every byte is transport payload.
+    // Once Core declares paste ownership, every byte in both complete marker
+    // sequences remains transport payload and cannot start decoder state.
     var decoder = Decoder{};
-    const paste = decoder.feed(0x1b, decoderMatrixContext(1, true));
-    try std.testing.expectEqual(@as(usize, 1), @intFromBool(paste.event != null));
-    try std.testing.expectEqual(@as(u8, 0x1b), paste.event.?.paste_byte);
-    try std.testing.expect(!decoder.hasPending());
+    const paste_markers = "\x1b[200~\x1b[201~";
+    for (paste_markers, 1..) |byte, now_ms| {
+        const paste = decoder.feed(byte, decoderMatrixContext(@intCast(now_ms), true));
+        const event = paste.event orelse return error.MissingTerminalIngress;
+        switch (event) {
+            .paste_byte => |paste_byte| try std.testing.expectEqual(byte, paste_byte),
+            else => return error.UnexpectedTerminalIngress,
+        }
+        try std.testing.expect(paste.replay_byte_after_routing == null);
+        try std.testing.expect(!decoder.hasPending());
+    }
 }
 
 test "bare Escape emits once" {
