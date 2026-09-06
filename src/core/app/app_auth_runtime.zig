@@ -1021,19 +1021,7 @@ pub fn Runtime(comptime App: type) type {
         }
 
         fn writeLoginError(app: *App, source: credentials.Source, err: anyerror) !void {
-            const notice: types.SemanticNotice = if (source == .chatgpt_subscription)
-                switch (err) {
-                    error.ChatGptAuthorizationFailed => .{ .topic = "auth", .tone = .@"error", .body = "Codex sign-in was denied. The current credential is unchanged." },
-                    error.ChatGptLoginTimedOut, error.LoginTimedOut => .{ .topic = "auth", .tone = .warning, .body = "Codex sign-in expired. The current credential is unchanged; run /login to try again." },
-                    else => .{ .topic = "auth", .tone = .@"error", .body = "Codex sign-in failed. The current credential is unchanged." },
-                }
-            else switch (err) {
-                error.ClientIdMissing => .{ .topic = "auth", .tone = .@"error", .body = "fx login is not configured yet. The current credential is unchanged." },
-                error.AccessDenied => .{ .topic = "auth", .tone = .@"error", .body = "Vercel sign-in was denied. The current credential is unchanged." },
-                error.ExpiredToken, error.LoginTimedOut => .{ .topic = "auth", .tone = .warning, .body = "The Vercel sign-in code expired. The current credential is unchanged; run /login to try again." },
-                else => .{ .topic = "auth", .tone = .@"error", .body = "Vercel sign-in failed. The current credential is unchanged." },
-            };
-            try writeAuthNotice(app, notice);
+            try writeAuthNotice(app, loginFailureNotice(source, err));
         }
 
         fn writeAuthNotice(app: *App, notice: types.SemanticNotice) !void {
@@ -1042,6 +1030,34 @@ pub fn Runtime(comptime App: type) type {
             try app.flushBeforeBlockingExternalWork();
         }
     };
+}
+
+fn loginFailureNotice(source: credentials.Source, err: anyerror) types.SemanticNotice {
+    return switch (source) {
+        .chatgpt_subscription => switch (err) {
+            error.ChatGptAuthorizationFailed => .{ .topic = "auth", .tone = .@"error", .body = "Codex sign-in was denied. The current credential is unchanged." },
+            error.ChatGptLoginTimedOut, error.LoginTimedOut => .{ .topic = "auth", .tone = .warning, .body = "Codex sign-in expired. The current credential is unchanged; run /login to try again." },
+            else => .{ .topic = "auth", .tone = .@"error", .body = "Codex sign-in failed. The current credential is unchanged." },
+        },
+        .opencode_go_subscription => switch (err) {
+            error.ClientIdMissing => .{ .topic = "auth", .tone = .@"error", .body = "OpenCode Go sign-in is not configured yet. The current credential is unchanged." },
+            error.AccessDenied => .{ .topic = "auth", .tone = .@"error", .body = "OpenCode Go sign-in was denied. The current credential is unchanged." },
+            error.ExpiredToken, error.LoginTimedOut => .{ .topic = "auth", .tone = .warning, .body = "The OpenCode Go sign-in code expired. The current credential is unchanged; run /login to try again." },
+            else => .{ .topic = "auth", .tone = .@"error", .body = "OpenCode Go sign-in failed. The current credential is unchanged." },
+        },
+        else => switch (err) {
+            error.ClientIdMissing => .{ .topic = "auth", .tone = .@"error", .body = "fx login is not configured yet. The current credential is unchanged." },
+            error.AccessDenied => .{ .topic = "auth", .tone = .@"error", .body = "Vercel sign-in was denied. The current credential is unchanged." },
+            error.ExpiredToken, error.LoginTimedOut => .{ .topic = "auth", .tone = .warning, .body = "The Vercel sign-in code expired. The current credential is unchanged; run /login to try again." },
+            else => .{ .topic = "auth", .tone = .@"error", .body = "Vercel sign-in failed. The current credential is unchanged." },
+        },
+    };
+}
+
+test "login failure notices identify their provider" {
+    try std.testing.expect(std.mem.find(u8, loginFailureNotice(.chatgpt_subscription, error.Unexpected).body, "Codex sign-in") != null);
+    try std.testing.expect(std.mem.find(u8, loginFailureNotice(.fx_login, error.Unexpected).body, "Vercel sign-in") != null);
+    try std.testing.expect(std.mem.find(u8, loginFailureNotice(.opencode_go_subscription, error.Unexpected).body, "OpenCode Go") != null);
 }
 
 test "provider switch state machine no-ops rejects busy work and prepares only idle changes" {
