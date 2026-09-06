@@ -988,3 +988,35 @@ test "ChatGPT browser callback requires the exact path and state" {
         ),
     );
 }
+
+test "browser login cancellation releases callback listener" {
+    const alloc = std.testing.allocator;
+    var runtime: login_flow.SignInRuntime = .{};
+    defer runtime.deinit(alloc);
+
+    const browser = try prepareBrowserSignIn(alloc);
+    const callback_port = browser.context.listener.socket.address.getPort();
+    try std.testing.expect(try runtime.startPrepared(
+        alloc,
+        browser.prepared,
+        .{
+            .ctx = browser.context,
+            .deinit_ctx = deinitBrowserLoginContext,
+            .oauth_transport = oauth_transport.unavailable_provider,
+            .poll = .{
+                .ctx = browser.context,
+                .poll_device_token = pollBrowserToken,
+            },
+            .complete = completeSignIn,
+            .save = saveSignIn,
+        },
+    ));
+
+    try std.testing.expect(runtime.cancel(alloc));
+    try std.testing.expectEqual(login_flow.SignInTransition.cancelled, runtime.pollTransition(alloc));
+
+    var address = try std.Io.net.IpAddress.parse("127.0.0.1", callback_port);
+    var rebound = try address.listen(io_mod.getIo(), .{ .reuse_address = true });
+    defer rebound.deinit(io_mod.getIo());
+    try std.testing.expectEqual(callback_port, rebound.socket.address.getPort());
+}
