@@ -568,10 +568,7 @@ pub const ProfileStore = struct {
             }),
         };
         defer home_dir.close();
-        var fx_dir = try io_mod.openOrCreateVerifiedPrivateDir(
-            &home_dir,
-            profile_paths.root_dir_name,
-        );
+        var fx_dir = try profile_paths.openOrCreateRootDir(&home_dir);
         defer fx_dir.close();
         var sessions_dir = try io_mod.openOrCreateVerifiedPrivateDir(
             &fx_dir,

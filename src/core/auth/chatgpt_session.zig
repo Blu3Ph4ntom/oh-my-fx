@@ -83,7 +83,7 @@ pub fn load(alloc: Allocator) !?Session {
     };
     defer home_dir.close(io_mod.getIo());
 
-    var fx_dir = home_dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+    var fx_dir = profile_paths.openRootDir(home_dir, .{
         .iterate = true,
         .follow_symlinks = false,
     }) catch |err| {
@@ -157,7 +157,7 @@ fn beginMutation() !Mutation {
     };
     defer home_dir.close();
 
-    const fx_dir = try io_mod.openOrCreateVerifiedPrivateDir(&home_dir, profile_paths.root_dir_name);
+    const fx_dir = try profile_paths.openOrCreateRootDir(&home_dir);
     return lockMutation(fx_dir);
 }
 
@@ -174,7 +174,7 @@ fn lockMutation(open_fx_dir: io_mod.VerifiedDir) !Mutation {
 }
 
 fn openExistingPrivateFxDir(home_dir: *io_mod.VerifiedDir) !io_mod.VerifiedDir {
-    var dir = try home_dir.dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+    var dir = try profile_paths.openRootDir(home_dir.dir, .{
         .iterate = true,
         .follow_symlinks = false,
     });

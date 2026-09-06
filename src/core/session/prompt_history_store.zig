@@ -71,7 +71,7 @@ pub const Store = struct {
         defer home.close(zio);
 
         var durable_home: ?io_mod.VerifiedDir = null;
-        if (home.openDir(zio, profile_paths.root_dir_name, .{
+        if (profile_paths.openRootDir(home, .{
             .iterate = true,
             .follow_symlinks = false,
         })) |dir| {
@@ -232,7 +232,7 @@ pub const Store = struct {
                 }) catch return error.DurableLayoutFailed,
             };
             defer home.close();
-            self.durable_home = io_mod.openOrCreateVerifiedPrivateDir(&home, profile_paths.root_dir_name) catch |err| switch (err) {
+            self.durable_home = profile_paths.openOrCreateRootDir(&home) catch |err| switch (err) {
                 error.PrivateStatePermissionsUnsupported, error.DurablePathUnsafe => return err,
                 else => return error.DurableLayoutFailed,
             };

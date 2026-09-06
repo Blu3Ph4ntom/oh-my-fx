@@ -471,7 +471,7 @@ fn openUsageRecoveryProfileRoot(
         .iterate = true,
     });
     defer home.close(zio);
-    var profile = home.openDir(zio, profile_paths.root_dir_name, .{
+    var profile = profile_paths.openRootDir(home, .{
         .iterate = true,
         .follow_symlinks = false,
     }) catch |err| switch (err) {

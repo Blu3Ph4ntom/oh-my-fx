@@ -97,10 +97,9 @@ fn resolveEndpointSelection(
 ) !EndpointSelection {
     const runtime_base = runtimeBase(target) orelse
         return error.TerminalHostUnsupported;
-    const authority_root = try std.fs.path.join(
-        alloc,
-        &.{ home, profile_paths.root_dir_name, host_dir_name },
-    );
+    const profile_root = try profile_paths.rootDir(alloc, home);
+    defer alloc.free(profile_root);
+    const authority_root = try std.fs.path.join(alloc, &.{ profile_root, host_dir_name });
     errdefer alloc.free(authority_root);
     const profile_endpoint = try std.fs.path.join(
         alloc,
@@ -214,10 +213,7 @@ pub const Paths = struct {
             }),
         };
         errdefer home_dir.close();
-        var fx_dir = try io_mod.openOrCreateVerifiedPrivateDir(
-            &home_dir,
-            profile_paths.root_dir_name,
-        );
+        var fx_dir = try profile_paths.openOrCreateRootDir(&home_dir);
         errdefer fx_dir.close();
         var host_dir = try io_mod.openOrCreateVerifiedPrivateDir(
             &fx_dir,
@@ -1527,10 +1523,9 @@ test "endpoint selection preserves short homes and deterministically separates l
         501,
     );
     defer short.deinit(alloc);
-    const expected_short = try std.fs.path.join(
-        alloc,
-        &.{ short_home, profile_paths.root_dir_name, host_dir_name },
-    );
+    const expected_profile_root = try profile_paths.rootDir(alloc, short_home);
+    defer alloc.free(expected_profile_root);
+    const expected_short = try std.fs.path.join(alloc, &.{ expected_profile_root, host_dir_name });
     defer alloc.free(expected_short);
     try std.testing.expect(!short.uses_fallback);
     try std.testing.expectEqualStrings(expected_short, short.authority_root);

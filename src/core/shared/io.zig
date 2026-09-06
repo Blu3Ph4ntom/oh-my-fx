@@ -861,6 +861,21 @@ pub fn openOrCreateVerifiedPrivateDirFromDir(parent: std.Io.Dir, name: []const u
     return openOrCreateVerifiedPrivateChild(parent, name);
 }
 
+/// Opens or creates a verified private directory at an absolute path. This
+/// is used only for the explicit product profile-root override; ordinary
+/// profile state continues to open relative to `$HOME/.fx`.
+pub fn openOrCreateVerifiedPrivateDirAbsolute(path: []const u8) !VerifiedDir {
+    if (path.len == 0 or !std.fs.path.isAbsolute(path)) return error.InvalidPath;
+    e2eFailIfDurableMutationAttempted();
+    try makeDirRecursive(path);
+
+    var dir = try openDirAbsoluteNoFollow(path, .{ .iterate = true });
+    errdefer dir.close(getIo());
+    try setPermissions(dir, private_dir_permissions);
+    try verifyPrivateDirectory(dir);
+    return .{ .dir = dir };
+}
+
 fn validateReplaceTarget(dir: std.Io.Dir, name: []const u8) !void {
     const stat = dir.statFile(getIo(), name, .{ .follow_symlinks = false }) catch |err| switch (err) {
         error.FileNotFound => return,

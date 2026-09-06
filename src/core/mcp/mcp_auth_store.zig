@@ -352,10 +352,7 @@ fn openOrCreateLockedDirControlled(
         .dir = try std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }),
     };
     defer home_dir.close();
-    var root = try io_mod.openOrCreateVerifiedPrivateDir(
-        &home_dir,
-        profile_paths.root_dir_name,
-    );
+    var root = try profile_paths.openOrCreateRootDir(&home_dir);
     defer root.close();
     var credentials_dir = try io_mod.openOrCreateVerifiedPrivateDir(
         &root,
@@ -393,13 +390,16 @@ fn openExistingLockedDirControlled(
         }),
     };
     defer home_dir.close();
-    var root = openExistingPrivateChild(
-        &home_dir,
-        profile_paths.root_dir_name,
-    ) catch |err| switch (err) {
+    var root_dir = profile_paths.openRootDir(home_dir.dir, .{
+        .iterate = true,
+        .follow_symlinks = false,
+    }) catch |err| switch (err) {
         error.FileNotFound => return null,
         else => return err,
     };
+    errdefer root_dir.close(io_mod.getIo());
+    try normalizeAndVerifyPrivateDir(root_dir);
+    var root = io_mod.VerifiedDir{ .dir = root_dir };
     defer root.close();
     var credentials_dir = openExistingPrivateChild(
         &root,

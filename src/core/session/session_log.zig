@@ -1000,10 +1000,7 @@ pub const Root = struct {
                 if (mode == .read_only) {
                     return .{
                         .sessions = null,
-                        .display_root = try std.fs.path.join(
-                            alloc,
-                            &.{ home_path, profile_paths.root_dir_name, profile_paths.sessions_dir_name },
-                        ),
+                        .display_root = try profile_paths.sessionsDir(alloc, home_path),
                         .mode = mode,
                     };
                 }
@@ -1017,7 +1014,7 @@ pub const Root = struct {
         };
         defer home.close(zio);
 
-        var durable_home = home.openDir(zio, profile_paths.root_dir_name, .{
+        var durable_home = profile_paths.openRootDir(home, .{
             .iterate = true,
             .follow_symlinks = false,
         }) catch |err| switch (err) {
@@ -1025,10 +1022,7 @@ pub const Root = struct {
                 if (mode == .read_only) {
                     return .{
                         .sessions = null,
-                        .display_root = try std.fs.path.join(
-                            alloc,
-                            &.{ home_path, profile_paths.root_dir_name, profile_paths.sessions_dir_name },
-                        ),
+                        .display_root = try profile_paths.sessionsDir(alloc, home_path),
                         .mode = mode,
                     };
                 }
@@ -1038,10 +1032,7 @@ pub const Root = struct {
                     }),
                 };
                 defer verified_home.close();
-                const created = try io_mod.openOrCreateVerifiedPrivateDir(
-                    &verified_home,
-                    profile_paths.root_dir_name,
-                );
+                const created = try profile_paths.openOrCreateRootDir(&verified_home);
                 break :blk created.dir;
             },
             error.NotDir, error.SymLinkLoop => return error.SessionPathUnsafe,
@@ -1062,10 +1053,7 @@ pub const Root = struct {
                 if (mode == .read_only) {
                     return .{
                         .sessions = null,
-                        .display_root = try std.fs.path.join(
-                            alloc,
-                            &.{ home_path, profile_paths.root_dir_name, profile_paths.sessions_dir_name },
-                        ),
+                        .display_root = try profile_paths.sessionsDir(alloc, home_path),
                         .mode = mode,
                     };
                 }

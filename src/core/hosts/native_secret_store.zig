@@ -96,7 +96,7 @@ fn loadFromProfile(alloc: Allocator) LoadError!?[]u8 {
     };
     defer home_dir.close(io_mod.getIo());
 
-    var fx_dir = home_dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+    var fx_dir = profile_paths.openRootDir(home_dir, .{
         .iterate = true,
         .follow_symlinks = false,
     }) catch |err| switch (err) {
@@ -162,7 +162,7 @@ fn storeInProfile(alloc: Allocator, value: []const u8) StoreError!void {
     };
     defer home_dir.close();
 
-    var fx_dir = io_mod.openOrCreateVerifiedPrivateDir(&home_dir, profile_paths.root_dir_name) catch |err| {
+    var fx_dir = profile_paths.openOrCreateRootDir(&home_dir) catch |err| {
         return writeFailed("open_profile", err);
     };
     defer fx_dir.close();
