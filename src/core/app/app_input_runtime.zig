@@ -26,6 +26,7 @@ const debug_trace = @import("../shared/debug_trace.zig");
 const image_attachments = @import("../images/image_attachments.zig");
 const image_commands = @import("../images/image_commands.zig");
 const model_capabilities = @import("../config/model_capabilities.zig");
+const model_provider = @import("../config/model_provider.zig");
 const model_cache_runtime = @import("model_cache_runtime.zig");
 const permission_request = @import("../permissions/permission_request.zig");
 const approval_decision = @import("../permissions/approval_decision.zig");
@@ -3192,6 +3193,7 @@ const RoutingFakeApp = struct {
     last_preference_fast_mode: ?bool = null,
     permission_mode_preference_commit_count: usize = 0,
     last_preference_permission_mode: ?types.PermissionMode = null,
+    selected_provider: model_provider.ProviderId = .gateway,
     model_completion_values: []const []const u8 = &.{},
     gateway_metadata_model: ?[]const u8 = null,
     gateway_metadata: model_capabilities.GatewayMetadata = .{},
@@ -3456,7 +3458,7 @@ const RoutingFakeApp = struct {
 
     pub fn applyAuthPickerChoice(self: *RoutingFakeApp, choice: auth_runtime.Choice) !void {
         switch (choice) {
-            .provider => {},
+            .provider => |provider| self.selected_provider = provider,
             .source => |source| _ = try self.selectCredentialSource(source),
             .action => |action| self.selected_auth_action = action,
             .team => |index| self.selected_auth_team = index,
@@ -3868,6 +3870,45 @@ test "app_input_runtime routes auth picker navigation before composer history" {
 
     try std.testing.expect((auth_runtime.Choice{ .action = .chatgpt_login }).eql(app.auth.pickerView().selected_choice.?));
     try std.testing.expectEqual(@as(?usize, null), app.input_runtime.composer_history.activeIndex());
+}
+
+test "app_input_runtime provider picker routes terminal actions through one owner" {
+    const alloc = std.testing.allocator;
+    var app = try RoutingFakeApp.init(alloc);
+    defer app.deinit();
+    try app.input_runtime.textReplacementState().replace(alloc, "keep this draft");
+    app.auth.openProviderPicker(alloc, .gateway);
+    app.shell.render_requests.clearReason(.footer);
+
+    try feedRoutingBytes(&app, "\x1b[B\x1b[B");
+
+    try std.testing.expect((auth_runtime.Choice{ .provider = .opencode_go }).eql(
+        app.auth.pickerView().selected_choice.?,
+    ));
+    try std.testing.expect(app.shell.render_requests.hasReason(.footer));
+
+    try feedRoutingBytes(&app, "\r");
+
+    try std.testing.expectEqual(model_provider.ProviderId.opencode_go, app.selected_provider);
+    try std.testing.expect(!app.auth.pickerView().active);
+    try std.testing.expectEqualStrings("keep this draft", app.input_runtime.edit_state.input.items);
+    try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+}
+
+test "app_input_runtime provider picker Escape closes without mutating the draft" {
+    const alloc = std.testing.allocator;
+    var app = try RoutingFakeApp.init(alloc);
+    defer app.deinit();
+    try app.input_runtime.textReplacementState().replace(alloc, "keep this draft");
+    app.auth.openProviderPicker(alloc, .gateway);
+    app.shell.render_requests.clearReason(.footer);
+
+    try feedRoutingBytes(&app, "\x1b[27u");
+
+    try std.testing.expect(!app.auth.pickerView().active);
+    try std.testing.expectEqualStrings("keep this draft", app.input_runtime.edit_state.input.items);
+    try std.testing.expect(!app.input_runtime.gestures.escapeClearArmed());
+    try std.testing.expect(app.shell.render_requests.hasReason(.footer));
 }
 
 test "app_input_runtime Tab cycles the active auth picker" {
