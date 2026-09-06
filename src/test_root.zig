@@ -8,4 +8,5 @@ test {
     _ = @import("gateway/openai_codex.zig");
     _ = @import("gateway/openai_codex_models.zig");
     _ = @import("core/config/model_provider.zig");
+    _ = @import("ui/input/terminal_action_decoder.zig");
 }

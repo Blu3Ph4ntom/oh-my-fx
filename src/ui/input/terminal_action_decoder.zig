@@ -244,6 +244,124 @@ fn shouldReplayControlAfterBareEscape(byte: u8) bool {
     };
 }
 
+fn decoderMatrixContext(now_ms: i64, paste_active: bool) input_action.TerminalDecodeContext {
+    return .{
+        .now_ms = now_ms,
+        .paste_active = paste_active,
+        .cancel_pending = false,
+        .child_route_active = false,
+    };
+}
+
+/// Feeds one terminal byte at a time so a decoder regression cannot hide a
+/// duplicate ingress event behind a complete escape sequence.
+fn expectDecodedAction(bytes: []const u8, expected: input_action.Action) !void {
+    var decoder = Decoder{};
+    var event_count: usize = 0;
+    var action: ?input_action.Action = null;
+
+    for (bytes, 1..) |byte, now_ms| {
+        const ingress = decoder.feed(byte, decoderMatrixContext(@intCast(now_ms), false));
+        if (ingress.event) |event| {
+            event_count += 1;
+            switch (event) {
+                .action => |decoded| action = decoded.action,
+                else => return error.UnexpectedTerminalIngress,
+            }
+        }
+        try std.testing.expect(ingress.replay_byte_after_routing == null);
+    }
+
+    try std.testing.expectEqual(@as(usize, 1), event_count);
+    try std.testing.expectEqual(expected, action.?);
+    try std.testing.expect(!decoder.hasPending());
+}
+
+fn expectDecodedRawByte(byte: u8, expected_shortcut: ?input_action.ShortcutAction) !void {
+    var decoder = Decoder{};
+    const ingress = decoder.feed(byte, decoderMatrixContext(1, false));
+    const event = ingress.event orelse return error.MissingTerminalIngress;
+    switch (event) {
+        .raw => |raw| {
+            try std.testing.expectEqual(byte, raw.byte);
+            try std.testing.expectEqual(expected_shortcut, raw.composer_shortcut);
+        },
+        else => return error.UnexpectedTerminalIngress,
+    }
+    try std.testing.expect(ingress.replay_byte_after_routing == null);
+    try std.testing.expect(!decoder.hasPending());
+}
+
+fn expectDecodedFlushAction(
+    bytes: []const u8,
+    now_ms: i64,
+    timeout_ms: i64,
+    expected: input_action.Action,
+) !void {
+    var decoder = Decoder{};
+    var event_count: usize = 0;
+
+    for (bytes, 1..) |byte, byte_now_ms| {
+        const ingress = decoder.feed(byte, decoderMatrixContext(@intCast(byte_now_ms), false));
+        try std.testing.expect(ingress.event == null);
+    }
+
+    const ingress = decoder.flush(now_ms, timeout_ms, false);
+    const event = ingress.event orelse return error.MissingTerminalIngress;
+    event_count += 1;
+    switch (event) {
+        .action => |decoded| try std.testing.expectEqual(expected, decoded.action),
+        else => return error.UnexpectedTerminalIngress,
+    }
+
+    try std.testing.expectEqual(@as(usize, 1), event_count);
+    try std.testing.expect(ingress.replay_byte_after_routing == null);
+    try std.testing.expect(!decoder.hasPending());
+}
+
+test "terminal decoder key matrix" {
+    // Parser/decoder stage: CSI terminal bytes become exactly one semantic action.
+    try expectDecodedAction(&.{ 0x1b, '[', 'A' }, .cursor_up);
+    try expectDecodedAction(&.{ 0x1b, '[', 'B' }, .cursor_down);
+    try expectDecodedAction(
+        &.{ 0x1b, '[', 'D' },
+        .{ .composer_shortcut = .{ .move = .{
+            .kind = .character_left,
+            .extend_selection = false,
+        } } },
+    );
+    try expectDecodedAction(
+        &.{ 0x1b, '[', 'C' },
+        .{ .composer_shortcut = .{ .move = .{
+            .kind = .character_right,
+            .extend_selection = false,
+        } } },
+    );
+    try expectDecodedAction(&.{ 0x1b, '[', 'H' }, .home);
+    try expectDecodedAction(&.{ 0x1b, '[', 'F' }, .end);
+    try expectDecodedAction(&.{ 0x1b, '[', '3', '~' }, .delete_next);
+    try expectDecodedAction(&.{ 0x1b, '[', '2', '0', '0', '~' }, .paste_start);
+    try expectDecodedAction(&.{ 0x1b, '[', '2', '0', '1', '~' }, .paste_end);
+
+    // Raw-byte stage: these must not be folded into a second semantic event.
+    try expectDecodedRawByte('\r', null);
+    try expectDecodedRawByte('\n', .insert_newline);
+    try expectDecodedRawByte(0x08, .delete_backward);
+    try expectDecodedRawByte(0x7f, .delete_backward);
+    try expectDecodedRawByte('\t', null);
+
+    // Once Core declares paste ownership, every byte is transport payload.
+    var decoder = Decoder{};
+    const paste = decoder.feed(0x1b, decoderMatrixContext(1, true));
+    try std.testing.expectEqual(@as(usize, 1), @intFromBool(paste.event != null));
+    try std.testing.expectEqual(@as(u8, 0x1b), paste.event.?.paste_byte);
+    try std.testing.expect(!decoder.hasPending());
+}
+
+test "bare Escape emits once" {
+    try expectDecodedFlushAction(&.{0x1b}, 31, 30, .escape);
+}
+
 test "plain byte carries composer fallback without consuming product routing" {
     var decoder = Decoder{};
     const ingress = decoder.feed(11, .{
