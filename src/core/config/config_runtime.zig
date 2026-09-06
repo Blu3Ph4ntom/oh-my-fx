@@ -447,7 +447,7 @@ fn loadMergedSettingsDetailedWithOptionalHome(
         }
     }
 
-    if (io_mod.getenv("FX_MODEL")) |model_override| {
+    if (io_mod.getenvProduct("OMFX_MODEL", "FX_MODEL")) |model_override| {
         if (std.mem.trim(u8, model_override, " \t\r\n").len > 0) {
             sources.model = .process_override;
         }

@@ -1,5 +1,6 @@
 test {
     _ = @import("core/shared/product_identity.zig");
+    _ = @import("core/shared/product_theme.zig");
     _ = @import("core/shared/profile_paths.zig");
     _ = @import("core/auth/auth_runtime.zig");
     _ = @import("core/app/app_auth_runtime.zig");

@@ -61,7 +61,7 @@ pub fn configureFromEnv(
 ) !void {
     _ = workspace_root;
 
-    const configured_path = if (io_mod.getenv("FX_RECORD")) |raw_path|
+    const configured_path = if (io_mod.getenvProduct("OMFX_RECORD", "FX_RECORD")) |raw_path|
         std.mem.trim(u8, raw_path, " \t\r\n")
     else
         "";

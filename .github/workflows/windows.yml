@@ -199,6 +199,7 @@ jobs:
       - name: Run unit tests
         run: |
           zig test -lc src/test_root.zig --test-filter "omfx identity contract"
+          zig test -lc src/test_root.zig --test-filter "Night Signal palette"
           zig test -lc src/test_root.zig --test-filter "getenvProduct prefers"
           zig test -lc src/test_root.zig --test-filter "OMFX_HOME overrides legacy profile root"
           zig test -lc src/test_root.zig --test-filter "go endpoint accepts"

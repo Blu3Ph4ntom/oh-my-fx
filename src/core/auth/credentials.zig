@@ -184,15 +184,15 @@ pub const LoadMode = enum { stored, refresh_if_needed };
 
 const FxLoginRefreshMode = enum { if_needed, force };
 
-pub const missing_credential_message = "Fx needs access to Vercel AI Gateway. Run fx login to sign in, fx setup to use an API key, or set AI_GATEWAY_API_KEY.";
-pub const missing_interactive_credential_message = "Fx needs access to Vercel AI Gateway. Run /login to sign in, /setup to use an API key, or set AI_GATEWAY_API_KEY.";
-pub const missing_chatgpt_credential_message = "fx needs a Codex subscription login for this model. Run fx login codex.";
+pub const missing_credential_message = "omfx needs access to Vercel AI Gateway. Run omfx login to sign in, omfx setup to use an API key, or set AI_GATEWAY_API_KEY.";
+pub const missing_interactive_credential_message = "omfx needs access to Vercel AI Gateway. Run /login to sign in, /setup to use an API key, or set AI_GATEWAY_API_KEY.";
+pub const missing_chatgpt_credential_message = "omfx needs a Codex subscription login for this model. Run omfx login codex.";
 pub const missing_chatgpt_interactive_credential_message = "Codex needs a subscription login. Run /login and choose Sign in with Codex.";
-pub const missing_grok_credential_message = "fx needs a Grok subscription login for this model. Run fx login grok.";
+pub const missing_grok_credential_message = "omfx needs a Grok subscription login for this model. Run omfx login grok.";
 pub const missing_grok_interactive_credential_message = "Grok needs a subscription login. Run /login and choose Sign in with Grok.";
-pub const missing_opencode_go_credential_message = "fx needs an OpenCode Go API key for this model. Set OPENCODE_GO_API_KEY.";
+pub const missing_opencode_go_credential_message = "omfx needs an OpenCode Go API key for this model. Set OPENCODE_GO_API_KEY.";
 pub const missing_opencode_go_interactive_credential_message = "OpenCode Go needs an API key. Set OPENCODE_GO_API_KEY.";
-pub const unreadable_store_message = "Fx could not read the stored API key from " ++ stored_key_backend_label ++ ". A key may be saved but unreadable. Set FX_TRACE_LOG for the failing step, or set AI_GATEWAY_API_KEY.";
+pub const unreadable_store_message = "omfx could not read the stored API key from " ++ stored_key_backend_label ++ ". A key may be saved but unreadable. Set FX_TRACE_LOG for the failing step, or set AI_GATEWAY_API_KEY.";
 
 pub fn required_credential_source_for_provider(provider: model_provider.ProviderId) ?Source {
     return switch (provider) {
@@ -695,7 +695,7 @@ pub fn sourceLabel(source: Source) []const u8 {
     return switch (source) {
         .vercel_oidc_token => "VERCEL_OIDC_TOKEN",
         .ai_gateway_api_key => "AI_GATEWAY_API_KEY",
-        .fx_login => "fx login",
+        .fx_login => "omfx login",
         .stored_key => "stored API key (" ++ stored_key_backend_label ++ ")",
         .chatgpt_subscription => "Codex subscription",
         .grok_subscription => "Grok subscription",
@@ -717,8 +717,8 @@ test "stored key label discloses the backend that answered" {
 }
 
 test "missing credential messages use surface commands in preferred order" {
-    const cli_login = std.mem.find(u8, missing_credential_message, "fx login").?;
-    const cli_setup = std.mem.find(u8, missing_credential_message, "fx setup").?;
+    const cli_login = std.mem.find(u8, missing_credential_message, "omfx login").?;
+    const cli_setup = std.mem.find(u8, missing_credential_message, "omfx setup").?;
     const cli_env = std.mem.find(u8, missing_credential_message, "AI_GATEWAY_API_KEY").?;
 
     try std.testing.expect(cli_login < cli_setup);

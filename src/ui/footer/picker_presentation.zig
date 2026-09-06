@@ -153,8 +153,8 @@ pub noinline fn composeAuthPickerRow(
     return row;
 }
 
-const onboarding_note = "   ⚠︎ Note: fx is experimental and defaults to auto mode.";
-const onboarding_note_link = onboarding_note ++ " \x1b]8;id=fx-onboarding;https://fx.sh/docs/stability\x1b\\\x1b[4mLearn more\x1b[24m\x1b]8;;\x1b\\";
+const onboarding_note = "   ⚠︎ Note: omfx is experimental and defaults to auto mode.";
+const onboarding_note_link = onboarding_note ++ " \x1b]8;id=omfx-onboarding;https://fx.sh/docs/stability\x1b\\\x1b[4mLearn more\x1b[24m\x1b]8;;\x1b\\";
 
 fn onboardingProjectedRowIndex(view: auth_runtime.PickerView, row_index: u16, row_count: u16) u16 {
     if (row_count >= 17) return row_index;
@@ -208,11 +208,11 @@ fn composeOnboardingPickerRow(
         return row;
     }
 
-    try row.appendSlice(alloc, ui_render.hint_style);
+    try row.appendSlice(alloc, if (source_row_index == 0) ui_render.brand_style else ui_render.hint_style);
     const label = switch (source_row_index) {
-        0 => "   Welcome to fx",
+        0 => "   Welcome to omfx",
         1 => "",
-        2 => "   fx can access AI models with an account, subscription, or API key.",
+        2 => "   omfx can access AI models with an account, subscription, or API key.",
         3 => "   Choose a sign-in option below, or add your own API key.",
         4 => "",
         5 => "   You can change this anytime with /setup.",

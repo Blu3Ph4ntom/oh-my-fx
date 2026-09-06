@@ -2,6 +2,7 @@ const std = @import("std");
 const display_width = @import("../shared/display_width.zig");
 const list_window = @import("../shared/list_window.zig");
 const mod_registry = @import("../mods/registry.zig");
+const product_identity = @import("../shared/product_identity.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -281,7 +282,7 @@ pub fn renderTopLevelHelpWithStyle(alloc: Allocator, registry: TopLevelRegistry,
     var out: std.Io.Writer.Allocating = .init(alloc);
     defer out.deinit();
 
-    try writeStyled(&out.writer, style, .brand, "𝒇x");
+    try writeStyled(&out.writer, style, .brand, product_identity.name);
     try out.writer.writeByte(' ');
     try writeStyleStart(&out.writer, style, .muted);
     try out.writer.writeByte('v');
@@ -293,8 +294,8 @@ pub fn renderTopLevelHelpWithStyle(alloc: Allocator, registry: TopLevelRegistry,
     try writeWrappedStyledLine(&out.writer, "", "", registry.interactive_hint, width, style, .muted);
 
     try writeSectionHeading(&out.writer, style, "Usage:");
-    try writeWrappedStyledLine(&out.writer, "  ", "  ", "fx [flags]", width, style, .syntax);
-    try writeWrappedStyledLine(&out.writer, "  ", "  ", "fx <command> [...flags] [...args]", width, style, .syntax);
+    try writeWrappedStyledLine(&out.writer, "  ", "  ", "omfx [flags]", width, style, .syntax);
+    try writeWrappedStyledLine(&out.writer, "  ", "  ", "omfx <command> [...flags] [...args]", width, style, .syntax);
 
     try writeSectionHeading(&out.writer, style, "Commands:");
     for (registry.help_groups, 0..) |group, group_index| {
@@ -333,12 +334,12 @@ pub fn renderTopLevelCommandHelp(alloc: Allocator, registry: TopLevelRegistry, k
     var out: std.Io.Writer.Allocating = .init(alloc);
     defer out.deinit();
 
-    try out.writer.writeAll("fx ");
+    try out.writer.writeAll("omfx ");
     try out.writer.writeAll(spec.token);
     try out.writer.writeAll("\n\n");
     try out.writer.writeAll(spec.summary);
     try out.writer.writeAll("\n\nUsage:\n");
-    try out.writer.writeAll("  fx ");
+    try out.writer.writeAll("  omfx ");
     try out.writer.writeAll(spec.usage);
     try out.writer.writeByte('\n');
 
@@ -1520,10 +1521,10 @@ fn writeStyleEnd(writer: *std.Io.Writer, style: HelpStyle) !void {
 fn styleStart(style: HelpStyle, role: HelpRole) []const u8 {
     if (style == .plain) return "";
     return switch (role) {
-        .brand => "\x1b[1m",
-        .heading, .label => "\x1b[1m",
+        .brand => "\x1b[1;38;5;81m",
+        .heading, .label => "\x1b[1;38;5;141m",
         .syntax => "\x1b[39m",
-        .muted => "\x1b[38;5;243m",
+        .muted => "\x1b[38;5;245m",
         .link => "\x1b[4m",
     };
 }

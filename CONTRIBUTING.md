@@ -2,7 +2,7 @@
 
 ## Scope
 
-`fx` is a CLI-first coding agent written in Zig.
+`omfx` is a CLI-first coding agent written in Zig. The `fx` command remains a compatibility name.
 
 Contributions should preserve that direction:
 
@@ -24,7 +24,7 @@ Requirements:
 
 * interactive terminal for manual shell testing
 
-* a Vercel OAuth session via `fx login` for model-backed flows. macOS Keychain API keys (via `fx setup`), `AI_GATEWAY_API_KEY`, and `VERCEL_OIDC_TOKEN` are also supported
+* a Vercel OAuth session via `omfx login` for model-backed flows. macOS Keychain API keys (via `omfx setup`), `AI_GATEWAY_API_KEY`, and `VERCEL_OIDC_TOKEN` are also supported
 
 Common commands:
 
@@ -37,7 +37,7 @@ zig build run
 
 ## Verification Workflow
 
-Keep the local development loop focused: run the narrowest test that covers the changed path, build fx, and exercise the change using `./zig-out/bin/fx`. The installed `fx` on `PATH` is not valid development evidence.
+Keep the local development loop focused: run the narrowest test that covers the changed path, build omfx, and exercise the change using `./zig-out/bin/fx`. The installed `fx` on `PATH` is not valid development evidence; that path is the repository's development compatibility artifact.
 
 Once the focused checks pass, create a clean checkpoint commit, push the non-`main` feature branch, and open a draft PR immediately. The **Full CI** workflow runs the complete deterministic suite on native Linux x86_64, Linux aarch64, macOS x86_64, and macOS aarch64 runners. The native matrix builds, tests, and smoke-tests ReleaseSafe on every platform; formatting and the public-surface audit run in those ReleaseSafe jobs. Four duration-balanced, isolated ReleaseSafe E2E shards per platform use checked-in weights to assign every Bun test file once; files inside each shard run sequentially in separate Bun processes so terminal fixtures and process state cannot leak between files. A failed file receives one bounded retry after tmux is reset.
 
@@ -85,7 +85,7 @@ If you cannot manage labels, a maintainer or repository agent will apply the lab
 
 * `src/gateway/`: AI Gateway client transport
 
-* `.fx/skills/`: optional fx-native workspace-level skill root
+* `.fx/skills/`: optional omfx-native workspace-level skill root
 
 * `skills/`: optional shared workspace-level skill root
 
@@ -143,9 +143,9 @@ Subagent children are ordinary sessions with their own `~/.fx/sessions/<child-id
 
 ## Skills
 
-There are two distinct skill categories in `fx`:
+There are two distinct skill categories in `omfx`:
 
-* `fx` roots that belong to the product itself: `.fx/skills`, `skills/`, `~/.fx/skills`
+* `omfx` roots that belong to the product itself: `.fx/skills`, `skills/`, `~/.fx/skills`
 
 * compatibility roots discovered for other agent installs: `.opencode/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, `.claw/skills`, plus their global equivalents
 

@@ -1,5 +1,7 @@
 const std = @import("std");
 const io_mod = @import("../core/shared/io.zig");
+const product_identity = @import("../core/shared/product_identity.zig");
+const product_theme = @import("../core/shared/product_theme.zig");
 const host = @import("../core/hosts/host.zig");
 const display_width = @import("../core/shared/display_width.zig");
 const text_utils = @import("../core/shared/text_utils.zig");
@@ -15,8 +17,8 @@ pub const input_prefix = "❯ ";
 pub const TerminalRgb = user_message_card.Rgb;
 pub const reset_style = "\x1b[0m";
 pub const bold_style = "\x1b[1m";
-pub const app_name = "fx";
-pub const right_tag = "/fx";
+pub const app_name = product_identity.name;
+pub const right_tag = "/omfx";
 pub const ask_activity_label = "⏺ Asking";
 
 const user_message_card = @import("assistant/user_message_card.zig");
@@ -25,6 +27,11 @@ pub const welcome_message_reserved_rows: u16 = 11;
 
 pub var is_light: bool = false;
 pub var input_bar_style: []const u8 = "";
+pub var brand_style: []const u8 = "\x1b[38;5;81m";
+pub var focus_style: []const u8 = "\x1b[38;5;141m";
+pub var success_style: []const u8 = "\x1b[38;5;78m";
+pub var danger_style: []const u8 = "\x1b[38;5;203m";
+pub var border_style: []const u8 = "\x1b[38;5;240m";
 pub var divider_style: []const u8 = "\x1b[38;5;240m";
 pub var hint_style: []const u8 = "\x1b[38;5;255m";
 pub var statusline_style: []const u8 = "\x1b[38;5;245m";
@@ -57,13 +64,24 @@ var active_terminal_background: ?TerminalRgb = null;
 
 var truecolor_enabled: bool = true;
 
+fn applyProductPalette(light: bool) void {
+    const palette = product_theme.palette(truecolor_enabled, light);
+    brand_style = palette.brand;
+    focus_style = palette.focus;
+    success_style = palette.success;
+    danger_style = palette.danger;
+    border_style = palette.border;
+}
+
 pub fn setTruecolorSupport(enabled: bool) void {
     truecolor_enabled = enabled;
+    applyProductPalette(is_light);
 }
 
 pub fn initTheme(light: bool, terminal_bg: ?TerminalRgb) void {
     is_light = light;
     active_terminal_background = terminal_bg;
+    applyProductPalette(light);
     assistant_presentation.setInlineCodeTheme(light);
     if (light) {
         input_bar_style = "";
@@ -173,8 +191,8 @@ pub fn buildInputLineForRow(input: []const u8, cursor: usize, line_index: usize,
 pub fn welcomeMessage(alloc: std.mem.Allocator) ![]u8 {
     return std.fmt.allocPrint(
         alloc,
-        "{s}𝒇x{s}{s} v{s} · Run /help for commands" ++ reset_style ++ "\n\n",
-        .{ subtitle_style, reset_style, dim_style, main.version },
+        "{s}{s}{s}{s} v{s} · Run /help for commands" ++ reset_style ++ "\n\n",
+        .{ brand_style, product_identity.name, reset_style, dim_style, main.version },
     );
 }
 
@@ -665,7 +683,7 @@ fn titleOutput(raw: ?*anyopaque) std.Io.File {
 }
 
 const terminal_title_osc_prefix = "\x1b]2;";
-const terminal_title_display_prefix = "fx · ";
+const terminal_title_display_prefix = "omfx · ";
 const terminal_title_max_content_bytes: usize = 128;
 const terminal_title_max_label_bytes = terminal_title_max_content_bytes - terminal_title_display_prefix.len;
 

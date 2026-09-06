@@ -146,8 +146,8 @@ pub const RunResult = union(enum) {
     handled_exit: u8,
 };
 
-pub const record_modifier_usage = "usage: fx --record is only supported for interactive startup\n";
-const version_usage = "usage: fx --version\n";
+pub const record_modifier_usage = "usage: omfx --record is only supported for interactive startup\n";
+const version_usage = "usage: omfx --version\n";
 
 pub fn recordRequested(args: []const [:0]const u8) error{RecordModifierRequiresInteractive}!bool {
     var count: usize = 0;
@@ -656,11 +656,11 @@ fn runIfRequestedWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Con
         var writer: std.Io.Writer.Allocating = .init(alloc);
         defer writer.deinit();
         if (globalLaunchErrorMessage(err)) |message| {
-            try writer.writer.print("fx: {s}\n", .{message});
+            try writer.writer.print("omfx: {s}\n", .{message});
         } else {
-            try writer.writer.print("fx: invalid global launch option: {s}\n", .{@errorName(err)});
+            try writer.writer.print("omfx: invalid global launch option: {s}\n", .{@errorName(err)});
         }
-        try writer.writer.writeAll("usage: fx [--context-limit NAME=BYTES|off] [--add-dir PATH]... [--no-additional-dirs] <command>\n");
+        try writer.writer.writeAll("usage: omfx [--context-limit NAME=BYTES|off] [--add-dir PATH]... [--no-additional-dirs] <command>\n");
         try writeStderr(deps, writer.written());
         return .handled_failure;
     };
@@ -720,7 +720,7 @@ fn runNonInteractiveWithDeps(
         },
         .acp => |rest| {
             const acp_opts = parseAcpArgs(rest) catch {
-                try writeStderr(deps, "usage: fx acp [--model <id>] [--log-file <path>]\n");
+                try writeStderr(deps, "usage: omfx acp [--model <id>] [--log-file <path>]\n");
                 return .handled_failure;
             };
             try cfg.acp_runner.run(alloc, .{
@@ -762,7 +762,7 @@ fn runNonInteractiveWithDeps(
         .issue => |rest| return runGithubWorkflow(alloc, rest, cfg, global_args.modifiers, deps, .issue),
         .login => |rest| {
             const maybe_login_provider = parseLoginProvider(rest) catch {
-                try writeStderr(deps, "usage: fx login [vercel|codex]\n");
+                try writeStderr(deps, "usage: omfx login [vercel|codex]\n");
                 return .handled_failure;
             };
             // Preserve the original `fx login` behavior for scripts and users.
@@ -774,10 +774,10 @@ fn runNonInteractiveWithDeps(
                     cfg.url_opener,
                 ) catch |err| {
                     const message = switch (err) {
-                        error.ClientIdMissing => "fx login: missing FX_OAUTH_CLIENT_ID; configure the fx Vercel App client id first\n",
-                        error.AccessDenied => "fx login: authorization denied\n",
-                        error.ExpiredToken, error.LoginTimedOut => "fx login: authorization expired; run fx login again\n",
-                        else => "fx login: failed to sign in\n",
+                        error.ClientIdMissing => "omfx login: missing FX_OAUTH_CLIENT_ID; configure the omfx Vercel App client id first\n",
+                        error.AccessDenied => "omfx login: authorization denied\n",
+                        error.ExpiredToken, error.LoginTimedOut => "omfx login: authorization expired; run omfx login again\n",
+                        else => "omfx login: failed to sign in\n",
                     };
                     try writeStderr(deps, message);
                     return .handled_failure;
@@ -788,9 +788,9 @@ fn runNonInteractiveWithDeps(
                     cfg.url_opener,
                 ) catch |err| {
                     const message = switch (err) {
-                        error.ChatGptLoginTimedOut => "fx login: Codex authorization expired; run fx login codex again\n",
-                        error.ChatGptAuthorizationFailed => "fx login: Codex authorization denied\n",
-                        else => "fx login: failed to sign in with Codex\n",
+                        error.ChatGptLoginTimedOut => "omfx login: Codex authorization expired; run omfx login codex again\n",
+                        error.ChatGptAuthorizationFailed => "omfx login: Codex authorization denied\n",
+                        else => "omfx login: failed to sign in with Codex\n",
                     };
                     try writeStderr(deps, message);
                     return .handled_failure;
@@ -800,14 +800,14 @@ fn runNonInteractiveWithDeps(
         },
         .logout => |rest| {
             const maybe_login_provider = parseLoginProvider(rest) catch {
-                try writeStderr(deps, "usage: fx logout [vercel|codex]\n");
+                try writeStderr(deps, "usage: omfx logout [vercel|codex]\n");
                 return .handled_failure;
             };
             // Preserve the original `fx logout` behavior for scripts and users.
             const login_provider = maybe_login_provider orelse .vercel;
             if (login_provider == .codex) {
                 const outcome = chatgpt_oauth.logout() catch {
-                    try writeStderr(deps, "fx logout: failed to durably remove saved Codex login\n");
+                    try writeStderr(deps, "omfx logout: failed to durably remove saved Codex login\n");
                     return .handled_failure;
                 };
                 return switch (outcome) {
@@ -820,23 +820,23 @@ fn runNonInteractiveWithDeps(
                         break :result .handled_success;
                     },
                     .deleted_not_durable => result: {
-                        try writeStderr(deps, "fx logout: failed to durably remove saved Codex login\n");
+                        try writeStderr(deps, "omfx logout: failed to durably remove saved Codex login\n");
                         break :result .handled_failure;
                     },
                 };
             }
             const result = login_flow.logout(alloc, cfg.gateway_provider.oauth_transport) catch |err| switch (err) {
                 error.SessionDeleteFailed => {
-                    try writeStderr(deps, "fx logout: failed to durably remove saved Fx login\n");
+                    try writeStderr(deps, "omfx logout: failed to durably remove saved omfx login\n");
                     return .handled_failure;
                 },
             };
             if (result.local_durability_failed) {
-                try writeStderr(deps, "fx logout: failed to durably remove saved Fx login\n");
+                try writeStderr(deps, "omfx logout: failed to durably remove saved omfx login\n");
             } else {
                 try writeStdout(
                     deps,
-                    if (result.session_deleted) "Signed out of fx.\n" else "No fx login session found.\n",
+                    if (result.session_deleted) "Signed out of omfx.\n" else "No omfx login session found.\n",
                 );
             }
             if (result.remote_revocation_failed) {
@@ -847,17 +847,17 @@ fn runNonInteractiveWithDeps(
         },
         .teams => |rest| {
             if (rest.len != 0) {
-                try writeStderr(deps, "usage: fx teams\n");
+                try writeStderr(deps, "usage: omfx teams\n");
                 return .handled_failure;
             }
             login_flow.runTeams(alloc, cfg.gateway_provider.oauth_transport) catch |err| {
                 const message = switch (err) {
-                    error.NoSession => "fx teams: run fx login first\n",
-                    error.SessionChanged => "fx teams: authentication changed; try again\n",
-                    error.TeamRequestFailed => "fx teams: failed to list Vercel teams\n",
-                    error.InvalidTeamSelection => "fx teams: no team selected\n",
-                    error.AccessDenied => "fx teams: authorization denied\n",
-                    else => "fx teams: failed to switch team\n",
+                    error.NoSession => "omfx teams: run omfx login first\n",
+                    error.SessionChanged => "omfx teams: authentication changed; try again\n",
+                    error.TeamRequestFailed => "omfx teams: failed to list Vercel teams\n",
+                    error.InvalidTeamSelection => "omfx teams: no team selected\n",
+                    error.AccessDenied => "omfx teams: authorization denied\n",
+                    else => "omfx teams: failed to switch team\n",
                 };
                 try writeStderr(deps, message);
                 return .handled_failure;
@@ -866,21 +866,21 @@ fn runNonInteractiveWithDeps(
         },
         .provider => |rest| {
             if (rest.len != 1) {
-                try writeStderr(deps, "usage: fx provider <gateway|codex|opencode_go>\n");
+                try writeStderr(deps, "usage: omfx provider <gateway|codex|opencode_go>\n");
                 return .handled_failure;
             }
             const target = model_provider.parse(rest[0]) orelse {
-                try writeStderr(deps, "fx provider: expected gateway, codex, or opencode_go\n");
+                try writeStderr(deps, "omfx provider: expected gateway, codex, or opencode_go\n");
                 return .handled_failure;
             };
             if (target != .gateway and target != .codex and target != .opencode_go) {
-                try writeStderr(deps, "fx provider: expected gateway, codex, or opencode_go\n");
+                try writeStderr(deps, "omfx provider: expected gateway, codex, or opencode_go\n");
                 return .handled_failure;
             }
             const workspace_root = try io_mod.realpathAlloc(alloc, ".");
             defer alloc.free(workspace_root);
             var settings = config_runtime.loadMergedSettings(alloc, workspace_root) catch |err| {
-                try writeStderr(deps, "fx provider: could not load settings\n");
+                try writeStderr(deps, "omfx provider: could not load settings\n");
                 debug_trace.logf("config", "provider selection settings load failed err={s}", .{@errorName(err)});
                 return .handled_failure;
             };
@@ -907,7 +907,7 @@ fn runNonInteractiveWithDeps(
             if (resolution.credential == null and target == .codex) {
                 chatgpt_oauth.runLogin(alloc, cfg.gateway_provider.oauth_transport, cfg.url_opener) catch |err| {
                     debug_trace.logf("auth", "provider selection Codex login failed err={s}", .{@errorName(err)});
-                    try writeStderr(deps, "fx provider: Codex login failed\n");
+                    try writeStderr(deps, "omfx provider: Codex login failed\n");
                     return .handled_failure;
                 };
                 resolution = try credentials.resolveForProvider(
@@ -921,9 +921,9 @@ fn runNonInteractiveWithDeps(
             }
             const credential = if (resolution.credential) |*value| value else {
                 try writeStderr(deps, switch (target) {
-                    .codex => "fx provider: run fx login codex first\n",
-                    .opencode_go => "fx provider: set OPENCODE_GO_API_KEY first\n",
-                    .gateway => "fx provider: configure a Gateway credential first\n",
+                    .codex => "omfx provider: run omfx login codex first\n",
+                    .opencode_go => "omfx provider: set OPENCODE_GO_API_KEY first\n",
+                    .gateway => "omfx provider: configure a Gateway credential first\n",
                     else => unreachable,
                 });
                 return .handled_failure;
@@ -931,11 +931,11 @@ fn runNonInteractiveWithDeps(
             const catalog_provider = switch (target) {
                 .gateway => cfg.gateway_provider.model_catalog,
                 .codex => cfg.codex_model_catalog orelse {
-                    try writeStderr(deps, "fx provider: Codex model catalog is unavailable\n");
+                    try writeStderr(deps, "omfx provider: Codex model catalog is unavailable\n");
                     return .handled_failure;
                 },
                 .opencode_go => cfg.opencode_go_model_catalog orelse {
-                    try writeStderr(deps, "fx provider: OpenCode Go model catalog is unavailable\n");
+                    try writeStderr(deps, "omfx provider: OpenCode Go model catalog is unavailable\n");
                     return .handled_failure;
                 },
                 else => unreachable,
@@ -951,7 +951,7 @@ fn runNonInteractiveWithDeps(
                     debug_trace.logf("catalog", "provider selection catalog failed provider={s} category={s}", .{ @tagName(target), @tagName(failure.failure.category) });
                     const message = try std.fmt.allocPrint(
                         alloc,
-                        "fx provider: could not load the target model catalog ({s})\n",
+                        "omfx provider: could not load the target model catalog ({s})\n",
                         .{@tagName(failure.failure.category)},
                     );
                     defer alloc.free(message);
@@ -962,7 +962,7 @@ fn runNonInteractiveWithDeps(
             defer model_catalog.freeModelCatalog(alloc, &loaded.catalog);
             const saved_model = if (target == .codex) settings.codex_model else settings.model;
             const selected_model = selectCatalogModel(loaded.catalog.items, saved_model) orelse {
-                try writeStderr(deps, "fx provider: target model catalog is empty\n");
+                try writeStderr(deps, "omfx provider: target model catalog is empty\n");
                 return .handled_failure;
             };
             var attempt = config_runtime.attemptUserPreferences(alloc, if (target == .codex)
@@ -973,7 +973,7 @@ fn runNonInteractiveWithDeps(
             switch (attempt) {
                 .failure => |failure| {
                     debug_trace.logf("config", "provider selection persistence failed err={s}", .{@errorName(failure.err)});
-                    try writeStderr(deps, "fx provider: failed to save provider selection\n");
+                    try writeStderr(deps, "omfx provider: failed to save provider selection\n");
                     return .handled_failure;
                 },
                 .outcome => {},
@@ -1064,11 +1064,11 @@ fn runNonInteractiveWithDeps(
             const catalog_provider = switch (startup.provider) {
                 .gateway => cfg.gateway_provider.cli_model_catalog,
                 .codex => cfg.codex_cli_model_catalog orelse {
-                    try writeStderr(deps, "fx models: Codex model catalog is unavailable\n");
+                    try writeStderr(deps, "omfx models: Codex model catalog is unavailable\n");
                     return .handled_failure;
                 },
                 .opencode_go => cfg.opencode_go_cli_model_catalog orelse {
-                    try writeStderr(deps, "fx models: OpenCode Go model catalog is unavailable\n");
+                    try writeStderr(deps, "omfx models: OpenCode Go model catalog is unavailable\n");
                     return .handled_failure;
                 },
                 else => cfg.gateway_provider.cli_model_catalog,
@@ -1095,7 +1095,7 @@ fn runNonInteractiveWithDeps(
                             message,
                         );
                     } else {
-                        try writeStderr(deps, "fx models: ");
+                        try writeStderr(deps, "omfx models: ");
                         try writeStderr(deps, message);
                         try writeStderr(deps, "\n");
                     }
@@ -1541,7 +1541,7 @@ fn runNonInteractiveWithDeps(
                 if (opts.format == .json) {
                     try writeJsonCommandFailure(alloc, deps, "upgrade", err, "failed to load update settings");
                 } else {
-                    try writeStderr(deps, "fx upgrade: failed to load update settings\n");
+                    try writeStderr(deps, "omfx upgrade: failed to load update settings\n");
                 }
                 return .handled_failure;
             };
@@ -1554,7 +1554,7 @@ fn runNonInteractiveWithDeps(
                     if (opts.format == .json) {
                         try writeJsonCommandFailure(alloc, deps, "upgrade", err, "failed to save update channel");
                     } else {
-                        try writeStderr(deps, "fx upgrade: failed to save update channel\n");
+                        try writeStderr(deps, "omfx upgrade: failed to save update channel\n");
                     }
                     return .handled_failure;
                 };
@@ -1574,7 +1574,7 @@ fn runNonInteractiveWithDeps(
                 .text => .text,
                 .json => .json,
             }) catch {
-                try writeStderr(deps, "fx upgrade: render failed\n");
+                try writeStderr(deps, "omfx upgrade: render failed\n");
                 return .handled_failure;
             };
             defer alloc.free(text);
@@ -1587,7 +1587,7 @@ fn runNonInteractiveWithDeps(
             return if (exit_code == 0) .handled_success else .handled_failure;
         },
         .unknown => |command| {
-            try writeStderr(deps, "fx: unknown subcommand: ");
+            try writeStderr(deps, "omfx: unknown subcommand: ");
             try writeStderr(deps, command);
             try writeStderr(deps, "\n\n");
             try writeTopLevelHelp(alloc, cfg.command_catalog, deps, cfg.version, .stderr);
@@ -1653,8 +1653,8 @@ fn runGithubWorkflow(
 
     const draft = github_publish.parseDraft(alloc, run_result.assistant_output) catch {
         try writeStderr(deps, switch (workflow) {
-            .pull_request => "fx pr: failed to parse drafted PR title/body\n",
-            .issue => "fx issue: failed to parse drafted issue title/body\n",
+            .pull_request => "omfx pr: failed to parse drafted PR title/body\n",
+            .issue => "omfx issue: failed to parse drafted issue title/body\n",
         });
         return .handled_failure;
     };
@@ -1667,8 +1667,8 @@ fn runGithubWorkflow(
     defer published.deinit(alloc);
     if (!published.ok) {
         try writeStderr(deps, switch (workflow) {
-            .pull_request => "fx pr: ",
-            .issue => "fx issue: ",
+            .pull_request => "omfx pr: ",
+            .issue => "omfx issue: ",
         });
         try writeStderr(deps, published.text);
         try writeStderr(deps, "\n");
@@ -1693,17 +1693,17 @@ fn runPasteSetup(
     deps: RunDeps,
 ) !bool {
     if (secret_store.isDisabled()) {
-        try writeStderr(deps, "fx setup: stored API keys are disabled by FX_DISABLE_KEYCHAIN\n");
+        try writeStderr(deps, "omfx setup: stored API keys are disabled by FX_DISABLE_KEYCHAIN\n");
         return false;
     }
     if (!deps.setup_terminal_available(deps.setup_ctx)) {
-        try writeStderr(deps, "fx setup: an interactive terminal is required to paste an API key\n");
+        try writeStderr(deps, "omfx setup: an interactive terminal is required to paste an API key\n");
         return false;
     }
 
     try writeStderr(deps, "Paste AI Gateway API key (input hidden): ");
     const stored_interactively = secret_store.storeInteractive() catch {
-        try writeStderr(deps, "\nfx setup: API key was not saved\n");
+        try writeStderr(deps, "\nomfx setup: API key was not saved\n");
         return false;
     };
     if (!stored_interactively) {
@@ -1713,13 +1713,13 @@ fn runPasteSetup(
             deps.write_stderr,
             deps.stderr_ctx,
         ) catch {
-            try writeStderr(deps, "\nfx setup: API key was not saved\n");
+            try writeStderr(deps, "\nomfx setup: API key was not saved\n");
             return false;
         };
         defer secret.zeroAndFree(alloc, key);
         try writeStderr(deps, "\n");
         secret_store.store(alloc, key) catch {
-            try writeStderr(deps, "fx setup: API key was not saved\n");
+            try writeStderr(deps, "omfx setup: API key was not saved\n");
             return false;
         };
     }
@@ -2009,7 +2009,7 @@ fn selfExePathDefault(_: ?*anyopaque, alloc: Allocator) ![]u8 {
 }
 
 fn writeTopLevelUsage(command_catalog: CommandCatalog, deps: RunDeps, kind: TopLevelKind) !void {
-    try writeStderr(deps, "usage: fx ");
+    try writeStderr(deps, "usage: omfx ");
     try writeStderr(deps, command_specs.topLevelUsage(command_catalog, kind));
     try writeStderr(deps, "\n");
 }
@@ -2046,7 +2046,7 @@ fn writeUsageCommandFailure(
             message,
         );
     }
-    try writeStderr(deps, "fx usage: ");
+    try writeStderr(deps, "omfx usage: ");
     try writeStderr(deps, message);
     try writeStderr(deps, "\n");
 }
@@ -2070,7 +2070,7 @@ fn writeWorkspaceCommandError(
 ) !void {
     if (!argsContainJson(args)) {
         if (output_contracts.workspaceErrorMessage(err)) |message| {
-            try writeStderr(deps, "fx workspace: ");
+            try writeStderr(deps, "omfx workspace: ");
             try writeStderr(deps, message);
             try writeStderr(deps, "\n");
             return;
@@ -2102,7 +2102,7 @@ fn writeWorkspaceIndeterminateError(
         .unconfirmed => "settings durability is uncertain; reloaded settings match neither the requested nor previous state",
     };
     if (!argsContainJson(args)) {
-        try writeStderr(deps, "fx workspace: ");
+        try writeStderr(deps, "omfx workspace: ");
         try writeStderr(deps, message);
         try writeStderr(deps, "\n");
         return;
@@ -2562,102 +2562,102 @@ fn writeLookupFailure(
 
     switch (err) {
         error.NoBackgroundRecords => {
-            try writeStderr(deps, "fx ");
+            try writeStderr(deps, "omfx ");
             try writeStderr(deps, kind);
             try writeStderr(deps, ": no persisted records for this workspace\n");
         },
         error.BackgroundRecordNotFound => {
-            try writeStderr(deps, "fx ");
+            try writeStderr(deps, "omfx ");
             try writeStderr(deps, kind);
             try writeStderr(deps, ": record not found\n");
         },
         error.InvalidBackgroundRecord, error.UnsupportedBackgroundSchema => {
-            try writeStderr(deps, "fx ");
+            try writeStderr(deps, "omfx ");
             try writeStderr(deps, kind);
             try writeStderr(deps, ": record is unreadable or from an unsupported version\n");
         },
         error.NoSavedSessions => {
-            try writeStderr(deps, "fx session: no saved sessions for this workspace\n");
+            try writeStderr(deps, "omfx session: no saved sessions for this workspace\n");
         },
         error.NoReadableSessions => {
-            try writeStderr(deps, "fx session: saved sessions are unreadable; run `fx doctor` for recovery guidance\n");
+            try writeStderr(deps, "omfx session: saved sessions are unreadable; run `omfx doctor` for recovery guidance\n");
         },
         error.SessionNotFound => {
-            try writeStderr(deps, "fx session: record not found\n");
+            try writeStderr(deps, "omfx session: record not found\n");
         },
         error.InvalidSessionFormat => {
             try writeStderr(
                 deps,
-                "fx session: record is corrupt; run `fx doctor` for recovery guidance\n",
+                "omfx session: record is corrupt; run `omfx doctor` for recovery guidance\n",
             );
         },
         error.UnsupportedSessionSchema => {
             try writeStderr(
                 deps,
-                "fx session: record uses an unsupported session version\n",
+                "omfx session: record uses an unsupported session version\n",
             );
         },
         error.InvalidSessionId => {
-            try writeStderr(deps, "fx session: invalid session id\n");
+            try writeStderr(deps, "omfx session: invalid session id\n");
         },
         error.LegacySessionTooLarge => {
             try writeStderr(
                 deps,
-                "fx session: legacy session is too large for automatic loading; run `fx session migrate <id> --allow-large`\n",
+                "omfx session: legacy session is too large for automatic loading; run `omfx session migrate <id> --allow-large`\n",
             );
         },
         error.LegacySessionReadResourceExhausted => {
             try writeStderr(
                 deps,
-                "fx session: legacy session could not be loaded with available resources\n",
+                "omfx session: legacy session could not be loaded with available resources\n",
             );
         },
         error.LegacySessionMigrationResourceExhausted => {
             try writeStderr(
                 deps,
-                "fx session: migration did not complete because resources were exhausted; the original session remains authoritative\n",
+                "omfx session: migration did not complete because resources were exhausted; the original session remains authoritative\n",
             );
         },
         error.LegacySessionMigrationFailed, error.LegacySessionChanged => {
             try writeStderr(
                 deps,
-                "fx session: migration did not complete; the original session remains authoritative\n",
+                "omfx session: migration did not complete; the original session remains authoritative\n",
             );
         },
         error.LegacySessionMigrationIndeterminate => {
             try writeStderr(
                 deps,
-                "fx session: migration outcome is indeterminate and will be resolved by the next exact writable load\n",
+                "omfx session: migration outcome is indeterminate and will be resolved by the next exact writable load\n",
             );
         },
         error.SessionRecoveryNotNeeded => {
             try writeStderr(
                 deps,
-                "fx session: recovery was refused because the session has a valid commit boundary; resume it normally\n",
+                "omfx session: recovery was refused because the session has a valid commit boundary; resume it normally\n",
             );
         },
         error.SessionRecoveryRequiresCurrentSchema => {
             try writeStderr(
                 deps,
-                "fx session: recovery only applies to current schema-v3 sessions; migrate legacy sessions first\n",
+                "omfx session: recovery only applies to current schema-v3 sessions; migrate legacy sessions first\n",
             );
         },
         error.SessionRecoveryUnsupportedSchema => {
             try writeStderr(
                 deps,
-                "fx session: recovery is unavailable for this unsupported session version\n",
+                "omfx session: recovery is unavailable for this unsupported session version\n",
             );
         },
         error.SessionRecoveryBoundaryInvalid => {
             try writeStderr(
                 deps,
-                "fx session: no exact trustworthy recovery boundary was found; the source was left unchanged\n",
+                "omfx session: no exact trustworthy recovery boundary was found; the source was left unchanged\n",
             );
         },
         error.SessionRecoveryIndeterminate => {
             try writeStderr(
                 deps,
-                "fx session: the recovery copy could not be confirmed; the source was left unchanged\n",
+                "omfx session: the recovery copy could not be confirmed; the source was left unchanged\n",
             );
         },
         error.SessionAuthorityBoundaryUnavailable,
@@ -2665,19 +2665,19 @@ fn writeLookupFailure(
         => {
             try writeStderr(
                 deps,
-                "fx session: session authority is temporarily unavailable while an incomplete commit is resolved\n",
+                "omfx session: session authority is temporarily unavailable while an incomplete commit is resolved\n",
             );
         },
         error.SessionAuthorityIntentCleanupPending => {
             try writeStderr(
                 deps,
-                "fx session: session authority is confirmed but transition cleanup is still pending\n",
+                "omfx session: session authority is confirmed but transition cleanup is still pending\n",
             );
         },
         error.SessionBusy, error.SessionLockUnsupported => {
             try writeStderr(
                 deps,
-                "fx session: session is busy or the filesystem cannot provide the required lock\n",
+                "omfx session: session is busy or the filesystem cannot provide the required lock\n",
             );
         },
         error.SessionPathUnsafe,
@@ -2686,14 +2686,14 @@ fn writeLookupFailure(
         => {
             try writeStderr(
                 deps,
-                "fx session: durable session storage is unsafe or does not support required private permissions\n",
+                "omfx session: durable session storage is unsafe or does not support required private permissions\n",
             );
         },
         error.DurableLayoutFailed, error.SessionStoreUnavailable => {
-            try writeStderr(deps, "fx session: durable session store is unavailable\n");
+            try writeStderr(deps, "omfx session: durable session store is unavailable\n");
         },
         error.HomeNotSet => {
-            try writeStderr(deps, "fx ");
+            try writeStderr(deps, "omfx ");
             try writeStderr(deps, kind);
             try writeStderr(deps, ": HOME is not set\n");
         },
@@ -2711,7 +2711,7 @@ fn writeSessionDetailFailure(
     const message = switch (err) {
         error.InvalidSessionFormat => try std.fmt.allocPrint(
             alloc,
-            "session {s} is corrupt; run `fx session recover {s}`",
+            "session {s} is corrupt; run `omfx session recover {s}`",
             .{ session_id, session_id },
         ),
         error.UnsupportedSessionSchema => try std.fmt.allocPrint(
@@ -2737,7 +2737,7 @@ fn writeSessionDetailFailure(
             message,
         );
     }
-    try writeStderr(deps, "fx session: ");
+    try writeStderr(deps, "omfx session: ");
     try writeStderr(deps, message);
     try writeStderr(deps, "\n");
 }

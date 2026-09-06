@@ -19,6 +19,7 @@ const input_queue_runtime = @import("input_queue_runtime.zig");
 const image_attachments = @import("../images/image_attachments.zig");
 const core_input_runtime = @import("../input/runtime.zig");
 const io_mod = @import("../shared/io.zig");
+const product_identity = @import("../shared/product_identity.zig");
 const list_window = @import("../shared/list_window.zig");
 const text_utils = @import("../shared/text_utils.zig");
 const session_runtime = @import("../session/session.zig");
@@ -3690,8 +3691,8 @@ pub fn Runtime(comptime App: type) type {
                 .upgrade => |version| {
                     const body = try std.fmt.allocPrint(
                         app.alloc,
-                        "𝒇x has been updated to v{s}",
-                        .{version},
+                        "{s} has been updated to v{s}",
+                        .{ product_identity.name, version },
                     );
                     defer app.alloc.free(body);
                     try sink.appendNotice(.{

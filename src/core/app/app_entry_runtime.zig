@@ -179,7 +179,11 @@ fn runBeforeInteractiveWithDeps(alloc: Allocator, args: []const [:0]const u8, cf
         },
     };
 
-    return beforeInteractiveResultFromRunResult(alloc, run_result, deps.getenv(deps.env_ctx, "FX_BENCH") != null);
+    return beforeInteractiveResultFromRunResult(
+        alloc,
+        run_result,
+        (deps.getenv(deps.env_ctx, "OMFX_BENCH") orelse deps.getenv(deps.env_ctx, "FX_BENCH")) != null,
+    );
 }
 
 fn beforeInteractiveResultFromRunResult(alloc: Allocator, run_result: cli_surface.RunResult, bench: bool) BeforeInteractiveResult {
@@ -200,9 +204,9 @@ fn beforeInteractiveResultFromRunResult(alloc: Allocator, run_result: cli_surfac
 
 fn benchEnabled() bool {
     if (comptime builtin.link_libc) {
-        return std.c.getenv("FX_BENCH") != null;
+        return std.c.getenv("OMFX_BENCH") != null or std.c.getenv("FX_BENCH") != null;
     }
-    return io_mod.getenv("FX_BENCH") != null;
+    return io_mod.getenvProduct("OMFX_BENCH", "FX_BENCH") != null;
 }
 
 pub fn runInteractive(comptime App: type, alloc: Allocator, launch: *cli_surface.InteractiveLaunch) !RunOutcome {
@@ -224,49 +228,49 @@ fn runInteractiveWithDeps(comptime App: type, comptime cooperative: bool, alloc:
     var app = App.init(alloc, launch) catch |err| {
         switch (err) {
             error.NotATerminal => {
-                writeStderr(deps, "fx requires an interactive terminal (TTY).\n");
+                writeStderr(deps, "omfx requires an interactive terminal (TTY).\n");
                 return .{ .exit = 1 };
             },
             error.TerminalTooSmall => {
-                writeStderr(deps, "fx needs at least 5 terminal rows.\n");
+                writeStderr(deps, "omfx needs at least 5 terminal rows.\n");
                 return .returned;
             },
             error.RecordingStartFailed => {
-                writeStderr(deps, "fx: unable to start terminal recording.\n");
+                writeStderr(deps, "omfx: unable to start terminal recording.\n");
                 return .{ .exit = 1 };
             },
             error.NoSavedSessions => {
-                writeStderr(deps, "fx: no saved sessions for this workspace.\n");
+                writeStderr(deps, "omfx: no saved sessions for this workspace.\n");
                 return .{ .exit = 1 };
             },
             error.SessionNotFound => {
-                writeStderr(deps, "fx: saved session not found.\n");
+                writeStderr(deps, "omfx: saved session not found.\n");
                 return .{ .exit = 1 };
             },
             error.SessionBusy => {
-                writeStderr(deps, "fx: another Fx process may be using this session (running or suspended); check other terminals or run jobs, then use fg or quit that process\n");
+                writeStderr(deps, "omfx: another omfx process may be using this session (running or suspended); check other terminals or run jobs, then use fg or quit that process\n");
                 return .{ .exit = 1 };
             },
             error.SessionLockUnsupported => {
-                writeStderr(deps, "fx: the filesystem cannot provide the required session lock\n");
+                writeStderr(deps, "omfx: the filesystem cannot provide the required session lock\n");
                 return .{ .exit = 1 };
             },
             error.SessionAuthorityBoundaryUnavailable,
             error.SessionCommitBoundaryUnavailable,
             => {
-                writeStderr(deps, "fx: this session is being updated; wait a moment and retry\n");
+                writeStderr(deps, "omfx: this session is being updated; wait a moment and retry\n");
                 return .{ .exit = 1 };
             },
             error.OneOffSessionNotResumable => {
-                writeStderr(deps, "fx: one-off child sessions cannot accept additional prompts; create a persistent child to continue the conversation\n");
+                writeStderr(deps, "omfx: one-off child sessions cannot accept additional prompts; create a persistent child to continue the conversation\n");
                 return .{ .exit = 1 };
             },
             error.InvalidSessionFormat => {
-                writeStderr(deps, "fx: saved session is unreadable. Run `fx doctor`; if it is recoverable, use `fx session recover <id>`.\n");
+                writeStderr(deps, "omfx: saved session is unreadable. Run `omfx doctor`; if it is recoverable, use `omfx session recover <id>`.\n");
                 return .{ .exit = 1 };
             },
             error.UnsupportedSessionSchema => {
-                writeStderr(deps, "fx: saved session uses an unsupported version and cannot be resumed by this fx build.\n");
+                writeStderr(deps, "omfx: saved session uses an unsupported version and cannot be resumed by this omfx build.\n");
                 return .{ .exit = 1 };
             },
             error.RetiredSandboxValue, error.UnsupportedSandboxValue => {
@@ -346,7 +350,7 @@ fn runInteractiveWithDeps(comptime App: type, comptime cooperative: bool, alloc:
         } else {
             writeStderr(
                 deps,
-                "fx: upgrade installed, but no validated resume handoff was available. Your conversation remains on disk; run `fx doctor`.\n",
+                "omfx: upgrade installed, but no validated resume handoff was available. Your conversation remains on disk; run `omfx doctor`.\n",
             );
         }
         return .{ .exit = 1 };
@@ -384,9 +388,9 @@ fn writeUpgradeRelaunchFailure(
     var buffer: [768]u8 = undefined;
     const message = std.fmt.bufPrint(
         &buffer,
-        "fx: upgrade installed, but relaunch failed: {s}\nContinue session with: fx --resume {s}\n",
+        "omfx: upgrade installed, but relaunch failed: {s}\nContinue session with: omfx --resume {s}\n",
         .{ @errorName(err), session_id },
-    ) catch "fx: upgrade installed, but relaunch failed; run `fx doctor`.\n";
+    ) catch "omfx: upgrade installed, but relaunch failed; run `omfx doctor`.\n";
     writeStderr(deps, message);
 }
 
@@ -463,13 +467,13 @@ fn writeRealStdout(_: ?*anyopaque, text: []const u8) !void {
 fn formatResumeHandoff(buffer: []u8, session_id: []const u8) ![]const u8 {
     return std.fmt.bufPrint(
         buffer,
-        "Continue session with: fx --resume {s}\n",
+        "Continue session with: omfx --resume {s}\n",
         .{session_id},
     );
 }
 
 fn formatUnexpectedError(buffer: []u8, err: anyerror) ![]const u8 {
-    return std.fmt.bufPrint(buffer, "fx: {s}\n", .{@errorName(err)});
+    return std.fmt.bufPrint(buffer, "omfx: {s}\n", .{@errorName(err)});
 }
 
 fn reportUnexpectedInteractiveError(deps: RunDeps, err: anyerror) void {
@@ -483,7 +487,7 @@ fn writeStderr(deps: RunDeps, text: []const u8) void {
 }
 
 fn tryWriteErrorMessage(deps: RunDeps, err: anyerror) void {
-    writeStderr(deps, "fx: ");
+    writeStderr(deps, "omfx: ");
     if (sandbox.configErrorMessage(err)) |message| {
         writeStderr(deps, message);
     } else {

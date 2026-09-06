@@ -192,7 +192,7 @@ pub fn Runtime(comptime App: type) type {
                     try writeAuthNotice(app, .{
                         .topic = "auth",
                         .tone = .@"error",
-                        .body = "Could not complete fx logout. The current source is unchanged.",
+                        .body = "Could not complete omfx logout. The current source is unchanged.",
                     });
                     return;
                 },
@@ -226,19 +226,19 @@ pub fn Runtime(comptime App: type) type {
                 .{
                     .topic = "auth",
                     .tone = .warning,
-                    .body = "Could not confirm durable fx logout. The active source was recalculated.",
+                    .body = "Could not confirm durable omfx logout. The active source was recalculated.",
                 }
             else if (result.session_deleted)
                 .{
                     .topic = "auth",
                     .tone = .neutral,
-                    .body = "Signed out of fx.",
+                    .body = "Signed out of omfx.",
                 }
             else
                 .{
                     .topic = "auth",
                     .tone = .neutral,
-                    .body = "No fx login session found.",
+                    .body = "No omfx login session found.",
                 });
             if (result.remote_revocation_failed) {
                 try writeAuthNotice(app, .{
@@ -352,7 +352,7 @@ pub fn Runtime(comptime App: type) type {
                                 try writeAuthNotice(app, .{
                                     .topic = "auth",
                                     .tone = .@"error",
-                                    .body = "Signed in, but the fx login credential could not be loaded.",
+                                    .body = "Signed in, but the omfx login credential could not be loaded.",
                                 });
                                 return;
                             }
@@ -676,7 +676,7 @@ pub fn Runtime(comptime App: type) type {
                     .topic = "provider",
                     .tone = .warning,
                     .body = if (target == .codex)
-                        "Run fx login codex, then try switching again."
+                        "Run omfx login codex, then try switching again."
                     else
                         credentials.missing_credential_message_for_provider(target, true),
                 }, true);
@@ -745,7 +745,7 @@ pub fn Runtime(comptime App: type) type {
                 .openai_compatible => settings.model,
                 .opencode_go => settings.model,
             };
-            const requested_model = io_mod.getenv("FX_MODEL") orelse saved_model;
+            const requested_model = io_mod.getenvProduct("OMFX_MODEL", "FX_MODEL") orelse saved_model;
             var selected: ?[]const u8 = null;
             if (requested_model) |candidate| {
                 for (catalog.items) |entry| {
@@ -827,7 +827,7 @@ pub fn Runtime(comptime App: type) type {
                     .topic = "auth",
                     .tone = .@"error",
                     .body = switch (err) {
-                        error.NoSession => "The fx login session is no longer available. Sign in to change teams.",
+                        error.NoSession => "The omfx login session is no longer available. Sign in to change teams.",
                         error.NoTeams => "No Vercel teams are available for this account.",
                         else => "Could not load Vercel teams. The current team is unchanged.",
                     },
@@ -857,7 +857,7 @@ pub fn Runtime(comptime App: type) type {
                     .topic = "auth",
                     .tone = .@"error",
                     .body = switch (err) {
-                        error.SessionChanged, error.NoSession => "The fx login session changed before the team could be saved.",
+                        error.SessionChanged, error.NoSession => "The omfx login session changed before the team could be saved.",
                         else => "Could not change the Vercel team. The current team is unchanged.",
                     },
                 }, true);
@@ -872,7 +872,7 @@ pub fn Runtime(comptime App: type) type {
                 try app.writeDomainNotice(.{
                     .topic = "auth",
                     .tone = .@"error",
-                    .body = "Changed the Vercel team, but the fx login credential could not be loaded.",
+                    .body = "Changed the Vercel team, but the omfx login credential could not be loaded.",
                 }, true);
                 return;
             }
@@ -1048,7 +1048,7 @@ fn loginFailureNotice(source: credentials.Source, err: anyerror) types.SemanticN
             else => .{ .topic = "auth", .tone = .@"error", .body = "OpenCode Go sign-in failed. The current credential is unchanged." },
         },
         else => switch (err) {
-            error.ClientIdMissing => .{ .topic = "auth", .tone = .@"error", .body = "fx login is not configured yet. The current credential is unchanged." },
+            error.ClientIdMissing => .{ .topic = "auth", .tone = .@"error", .body = "omfx login is not configured yet. The current credential is unchanged." },
             error.AccessDenied => .{ .topic = "auth", .tone = .@"error", .body = "Vercel sign-in was denied. The current credential is unchanged." },
             error.ExpiredToken, error.LoginTimedOut => .{ .topic = "auth", .tone = .warning, .body = "The Vercel sign-in code expired. The current credential is unchanged; run /login to try again." },
             else => .{ .topic = "auth", .tone = .@"error", .body = "Vercel sign-in failed. The current credential is unchanged." },
