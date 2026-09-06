@@ -40,7 +40,7 @@ fn rootOverride() ?[]const u8 {
 
 /// Opens the active profile root. With no override this is `$HOME/.fx`; with
 /// `OMFX_HOME` it is the exact absolute directory supplied by the user.
-pub fn openRootDir(home: std.Io.Dir, options: anytype) !std.Io.Dir {
+pub fn openRootDir(home: std.Io.Dir, options: std.Io.Dir.OpenOptions) !std.Io.Dir {
     if (rootOverride()) |path| {
         return io_mod.openDirAbsoluteNoFollow(path, .{
             .iterate = options.iterate,
