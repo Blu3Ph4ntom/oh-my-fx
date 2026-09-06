@@ -121,6 +121,22 @@ test "non-Darwin process I/O keeps the original vtable" {
     try std.testing.expect(selected.vtable == original.vtable);
 }
 
+test "Windows raw input mode enables virtual terminal keys" {
+    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
+
+    const unrelated: std.os.windows.DWORD = 0x4000;
+    const original = windows_console_echo_input |
+        windows_console_line_input |
+        windows_console_processed_input |
+        windows_console_quick_edit_input |
+        unrelated;
+
+    try std.testing.expectEqual(
+        windows_console_extended_flags | windows_console_virtual_terminal_input | unrelated,
+        windows_console_raw_input_mode(original),
+    );
+}
+
 test "openDirAbsoluteNoFollow rejects unsafe path components" {
     const alloc = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -539,6 +555,18 @@ pub fn windows_console_enable_utf8() void {
 pub const windows_console_echo_input: std.os.windows.DWORD = 0x0004;
 pub const windows_console_line_input: std.os.windows.DWORD = 0x0002;
 pub const windows_console_processed_input: std.os.windows.DWORD = 0x0001;
+const windows_console_quick_edit_input: std.os.windows.DWORD = 0x0040;
+const windows_console_extended_flags: std.os.windows.DWORD = 0x0080;
+const windows_console_virtual_terminal_input: std.os.windows.DWORD = 0x0200;
+
+fn windows_console_raw_input_mode(mode: std.os.windows.DWORD) std.os.windows.DWORD {
+    return (mode & ~(windows_console_echo_input |
+        windows_console_line_input |
+        windows_console_processed_input |
+        windows_console_quick_edit_input)) |
+        windows_console_extended_flags |
+        windows_console_virtual_terminal_input;
+}
 
 /// Current console input mode, if the handle is a console.
 pub fn windowsConsoleGetMode() ?std.os.windows.DWORD {
@@ -558,7 +586,7 @@ pub fn windowsConsoleSetRaw() ?std.os.windows.DWORD {
     if (GetConsoleMode(handle, &mode) == .FALSE) return null;
     // Clearing processed input lets Fx observe Ctrl-C itself, matching the
     // POSIX raw mode that disables ISIG.
-    const raw = mode & ~(windows_console_echo_input | windows_console_line_input | windows_console_processed_input);
+    const raw = windows_console_raw_input_mode(mode);
     if (SetConsoleMode(handle, raw) == .FALSE) return null;
     return mode;
 }
