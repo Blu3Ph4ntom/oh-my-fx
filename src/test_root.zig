@@ -1,4 +1,5 @@
 test {
+    _ = @import("core/auth/auth_runtime.zig");
     _ = @import("core/shared/io.zig");
     _ = @import("gateway/openai.zig");
     _ = @import("gateway/opencode_go.zig");

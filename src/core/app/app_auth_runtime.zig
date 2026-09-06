@@ -120,7 +120,7 @@ pub fn Runtime(comptime App: type) type {
                 try app.writeDomainNotice(.{
                     .topic = "provider",
                     .tone = .warning,
-                    .body = "Usage: /provider [gateway|codex]",
+                    .body = "Usage: /provider [gateway|codex|opencode_go]",
                 }, true);
                 return;
             };

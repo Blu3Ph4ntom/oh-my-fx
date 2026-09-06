@@ -384,7 +384,7 @@ pub const PickerView = struct {
                 4
             else
                 5,
-            .provider => 2,
+            .provider => 3,
             .sign_in, .api_key => 0,
             .change_team => blk: {
                 var count: usize = 0;
@@ -431,6 +431,7 @@ pub const PickerView = struct {
             .provider => switch (index) {
                 0 => .{ .provider = .gateway },
                 1 => .{ .provider = .codex },
+                2 => .{ .provider = .opencode_go },
                 else => null,
             },
             .sign_in, .api_key => null,
@@ -2235,6 +2236,20 @@ test "auth picker root starts on sign in and keeps sources in the switch stage" 
     try std.testing.expect((Choice{ .action = .login }).eql(picker.selected_choice.?));
     try std.testing.expectEqual(@as(usize, 5), picker.choiceCount());
     try std.testing.expect(picker.choiceAt(5) == null);
+}
+
+test "provider picker exposes OpenCode Go alongside built-in providers" {
+    const alloc = std.testing.allocator;
+    var runtime: Runtime = .{};
+    defer runtime.deinit(alloc);
+
+    runtime.openProviderPicker(alloc, .gateway);
+
+    const picker = runtime.pickerView();
+    try std.testing.expectEqual(@as(usize, 3), picker.choiceCount());
+    try std.testing.expect((Choice{ .provider = .gateway }).eql(picker.choiceAt(0).?));
+    try std.testing.expect((Choice{ .provider = .codex }).eql(picker.choiceAt(1).?));
+    try std.testing.expect((Choice{ .provider = .opencode_go }).eql(picker.choiceAt(2).?));
 }
 
 test "credential switcher excludes provider-routed ChatGPT sessions" {

@@ -204,4 +204,5 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "converts gateway tools"
           zig test -lc src/test_root.zig --test-filter "omits tools for none"
           zig test -lc src/test_root.zig --test-filter "Windows raw input mode"
+          zig test -lc src/test_root.zig --test-filter "provider picker exposes OpenCode Go"
           zig test -lc src/test_root.zig --test-filter "provider"
