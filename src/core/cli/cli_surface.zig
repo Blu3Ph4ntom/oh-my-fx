@@ -796,6 +796,16 @@ fn runNonInteractiveWithDeps(
                     return .handled_failure;
                 },
             }
+            if (login_provider == .codex) {
+                // A successful OAuth exchange must also select Codex. Otherwise
+                // the next startup remains on Gateway and asks for a second login.
+                return try runIfRequestedWithDeps(
+                    alloc,
+                    &.{ @constCast("provider"), @constCast("codex") },
+                    cfg,
+                    deps,
+                );
+            }
             return .handled_success;
         },
         .logout => |rest| {

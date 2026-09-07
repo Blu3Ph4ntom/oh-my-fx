@@ -573,7 +573,7 @@ pub fn Runtime(comptime App: type) type {
 
         fn beginChatGptSignIn(app: *App) !void {
             try app.flushBeforeBlockingExternalWork();
-            const started = app.auth.openChatGptSignInPickerFromRoot(app.alloc);
+            const started = app.auth.openChatGptSignInPickerForProviderSwitch(app.alloc);
             if (started catch |err| {
                 debug_trace.logf("auth", "ChatGPT login failed err={s}", .{@errorName(err)});
                 try writeLoginError(app, .chatgpt_subscription, err);
@@ -1141,6 +1141,8 @@ const TestAuth = struct {
     selected_team_adopted: bool = false,
     sign_in_url: ?[]const u8 = null,
     picker_pop_count: usize = 0,
+    chatgpt_root_sign_in_opened: bool = false,
+    chatgpt_provider_sign_in_opened: bool = false,
 
     fn credentialSource(self: *const TestAuth) ?credentials.Source {
         return self.active_source;
@@ -1218,6 +1220,16 @@ const TestAuth = struct {
     fn signInBrowserUrlAlloc(self: *TestAuth, alloc: std.mem.Allocator) !?[]u8 {
         const url = self.sign_in_url orelse return null;
         return try alloc.dupe(u8, url);
+    }
+
+    fn openChatGptSignInPickerFromRoot(self: *TestAuth, _: std.mem.Allocator) !bool {
+        self.chatgpt_root_sign_in_opened = true;
+        return true;
+    }
+
+    fn openChatGptSignInPickerForProviderSwitch(self: *TestAuth, _: std.mem.Allocator) !bool {
+        self.chatgpt_provider_sign_in_opened = true;
+        return true;
     }
 };
 
@@ -1392,6 +1404,16 @@ test "interactive sign-in frees its browser URL when the host opener errors" {
         Runtime(TestApp).openSignInBrowser(&app),
     );
     try std.testing.expectEqual(@as(usize, 1), app.test_url_opener.calls);
+}
+
+test "Codex onboarding sign-in enters the provider activation flow" {
+    var app: TestApp = .{};
+    defer app.deinit();
+
+    try Runtime(TestApp).applyPickerChoice(&app, .{ .action = .chatgpt_login });
+
+    try std.testing.expect(app.auth.chatgpt_provider_sign_in_opened);
+    try std.testing.expect(!app.auth.chatgpt_root_sign_in_opened);
 }
 
 test "auth source changes invalidate the catalog and failed selection preserves it" {

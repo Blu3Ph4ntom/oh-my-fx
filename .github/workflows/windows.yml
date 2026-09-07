@@ -213,6 +213,7 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "provider picker exposes OpenCode Go"
           zig test -lc src/test_root.zig --test-filter "provider credential guidance names"
           zig test -lc src/test_root.zig --test-filter "auth status snapshot names the selected OpenCode Go credential"
+          zig test -lc src/test_root.zig --test-filter "Codex onboarding sign-in enters the provider activation flow"
           zig test -lc src/test_root.zig --test-filter "app_input_runtime provider picker routes terminal actions"
           zig test -lc src/test_root.zig --test-filter "app_input_runtime provider picker Escape"
           zig test -lc src/test_root.zig --test-filter "provider"
