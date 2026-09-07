@@ -129,6 +129,19 @@ pub fn streamCompletion(
 
     var auth_header: ?[]u8 = null;
     defer if (auth_header) |v| alloc.free(v);
+    var generated_session_id: [64]u8 = undefined;
+    const session_id = if (request.session_id) |value| blk: {
+        if (value.len > 0) break :blk value;
+        break :blk try std.fmt.bufPrint(
+            &generated_session_id,
+            "omfx-{d}-{d}",
+            .{ request.trace_ctx.turn_id, request.trace_ctx.step_id },
+        );
+    } else try std.fmt.bufPrint(
+        &generated_session_id,
+        "omfx-{d}-{d}",
+        .{ request.trace_ctx.turn_id, request.trace_ctx.step_id },
+    );
     var extra_headers_buf: [3]std.http.Header = undefined;
     var extra_len: usize = 0;
     if (request.api_key.len > 0) {
@@ -138,10 +151,8 @@ pub fn streamCompletion(
     }
     extra_headers_buf[extra_len] = .{ .name = "Accept", .value = "text/event-stream" };
     extra_len += 1;
-    if (request.session_id) |session_id| if (session_id.len > 0) {
-        extra_headers_buf[extra_len] = .{ .name = "x-opencode-session", .value = session_id };
-        extra_len += 1;
-    };
+    extra_headers_buf[extra_len] = .{ .name = "x-opencode-session", .value = session_id };
+    extra_len += 1;
 
     var req = try client.request(.POST, uri, .{
         .headers = .{
