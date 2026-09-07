@@ -580,7 +580,7 @@ pub fn Runtime(comptime App: type) type {
                 return;
             }) {
                 app.shell.render_requests.request(.footer);
-                if (io_mod.getenv("FX_NO_OPEN_BROWSER") == null) try openSignInBrowser(app);
+                if (io_mod.getenvProduct("OMFX_NO_OPEN_BROWSER", "FX_NO_OPEN_BROWSER") == null) try openSignInBrowser(app);
             }
         }
 
@@ -593,7 +593,7 @@ pub fn Runtime(comptime App: type) type {
                 return;
             }) {
                 app.shell.render_requests.request(.footer);
-                if (io_mod.getenv("FX_NO_OPEN_BROWSER") == null) try openSignInBrowser(app);
+                if (io_mod.getenvProduct("OMFX_NO_OPEN_BROWSER", "FX_NO_OPEN_BROWSER") == null) try openSignInBrowser(app);
             }
         }
 
@@ -900,8 +900,9 @@ pub fn Runtime(comptime App: type) type {
                 app.shell.render_requests.request(.footer);
                 // Open the browser as soon as the device code is ready instead of
                 // waiting for Enter; Enter stays as a manual re-open, and
-                // FX_NO_OPEN_BROWSER opts out for headless/SSH sessions.
-                if (io_mod.getenv("FX_NO_OPEN_BROWSER") == null) try openSignInBrowser(app);
+                // OMFX_NO_OPEN_BROWSER opts out for headless/SSH sessions;
+                // FX_NO_OPEN_BROWSER remains supported for compatibility.
+                if (io_mod.getenvProduct("OMFX_NO_OPEN_BROWSER", "FX_NO_OPEN_BROWSER") == null) try openSignInBrowser(app);
             }
         }
 

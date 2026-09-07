@@ -24,6 +24,7 @@ const browser_callback_ports = [_]u16{ 1455, 1457 };
 const browser_login_timeout_seconds: i64 = 5 * 60;
 const browser_callback_poll_ms: i32 = 100;
 const browser_callback_io_timeout_seconds: i64 = 30;
+const browser_callback_host = if (builtin.os.tag == .windows) "127.0.0.1" else "localhost";
 
 pub const RefreshMode = enum {
     if_needed,
@@ -110,8 +111,8 @@ fn prepareBrowserSignIn(alloc: Allocator) !PreparedBrowserLogin {
     const callback_port = listener.socket.address.getPort();
     const redirect_uri = try std.fmt.allocPrint(
         alloc,
-        "http://localhost:{d}/auth/callback",
-        .{callback_port},
+        "http://{s}:{d}/auth/callback",
+        .{ browser_callback_host, callback_port },
     );
     errdefer alloc.free(redirect_uri);
     const code_verifier = try randomUrlSafeSecret(alloc);
@@ -463,7 +464,7 @@ pub fn runLogin(
     try writeStdout("Open this URL to sign in with Codex:\n");
     try writeStdout(authorization_url);
     try writeStdout("\n\nWaiting for browser authorization...\n");
-    if (io_mod.getenv("FX_NO_OPEN_BROWSER") == null) {
+    if (io_mod.getenvProduct("OMFX_NO_OPEN_BROWSER", "FX_NO_OPEN_BROWSER") == null) {
         _ = url_opener.open(alloc, authorization_url) catch false;
     }
 
@@ -1021,6 +1022,28 @@ test "ChatGPT browser authorization URL uses PKCE without device authentication"
     try std.testing.expect(std.mem.find(u8, url, "state=state-value") != null);
     try std.testing.expect(std.mem.find(u8, url, "originator=fx") != null);
     try std.testing.expect(std.mem.find(u8, url, "device") == null);
+}
+
+test "ChatGPT browser authorization URL keeps redirect URI" {
+    const redirect_uri = try std.fmt.allocPrint(
+        std.testing.allocator,
+        "http://{s}:1455/auth/callback",
+        .{browser_callback_host},
+    );
+    defer std.testing.allocator.free(redirect_uri);
+
+    const url = try buildBrowserAuthorizationUrl(
+        std.testing.allocator,
+        "https://auth.openai.com",
+        redirect_uri,
+        "challenge-value",
+        "state-value",
+    );
+    defer std.testing.allocator.free(url);
+
+    try std.testing.expect(std.mem.find(u8, url, "redirect_uri=http%3A%2F%2F") != null);
+    try std.testing.expect(std.mem.find(u8, url, browser_callback_host) != null);
+    try std.testing.expect(std.mem.find(u8, url, "%3A1455%2Fauth%2Fcallback") != null);
 }
 
 test "ChatGPT browser callback requires the exact path and state" {

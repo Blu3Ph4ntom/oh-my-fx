@@ -457,7 +457,7 @@ pub fn runLogin(
     try writeStdout("Open this URL to sign in with Grok:\n");
     try writeStdout(authorization_url);
     try writeStdout("\n\nWaiting for browser authorization...\n");
-    if (io_mod.getenv("FX_NO_OPEN_BROWSER") == null) {
+    if (io_mod.getenvProduct("OMFX_NO_OPEN_BROWSER", "FX_NO_OPEN_BROWSER") == null) {
         _ = url_opener.open(alloc, authorization_url) catch false;
     }
 
