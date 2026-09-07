@@ -54,9 +54,13 @@ fn launchUrl(
 ) LaunchOutcome {
     var macos_argv = [_][]const u8{ "open", url };
     var linux_argv = [_][]const u8{ "xdg-open", url };
+    // Launch Explorer directly instead of going through `cmd /c start`: the
+    // latter lets OAuth query-string ampersands become shell separators.
+    var windows_argv = [_][]const u8{ "explorer.exe", url };
     const argv: []const []const u8 = switch (os_tag) {
         .macos => &macos_argv,
         .linux => &linux_argv,
+        .windows => &windows_argv,
         else => return .unsupported,
     };
 
@@ -118,11 +122,19 @@ test "url opener selects the platform launcher argv" {
     try std.testing.expectEqualStrings("xdg-open http://localhost:3000", linux.argv_joined.items);
 }
 
+test "url opener selects Explorer on Windows and preserves the URL as one argument" {
+    const alloc = std.testing.allocator;
+    var mock = MockLauncher{};
+    defer mock.deinit(alloc);
+    try std.testing.expectEqual(LaunchOutcome.opened, launchUrl(alloc, "https://auth.example/authorize?code=1&state=2", .windows, mock.launcher()));
+    try std.testing.expectEqualStrings("explorer.exe https://auth.example/authorize?code=1&state=2", mock.argv_joined.items);
+}
+
 test "url opener reports unsupported platforms without launching" {
     const alloc = std.testing.allocator;
     var mock = MockLauncher{};
     defer mock.deinit(alloc);
-    try std.testing.expectEqual(LaunchOutcome.unsupported, launchUrl(alloc, "http://x", .windows, mock.launcher()));
+    try std.testing.expectEqual(LaunchOutcome.unsupported, launchUrl(alloc, "http://x", .freebsd, mock.launcher()));
     try std.testing.expectEqualStrings("", mock.argv_joined.items);
 }
 
