@@ -628,12 +628,14 @@ const App = struct {
                 .terminal_title = app.terminalTitle(),
             },
         );
+        debug_trace.logf("startup", "App.init bootstrap returned", .{});
         errdefer app.deinit();
         try WorkspaceAppRuntime.applyLaunch(
             &app,
             launch.modifiers.additional_directories,
             launch.modifiers.saved_directories_suppressed,
         );
+        debug_trace.logf("startup", "launch directories applied", .{});
         app.context_limits.applyCommandLine(launch.modifiers.context_limit_overrides);
         if (comptime host_profile.durable_sessions or host_profile.js_host_sessions) {
             if (app.requested_resume != null) {
@@ -651,6 +653,7 @@ const App = struct {
         if (comptime host_profile.durable_sessions) {
             SessionAppRuntime.primeSessionPicker(&app);
         }
+        debug_trace.logf("startup", "session picker primed", .{});
         const env_disabled = if (io_mod.getenv("FX_AUTO_UPGRADE")) |val|
             std.mem.eql(u8, val, "0") or std.ascii.eqlIgnoreCase(val, "false")
         else
@@ -660,6 +663,7 @@ const App = struct {
         }
         if (comptime !host_profile.auto_upgrade) app.auto_upgrade_enabled = false;
         try HostConfigAppRuntime.restore(&app, builtin_modes.registry);
+        debug_trace.logf("startup", "host config restored", .{});
         SessionAppRuntime.syncTerminalTitle(&app);
         return app;
     }
