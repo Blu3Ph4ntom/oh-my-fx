@@ -77,10 +77,7 @@ pub const OpenedSkillCandidate = struct {
         if (invalidResourceSegment(segment)) return error.InvalidSkillResourcePath;
 
         const child_segment = segments.next() orelse {
-            return self.dir.openFile(io_mod.getIo(), segment, .{
-                .allow_directory = false,
-                .follow_symlinks = false,
-            });
+            return io_mod.openExistingRegularFile(self.dir, segment, .read_only);
         };
         if (invalidResourceSegment(child_segment)) return error.InvalidSkillResourcePath;
 
@@ -99,10 +96,7 @@ pub const OpenedSkillCandidate = struct {
             current_dir = next_dir;
             segment = next_segment;
         }
-        return current_dir.openFile(io_mod.getIo(), segment, .{
-            .allow_directory = false,
-            .follow_symlinks = false,
-        });
+        return io_mod.openExistingRegularFile(current_dir, segment, .read_only);
     }
 };
 
@@ -587,10 +581,7 @@ fn appendSkillCandidate(
         return;
     }
 
-    var file = candidate_dir.openFile(io_mod.getIo(), "SKILL.md", .{
-        .allow_directory = false,
-        .follow_symlinks = false,
-    }) catch |err| {
+    var file = io_mod.openExistingRegularFile(candidate_dir, "SKILL.md", .read_only) catch |err| {
         if (err == error.FileNotFound) return;
         if (err == error.OutOfMemory) return error.OutOfMemory;
         if (diagnostics) |items| try appendSkillDiagnostic(alloc, items, candidate_path, root.source, .candidate, .unreadable);
@@ -709,10 +700,7 @@ pub fn openValidatedSkillCandidate(alloc: Allocator, skill: Skill) error{OutOfMe
             return if (err == error.FileNotFound) .missing else .{ .skipped = .unreadable };
         };
     };
-    var file = candidate_dir.openFile(io_mod.getIo(), "SKILL.md", .{
-        .allow_directory = false,
-        .follow_symlinks = false,
-    }) catch |err| {
+    var file = io_mod.openExistingRegularFile(candidate_dir, "SKILL.md", .read_only) catch |err| {
         candidate_dir.close(io_mod.getIo());
         if (err == error.OutOfMemory) return error.OutOfMemory;
         return if (err == error.FileNotFound) .missing else .{ .skipped = .unreadable };

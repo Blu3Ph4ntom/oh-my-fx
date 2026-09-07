@@ -4,6 +4,7 @@ test {
     _ = @import("core/shared/profile_paths.zig");
     _ = @import("core/auth/auth_runtime.zig");
     _ = @import("core/app/app_auth_runtime.zig");
+    _ = @import("core/app/app_runtime_setup.zig");
     _ = @import("core/shared/io.zig");
     _ = @import("gateway/openai.zig");
     _ = @import("gateway/opencode_go.zig");
