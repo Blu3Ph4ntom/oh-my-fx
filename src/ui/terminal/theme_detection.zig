@@ -4,10 +4,12 @@ const io_mod = @import("../../core/shared/io.zig");
 const shell_runtime = @import("../shell_runtime.zig");
 const terminal_sequences = @import("terminal.zig");
 const theme_protocol = @import("theme_protocol.zig");
+const ui_preferences = @import("../../core/config/ui_preferences.zig");
 
 pub const Detection = struct {
     light: bool,
     rgb: ?theme_protocol.Rgb,
+    high_contrast: bool = false,
 };
 
 pub const TerminalBackground = theme_protocol.Background;
@@ -36,6 +38,20 @@ pub fn detectTheme(_: std.mem.Allocator, terminal_state: *const shell_runtime.Te
     return .{ .light = false, .rgb = null };
 }
 
+pub fn detectThemeForPreference(
+    alloc: std.mem.Allocator,
+    terminal_state: *const shell_runtime.TerminalState,
+    preference: ui_preferences.Theme,
+) Detection {
+    if (explicitThemeOverride()) |light| return .{ .light = light, .rgb = null };
+    return switch (preference) {
+        .auto => detectTheme(alloc, terminal_state),
+        .dark => .{ .light = false, .rgb = null },
+        .light => .{ .light = true, .rgb = null },
+        .high_contrast => .{ .light = false, .rgb = null, .high_contrast = true },
+    };
+}
+
 fn queryTerminalBackground(terminal_state: *const shell_runtime.TerminalState) ?TerminalBackground {
     var stdout_file = std.Io.File.stdout();
     stdout_file.writeStreamingAll(io_mod.getIo(), terminal_sequences.theme_background_query) catch return null;
@@ -59,4 +75,19 @@ fn queryTerminalBackground(terminal_state: *const shell_runtime.TerminalState) ?
     }
 
     return theme_protocol.parseOsc11Response(buf[0..len]);
+}
+
+test "typed theme preference resolves explicit variants" {
+    const terminal_state = shell_runtime.TerminalState{};
+    const dark = detectThemeForPreference(std.testing.allocator, &terminal_state, .dark);
+    try std.testing.expect(!dark.light);
+    try std.testing.expect(!dark.high_contrast);
+
+    const light = detectThemeForPreference(std.testing.allocator, &terminal_state, .light);
+    try std.testing.expect(light.light);
+    try std.testing.expect(!light.high_contrast);
+
+    const high_contrast = detectThemeForPreference(std.testing.allocator, &terminal_state, .high_contrast);
+    try std.testing.expect(!high_contrast.light);
+    try std.testing.expect(high_contrast.high_contrast);
 }

@@ -152,6 +152,7 @@ pub const ThemeDetection = theme_detection.Detection;
 pub const TerminalBackground = theme_protocol.Background;
 pub const explicitThemeOverride = theme_detection.explicitThemeOverride;
 pub const detectTheme = theme_detection.detectTheme;
+pub const detectThemeForPreference = theme_detection.detectThemeForPreference;
 pub const parseOsc11Response = theme_protocol.parseOsc11Response;
 pub const truecolorSupportedForValues = theme_protocol.truecolorSupportedForValues;
 

@@ -12,6 +12,7 @@ const presentation_mode = @import("presentation_mode.zig");
 const workspace_access = @import("../workspace/workspace_access.zig");
 const sort_utils = @import("../shared/sort_utils.zig");
 const update_target = @import("../upgrade/update_target.zig");
+const ui_preferences = @import("ui_preferences.zig");
 
 const Allocator = std.mem.Allocator;
 const max_settings_bytes: usize = 64 * 1024;
@@ -110,6 +111,10 @@ pub const UserSettingsPatch = struct {
     notification_turn_end: ?bool = null,
     notification_attention_required: ?bool = null,
     notification_max: ?bool = null,
+    ui_theme: ?ui_preferences.Theme = null,
+    ui_density: ?ui_preferences.Density = null,
+    ui_motion: ?ui_preferences.Motion = null,
+    show_key_hints: ?bool = null,
 
     fn isEmpty(self: UserSettingsPatch) bool {
         return self.model == null and
@@ -130,7 +135,11 @@ pub const UserSettingsPatch = struct {
             self.statusline_item == null and
             self.notification_turn_end == null and
             self.notification_attention_required == null and
-            self.notification_max == null;
+            self.notification_max == null and
+            self.ui_theme == null and
+            self.ui_density == null and
+            self.ui_motion == null and
+            self.show_key_hints == null;
     }
 };
 
@@ -963,6 +972,29 @@ test "provider patch keeps independent Gateway and Codex models" {
     try std.testing.expectEqual(model_provider.ProviderId.codex, model_provider.parse(root.object.get("provider").?.string).?);
 }
 
+test "UI preference patch persists canonical settings keys" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var root = try std.json.parseFromSliceLeaky(
+        std.json.Value,
+        arena.allocator(),
+        "{}",
+        .{},
+    );
+    const application = try applyUserPatchToRoot(arena.allocator(), &root, .{
+        .ui_theme = .high_contrast,
+        .ui_density = .comfortable,
+        .ui_motion = .reduced,
+        .show_key_hints = false,
+    });
+    try std.testing.expect(application.changed);
+    try std.testing.expectEqualStrings("high_contrast", root.object.get("ui_theme").?.string);
+    try std.testing.expectEqualStrings("comfortable", root.object.get("ui_density").?.string);
+    try std.testing.expectEqualStrings("reduced", root.object.get("ui_motion").?.string);
+    try std.testing.expectEqual(false, root.object.get("show_key_hints").?.bool);
+}
+
 test "input appearance validation keeps experiment labels private" {
     try std.testing.expectError(error.InvalidDurableField, validateInputAppearance("minimal-maxxing"));
     try std.testing.expectError(error.InvalidDurableField, validateInputAppearance("no-lines"));
@@ -1020,6 +1052,10 @@ fn applyUserPatchToRoot(
     if (patch.slash_menu_categories) |value| application.changed = try putBool(arena, &root.object, "slash_menu_categories", value) or application.changed;
     if (patch.update_channel) |value| application.changed = try putString(arena, &root.object, "update_channel", value.label()) or application.changed;
     if (patch.startup_scrollback) |value| application.changed = try putBool(arena, &root.object, "startup_scrollback", value) or application.changed;
+    if (patch.ui_theme) |value| application.changed = try putString(arena, &root.object, "ui_theme", @tagName(value)) or application.changed;
+    if (patch.ui_density) |value| application.changed = try putString(arena, &root.object, "ui_density", @tagName(value)) or application.changed;
+    if (patch.ui_motion) |value| application.changed = try putString(arena, &root.object, "ui_motion", @tagName(value)) or application.changed;
+    if (patch.show_key_hints) |value| application.changed = try putBool(arena, &root.object, "show_key_hints", value) or application.changed;
 
     if (patch.prompt_history_enabled) |enabled| {
         var prompt_history = if (root.object.getPtr("prompt_history")) |value| blk: {
@@ -1697,6 +1733,15 @@ fn validateKnownSettingsObject(
         if (value != .string) return error.InvalidSettingsFormat;
         try validateModel(value.string);
     }
+    if (object.get("ui_theme")) |value| {
+        if (value != .string or ui_preferences.parseTheme(value.string) == null) return error.InvalidSettingsFormat;
+    }
+    if (object.get("ui_density")) |value| {
+        if (value != .string or ui_preferences.parseDensity(value.string) == null) return error.InvalidSettingsFormat;
+    }
+    if (object.get("ui_motion")) |value| {
+        if (value != .string or ui_preferences.parseMotion(value.string) == null) return error.InvalidSettingsFormat;
+    }
     if (object.get("permission_mode")) |value| {
         if (value != .string or
             (!std.ascii.eqlIgnoreCase(value.string, "ask") and
@@ -1725,7 +1770,7 @@ fn validateKnownSettingsObject(
     if (object.get("context_limits")) |value| {
         _ = context_limits.parseJsonObject(value) catch return error.InvalidSettingsFormat;
     }
-    inline for (&.{ "context", "fast_mode", "auto_upgrade", "slash_menu_categories", "startup_scrollback", "yolo_acknowledged" }) |key| {
+    inline for (&.{ "context", "fast_mode", "auto_upgrade", "slash_menu_categories", "startup_scrollback", "yolo_acknowledged", "show_key_hints" }) |key| {
         if (object.get(key)) |value| {
             if (value != .bool) return error.InvalidSettingsFormat;
         }

@@ -24,6 +24,10 @@ pub const Category = enum {
 pub const category_count = std.meta.fields(Category).len;
 
 pub const SettingId = enum {
+    ui_theme,
+    ui_density,
+    ui_motion,
+    show_key_hints,
     input_appearance,
     maxxing_mode,
     statusline_sandbox,
@@ -49,6 +53,10 @@ pub const Spec = struct {
 };
 
 pub const Snapshot = struct {
+    ui_theme: []const u8 = "auto",
+    ui_density: []const u8 = "compact",
+    ui_motion: []const u8 = "full",
+    show_key_hints: bool = true,
     model: []const u8 = "",
     effort: []const u8 = "default",
     reasoning_efforts: model_capabilities.ReasoningEffortOptions = .{},
@@ -69,6 +77,10 @@ pub const Snapshot = struct {
 
     pub fn value(self: Snapshot, id: SettingId) []const u8 {
         return switch (id) {
+            .ui_theme => self.ui_theme,
+            .ui_density => self.ui_density,
+            .ui_motion => self.ui_motion,
+            .show_key_hints => onOff(self.show_key_hints),
             .model => self.model,
             .effort => self.effort,
             .fast_mode => onOff(self.fast_mode),
@@ -439,6 +451,10 @@ pub const Menu = struct {
 };
 
 const specs = [_]Spec{
+    .{ .id = .ui_theme, .category = .interface, .label = "Theme", .description = "Choose the terminal color theme" },
+    .{ .id = .ui_density, .category = .interface, .label = "Density", .description = "Choose compact or comfortable spacing" },
+    .{ .id = .ui_motion, .category = .interface, .label = "Motion", .description = "Choose full or reduced motion" },
+    .{ .id = .show_key_hints, .category = .interface, .label = "Key hints", .description = "Show keyboard hints in interactive surfaces" },
     .{ .id = .input_appearance, .category = .interface, .label = "Input appearance", .description = "Choose the composer and submitted prompt presentation" },
     .{ .id = .maxxing_mode, .category = .interface, .label = "Maxxing mode", .description = "Choose minimal or legacy transcript presentation" },
     .{ .id = .statusline_sandbox, .category = .interface, .label = "Status line sandbox", .description = "Show the active sandbox in the status line" },
@@ -457,6 +473,9 @@ const specs = [_]Spec{
 };
 
 const on_off_options = [_][]const u8{ "off", "on" };
+const ui_theme_options = [_][]const u8{ "auto", "dark", "light", "high_contrast" };
+const ui_density_options = [_][]const u8{ "compact", "comfortable" };
+const ui_motion_options = [_][]const u8{ "full", "reduced" };
 const input_appearance_options = [_][]const u8{
     input_appearance.InputAppearance.lines.label(),
     input_appearance.InputAppearance.tint.label(),
@@ -561,6 +580,10 @@ pub fn changeAt(snapshot: *const Snapshot, id: SettingId, option_index: usize) ?
 
 fn staticOptionsFor(id: SettingId) []const []const u8 {
     return switch (id) {
+        .ui_theme => &ui_theme_options,
+        .ui_density => &ui_density_options,
+        .ui_motion => &ui_motion_options,
+        .show_key_hints => &on_off_options,
         .model, .effort => &.{},
         .fast_mode,
         .statusline_sandbox,
@@ -633,8 +656,8 @@ test "settings catalog projects grouped searchable preferences" {
         .sandbox = "os",
     };
 
-    try std.testing.expectEqual(@as(usize, 15), filteredCount(snapshot, .all, ""));
-    try std.testing.expectEqual(@as(usize, 7), filteredCount(snapshot, .interface, ""));
+    try std.testing.expectEqual(@as(usize, 19), filteredCount(snapshot, .all, ""));
+    try std.testing.expectEqual(@as(usize, 11), filteredCount(snapshot, .interface, ""));
     try std.testing.expectEqual(@as(usize, 4), filteredCount(snapshot, .agent, ""));
     try std.testing.expectEqual(@as(usize, 1), filteredCount(snapshot, .notifications, ""));
     try std.testing.expectEqual(@as(usize, 3), filteredCount(snapshot, .advanced, ""));
@@ -703,6 +726,47 @@ test "settings catalog exposes slash menu categories as an interface toggle" {
     const hide = changeAt(&shown, .slash_menu_categories, 0).?;
     try std.testing.expectEqual(SettingId.slash_menu_categories, hide.setting);
     try std.testing.expectEqualStrings("off", hide.value);
+}
+
+test "settings catalog exposes UI preference controls" {
+    const snapshot: Snapshot = .{
+        .ui_theme = "light",
+        .ui_density = "comfortable",
+        .ui_motion = "reduced",
+        .show_key_hints = true,
+    };
+
+    try std.testing.expectEqual(SettingId.ui_theme, itemAt(snapshot, .interface, "theme", 0).?.id);
+    try std.testing.expectEqual(SettingId.ui_density, itemAt(snapshot, .interface, "density", 0).?.id);
+    try std.testing.expectEqual(SettingId.ui_motion, itemAt(snapshot, .interface, "motion", 0).?.id);
+    try std.testing.expectEqual(SettingId.show_key_hints, itemAt(snapshot, .interface, "key hints", 0).?.id);
+    try std.testing.expectEqualStrings("light", optionAt(&snapshot, .ui_theme, 2).?);
+    try std.testing.expectEqualStrings("comfortable", optionAt(&snapshot, .ui_density, 1).?);
+    try std.testing.expectEqualStrings("reduced", optionAt(&snapshot, .ui_motion, 1).?);
+    try std.testing.expectEqualStrings("on", optionAt(&snapshot, .show_key_hints, 1).?);
+}
+
+test "settings catalog cycles UI preferences without skipping values" {
+    const snapshot: Snapshot = .{
+        .ui_theme = "auto",
+        .ui_density = "compact",
+        .ui_motion = "full",
+        .show_key_hints = true,
+    };
+
+    inline for (.{ SettingId.ui_theme, SettingId.ui_density, SettingId.ui_motion, SettingId.show_key_hints }) |id| {
+        const count = optionCount(&snapshot, id);
+        try std.testing.expect(count > 0);
+        const start = selectedOptionIndex(&snapshot, id).?;
+        var seen: usize = 0;
+        while (seen < count) : (seen += 1) {
+            const change = cycleChange(&snapshot, id, @intCast(seen)).?;
+            try std.testing.expectEqual(id, change.setting);
+            try std.testing.expectEqualStrings(optionAt(&snapshot, id, (start + seen) % count).?, change.value);
+        }
+        const reverse = cycleChange(&snapshot, id, -1).?;
+        try std.testing.expectEqualStrings(optionAt(&snapshot, id, (start + count - 1) % count).?, reverse.value);
+    }
 }
 
 test "settings menu navigates rows and changes selected values inline" {

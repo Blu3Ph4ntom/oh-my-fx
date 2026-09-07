@@ -13,6 +13,7 @@ const command_router = @import("../slash_commands/command_router.zig");
 const command_specs = @import("../slash_commands/command_specs.zig");
 const config_runtime = @import("../config/config_runtime.zig");
 const input_appearance = @import("../config/input_appearance.zig");
+const ui_preferences = @import("../config/ui_preferences.zig");
 const model_capabilities = @import("../config/model_capabilities.zig");
 const editor_state = @import("../input/editor_state.zig");
 const settings_catalog = @import("../config/settings_catalog.zig");
@@ -3363,6 +3364,10 @@ fn handleNotificationsCommand(app: anytype, rest: []const u8) !void {
 pub fn settingsCatalogSnapshot(app: anytype) settings_catalog.Snapshot {
     const App = @TypeOf(app.*);
     var snapshot: settings_catalog.Snapshot = .{};
+    if (comptime @hasField(App, "ui_theme")) snapshot.ui_theme = @tagName(app.ui_theme);
+    if (comptime @hasField(App, "ui_density")) snapshot.ui_density = @tagName(app.ui_density);
+    if (comptime @hasField(App, "ui_motion")) snapshot.ui_motion = @tagName(app.ui_motion);
+    if (comptime @hasField(App, "show_key_hints")) snapshot.show_key_hints = app.show_key_hints;
     if (comptime provider_runtime.supported(App)) snapshot.model = provider_runtime.model(app);
     if (comptime @hasField(App, "effort")) snapshot.effort = app.effort.displayLabel();
     if (comptime @hasField(App, "fast_mode")) snapshot.fast_mode = app.fast_mode;
@@ -3489,6 +3494,26 @@ fn persistUserPreferencesSilently(
 pub fn applySettingsCatalogChange(app: anytype, change: settings_catalog.Change) !void {
     switch (change.setting) {
         .model => unreachable,
+        .ui_theme => {
+            const value = ui_preferences.parseTheme(change.value) orelse return error.InvalidSettingsCatalogValue;
+            if (comptime @hasField(App, "ui_theme")) app.ui_theme = value;
+            try persistUserPreferences(app, "theme", .{ .ui_theme = value }, false);
+        },
+        .ui_density => {
+            const value = ui_preferences.parseDensity(change.value) orelse return error.InvalidSettingsCatalogValue;
+            if (comptime @hasField(App, "ui_density")) app.ui_density = value;
+            try persistUserPreferences(app, "density", .{ .ui_density = value }, false);
+        },
+        .ui_motion => {
+            const value = ui_preferences.parseMotion(change.value) orelse return error.InvalidSettingsCatalogValue;
+            if (comptime @hasField(App, "ui_motion")) app.ui_motion = value;
+            try persistUserPreferences(app, "motion", .{ .ui_motion = value }, false);
+        },
+        .show_key_hints => {
+            const enabled = parseOnOff(change.value) orelse return error.InvalidSettingsCatalogValue;
+            if (comptime @hasField(App, "show_key_hints")) app.show_key_hints = enabled;
+            try persistUserPreferences(app, "key hints", .{ .show_key_hints = enabled }, false);
+        },
         .input_appearance => try handleInputAppearanceCommand(app, change.value),
         .maxxing_mode => try handleMaxxingCommand(app, change.value),
         .statusline_sandbox, .statusline_context, .statusline_session, .statusline_workspace => {

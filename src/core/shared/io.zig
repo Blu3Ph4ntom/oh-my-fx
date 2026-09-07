@@ -335,6 +335,26 @@ pub fn getenvProduct(primary: []const u8, legacy: []const u8) ?[]const u8 {
     return getenv(primary) orelse getenv(legacy);
 }
 
+pub fn getenvProductBool(primary: []const u8, legacy: []const u8) ?bool {
+    const raw = getenvProduct(primary, legacy) orelse return null;
+    const value = std.mem.trim(u8, raw, " \t\r\n");
+    if (std.ascii.eqlIgnoreCase(value, "1") or
+        std.ascii.eqlIgnoreCase(value, "true") or
+        std.ascii.eqlIgnoreCase(value, "yes") or
+        std.ascii.eqlIgnoreCase(value, "on"))
+    {
+        return true;
+    }
+    if (std.ascii.eqlIgnoreCase(value, "0") or
+        std.ascii.eqlIgnoreCase(value, "false") or
+        std.ascii.eqlIgnoreCase(value, "no") or
+        std.ascii.eqlIgnoreCase(value, "off"))
+    {
+        return false;
+    }
+    return null;
+}
+
 pub fn e2eFailIfDurableMutationAttempted() void {
     const enabled = getenv("FX_E2E_FAIL_ON_DURABLE_MUTATION") orelse return;
     if (!std.mem.eql(u8, enabled, "1")) return;
@@ -1268,6 +1288,24 @@ test "getenvProduct prefers the omfx name and preserves the legacy name" {
         "legacy-value",
         getenvProduct("OMFX_IO_TEST", "FX_IO_TEST").?,
     );
+}
+
+test "getenvProductBool parses explicit product toggles" {
+    const previous = global_environ;
+    global_environ = null;
+    defer global_environ = previous;
+
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("OMFX_BOOL_TEST", "true");
+    try environ.put("FX_BOOL_TEST", "false");
+    setEnvironMap(&environ);
+    try std.testing.expectEqual(true, getenvProductBool("OMFX_BOOL_TEST", "FX_BOOL_TEST").?);
+
+    _ = environ.remove("OMFX_BOOL_TEST");
+    try std.testing.expectEqual(false, getenvProductBool("OMFX_BOOL_TEST", "FX_BOOL_TEST").?);
+    try environ.put("OMFX_BOOL_TEST", "unknown");
+    try std.testing.expect(getenvProductBool("OMFX_BOOL_TEST", "FX_BOOL_TEST") == null);
 }
 
 test "environMap returns borrowed process environment map" {

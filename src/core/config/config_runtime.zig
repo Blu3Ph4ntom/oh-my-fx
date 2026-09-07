@@ -10,6 +10,7 @@ const sandbox = @import("../permissions/sandbox.zig");
 const workspace_access = @import("../workspace/workspace_access.zig");
 const settings_store = @import("settings_store.zig");
 const model_provider = @import("model_provider.zig");
+const ui_preferences = @import("ui_preferences.zig");
 const update_target = @import("../upgrade/update_target.zig");
 pub const context_limits = @import("context_limits.zig");
 
@@ -65,6 +66,10 @@ pub const Settings = struct {
     notification_turn_end: ?bool = null,
     notification_attention_required: ?bool = null,
     notification_max: ?bool = null,
+    ui_theme: ?ui_preferences.Theme = null,
+    ui_density: ?ui_preferences.Density = null,
+    ui_motion: ?ui_preferences.Motion = null,
+    show_key_hints: ?bool = null,
     permission_rules: types.PermissionRuleSet = .{},
     has_permission_rules: bool = false,
 
@@ -125,6 +130,10 @@ pub const ConfigSources = struct {
     notification_turn_end: ConfigSource = .compiled_default,
     notification_attention_required: ConfigSource = .compiled_default,
     notification_max: ConfigSource = .compiled_default,
+    ui_theme: ConfigSource = .compiled_default,
+    ui_density: ConfigSource = .compiled_default,
+    ui_motion: ConfigSource = .compiled_default,
+    show_key_hints: ConfigSource = .compiled_default,
     sandbox: ConfigSource = .compiled_default,
 };
 
@@ -452,6 +461,7 @@ fn loadMergedSettingsDetailedWithOptionalHome(
             sources.model = .process_override;
         }
     }
+    applyUiPreferenceOverrides(&settings, &sources);
 
     return .{
         .settings = settings,
@@ -567,6 +577,10 @@ fn isProfileOnlySettingKey(key: []const u8) bool {
         "permission_mode",
         "credential_source",
         "yolo_acknowledged",
+        "ui_theme",
+        "ui_density",
+        "ui_motion",
+        "show_key_hints",
         "permission",
         "additional_directories",
     }) |profile_key| {
@@ -610,7 +624,36 @@ fn updateConfigSources(sources: *ConfigSources, settings: Settings, source: Conf
     if (settings.notification_turn_end != null) sources.notification_turn_end = source;
     if (settings.notification_attention_required != null) sources.notification_attention_required = source;
     if (settings.notification_max != null) sources.notification_max = source;
+    if (settings.ui_theme != null) sources.ui_theme = source;
+    if (settings.ui_density != null) sources.ui_density = source;
+    if (settings.ui_motion != null) sources.ui_motion = source;
+    if (settings.show_key_hints != null) sources.show_key_hints = source;
     if (settings.sandbox != null) sources.sandbox = source;
+}
+
+fn applyUiPreferenceOverrides(settings: *Settings, sources: *ConfigSources) void {
+    if (io_mod.getenvProduct("OMFX_UI_THEME", "FX_UI_THEME")) |raw| {
+        if (ui_preferences.parseTheme(std.mem.trim(u8, raw, " \t\r\n"))) |value| {
+            settings.ui_theme = value;
+            sources.ui_theme = .process_override;
+        }
+    }
+    if (io_mod.getenvProduct("OMFX_UI_DENSITY", "FX_UI_DENSITY")) |raw| {
+        if (ui_preferences.parseDensity(std.mem.trim(u8, raw, " \t\r\n"))) |value| {
+            settings.ui_density = value;
+            sources.ui_density = .process_override;
+        }
+    }
+    if (io_mod.getenvProduct("OMFX_UI_MOTION", "FX_UI_MOTION")) |raw| {
+        if (ui_preferences.parseMotion(std.mem.trim(u8, raw, " \t\r\n"))) |value| {
+            settings.ui_motion = value;
+            sources.ui_motion = .process_override;
+        }
+    }
+    if (io_mod.getenvProductBool("OMFX_SHOW_KEY_HINTS", "FX_SHOW_KEY_HINTS")) |value| {
+        settings.show_key_hints = value;
+        sources.show_key_hints = .process_override;
+    }
 }
 
 const DetailedPermissionSource = enum {
@@ -1366,6 +1409,26 @@ fn parseProfileOnlyFields(
         settings.yolo_acknowledged = acknowledged_value.bool;
     }
 
+    if (root.object.get("ui_theme")) |theme_value| {
+        if (theme_value != .string) return error.InvalidUiThemeType;
+        settings.ui_theme = ui_preferences.parseTheme(theme_value.string) orelse return error.InvalidUiThemeValue;
+    }
+
+    if (root.object.get("ui_density")) |density_value| {
+        if (density_value != .string) return error.InvalidUiDensityType;
+        settings.ui_density = ui_preferences.parseDensity(density_value.string) orelse return error.InvalidUiDensityValue;
+    }
+
+    if (root.object.get("ui_motion")) |motion_value| {
+        if (motion_value != .string) return error.InvalidUiMotionType;
+        settings.ui_motion = ui_preferences.parseMotion(motion_value.string) orelse return error.InvalidUiMotionValue;
+    }
+
+    if (root.object.get("show_key_hints")) |show_key_hints_value| {
+        if (show_key_hints_value != .bool) return error.InvalidShowKeyHintsType;
+        settings.show_key_hints = show_key_hints_value.bool;
+    }
+
     if (root.object.get("context_limits")) |context_limits_value| {
         settings.context_limits = try context_limits.parseJsonObject(context_limits_value);
     }
@@ -1574,6 +1637,10 @@ fn mergeSettings(target: *Settings, incoming: *Settings, alloc: Allocator) void 
     if (incoming.notification_turn_end) |value| target.notification_turn_end = value;
     if (incoming.notification_attention_required) |value| target.notification_attention_required = value;
     if (incoming.notification_max) |value| target.notification_max = value;
+    if (incoming.ui_theme) |value| target.ui_theme = value;
+    if (incoming.ui_density) |value| target.ui_density = value;
+    if (incoming.ui_motion) |value| target.ui_motion = value;
+    if (incoming.show_key_hints) |value| target.show_key_hints = value;
 
     if (incoming.sandbox) |value| {
         if (target.sandbox) |current| alloc.free(current);
@@ -3769,4 +3836,17 @@ test "malformed or duplicate additional directories do not discard sibling setti
         }
         try std.testing.expect(found_diagnostic);
     }
+}
+
+test "UI preferences parse as typed profile settings" {
+    var settings = try parseSettingsJson(
+        std.testing.allocator,
+        "{\"ui_theme\":\"high_contrast\",\"ui_density\":\"comfortable\",\"ui_motion\":\"reduced\",\"show_key_hints\":false}",
+    );
+    defer settings.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(ui_preferences.Theme.high_contrast, settings.ui_theme.?);
+    try std.testing.expectEqual(ui_preferences.Density.comfortable, settings.ui_density.?);
+    try std.testing.expectEqual(ui_preferences.Motion.reduced, settings.ui_motion.?);
+    try std.testing.expectEqual(false, settings.show_key_hints.?);
 }
