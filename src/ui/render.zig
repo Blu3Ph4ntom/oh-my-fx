@@ -6,6 +6,7 @@ const host = @import("../core/hosts/host.zig");
 const display_width = @import("../core/shared/display_width.zig");
 const text_utils = @import("../core/shared/text_utils.zig");
 const types = @import("../core/shared/types.zig");
+const ui_preferences = @import("../core/config/ui_preferences.zig");
 const image_attachments = @import("../core/images/image_attachments.zig");
 const assistant_presentation = @import("../core/agent/assistant_presentation.zig");
 const main = @import("../main.zig");
@@ -26,6 +27,8 @@ const user_message_card = @import("assistant/user_message_card.zig");
 pub const welcome_message_reserved_rows: u16 = 11;
 
 pub var is_light: bool = false;
+pub var theme_variant: product_theme.Variant = .dark;
+pub var color_enabled: bool = true;
 pub var input_bar_style: []const u8 = "";
 pub var brand_style: []const u8 = "\x1b[38;5;81m";
 pub var focus_style: []const u8 = "\x1b[38;5;141m";
@@ -64,24 +67,29 @@ var active_terminal_background: ?TerminalRgb = null;
 
 var truecolor_enabled: bool = true;
 
-fn applyProductPalette(light: bool) void {
-    const palette = product_theme.palette(truecolor_enabled, light);
+fn applyProductPalette(variant: product_theme.Variant) void {
+    const palette = product_theme.paletteFor(.{
+        .truecolor = truecolor_enabled,
+        .variant = variant,
+    });
     brand_style = palette.brand;
     focus_style = palette.focus;
     success_style = palette.success;
     danger_style = palette.danger;
     border_style = palette.border;
+    if (!color_enabled) clearColorStyles();
 }
 
 pub fn setTruecolorSupport(enabled: bool) void {
     truecolor_enabled = enabled;
-    applyProductPalette(is_light);
+    applyProductPalette(theme_variant);
 }
 
 pub fn initTheme(light: bool, terminal_bg: ?TerminalRgb) void {
     is_light = light;
+    theme_variant = if (light) .light else .dark;
     active_terminal_background = terminal_bg;
-    applyProductPalette(light);
+    applyProductPalette(theme_variant);
     assistant_presentation.setInlineCodeTheme(light);
     if (light) {
         input_bar_style = "";
@@ -136,8 +144,116 @@ pub fn initTheme(light: bool, terminal_bg: ?TerminalRgb) void {
     // Delegate bar shade computation to the card module — it owns the logic
     // that derives a subtle but visible shade from the terminal's actual bg.
     user_message_card.setTruecolor(truecolor_enabled);
+    user_message_card.setColorEnabled(color_enabled);
     user_message_card.setStyle(light, terminal_bg);
     input_bar_style = user_message_card.user_message_style;
+    if (!color_enabled) clearColorStyles();
+}
+
+/// Applies a named product variant without making callers reconstruct the
+/// relationship between preference, terminal detection, and semantic roles.
+/// `initTheme` remains the compatibility entry point for existing render
+/// tests and hosts that only know light versus dark.
+pub fn initThemeVariant(variant: product_theme.Variant, terminal_bg: ?TerminalRgb) void {
+    if (variant == .dark or variant == .light) {
+        initTheme(variant == .light, terminal_bg);
+        return;
+    }
+
+    theme_variant = variant;
+    is_light = false;
+    active_terminal_background = terminal_bg;
+    const palette = product_theme.paletteFor(.{
+        .truecolor = truecolor_enabled,
+        .variant = variant,
+    });
+    brand_style = palette.brand;
+    focus_style = palette.focus;
+    success_style = palette.success;
+    danger_style = palette.danger;
+    border_style = palette.border;
+    divider_style = palette.border;
+    hint_style = palette.text;
+    statusline_style = palette.muted;
+    tag_style = palette.focus;
+    subtitle_style = palette.brand;
+    system_notice_label_style = palette.text;
+    system_notice_text_style = palette.muted;
+    dim_style = palette.muted;
+    warning_style = palette.warning;
+    green_style = palette.success;
+    red_style = palette.danger;
+    diff_added_style = palette.success;
+    diff_removed_style = palette.danger;
+    selected_completion_style = palette.focus;
+    permission_auto_style = palette.warning;
+    if (truecolor_enabled) {
+        approval_button_active_style = "\x1b[48;2;255;255;0m\x1b[38;2;0;0;0m\x1b[1m";
+        approval_button_inactive_style = "\x1b[48;2;70;70;70m\x1b[38;2;255;255;255m";
+    } else {
+        approval_button_active_style = "\x1b[48;5;226m\x1b[38;5;16m\x1b[1m";
+        approval_button_inactive_style = "\x1b[48;5;238m\x1b[38;5;15m";
+    }
+    diff_added_marker_style = palette.success;
+    diff_removed_marker_style = palette.danger;
+    assistant_presentation.setInlineCodeTheme(false);
+    user_message_card.setTruecolor(truecolor_enabled);
+    user_message_card.setColorEnabled(color_enabled);
+    user_message_card.setStyle(false, terminal_bg);
+    input_bar_style = user_message_card.user_message_style;
+    if (!color_enabled) clearColorStyles();
+}
+
+fn clearColorStyles() void {
+    brand_style = "";
+    focus_style = "";
+    success_style = "";
+    danger_style = "";
+    border_style = "";
+    divider_style = "";
+    hint_style = "";
+    statusline_style = "";
+    tag_style = "";
+    subtitle_style = "";
+    system_notice_label_style = "";
+    system_notice_text_style = "";
+    dim_style = "";
+    warning_style = "";
+    green_style = "";
+    red_style = "";
+    diff_added_style = "";
+    diff_removed_style = "";
+    diff_added_marker_style = "";
+    diff_removed_marker_style = "";
+    approval_button_active_style = "";
+    approval_button_inactive_style = "";
+    selected_completion_style = "";
+    permission_auto_style = "";
+    input_bar_style = "";
+}
+
+pub fn setColorEnabled(enabled: bool) void {
+    color_enabled = enabled;
+    user_message_card.setColorEnabled(enabled);
+    if (!enabled) {
+        clearColorStyles();
+        return;
+    }
+    initThemeVariant(theme_variant, active_terminal_background);
+}
+
+pub fn initThemePreference(
+    preference: ui_preferences.Theme,
+    light: bool,
+    terminal_bg: ?TerminalRgb,
+) void {
+    const variant: product_theme.Variant = switch (preference) {
+        .auto => if (light) .light else .dark,
+        .dark => .dark,
+        .light => .light,
+        .high_contrast => .high_contrast,
+    };
+    initThemeVariant(variant, terminal_bg);
 }
 
 pub fn themeNeedsUpdate(light: bool, terminal_bg: ?TerminalRgb) bool {
@@ -816,6 +932,37 @@ test "initTheme sets light mode styles" {
     try std.testing.expect(!is_light);
     try std.testing.expectEqualStrings("\x1b[1;38;5;255m", subtitle_style);
     try std.testing.expectEqualStrings("\x1b[48;5;238m\x1b[38;5;250m", input_bar_style);
+}
+
+test "Night Signal render variants do not retain prior colors" {
+    defer {
+        setColorEnabled(true);
+        setTruecolorSupport(true);
+        initTheme(false, null);
+    }
+
+    setTruecolorSupport(true);
+    initThemeVariant(.high_contrast, null);
+    const high_contrast_focus = focus_style;
+    try std.testing.expectEqual(product_theme.Variant.high_contrast, theme_variant);
+
+    initThemeVariant(.light, null);
+    try std.testing.expectEqual(product_theme.Variant.light, theme_variant);
+    try std.testing.expect(!std.mem.eql(u8, high_contrast_focus, focus_style));
+
+    setTruecolorSupport(false);
+    initThemeVariant(.high_contrast, null);
+    try std.testing.expect(std.mem.find(u8, focus_style, "38;2;") == null);
+    try std.testing.expect(std.mem.find(u8, focus_style, "38;5;") != null);
+}
+
+test "no color keeps approval decisions distinguishable" {
+    defer setColorEnabled(true);
+    setColorEnabled(false);
+
+    try std.testing.expectEqualStrings("", focus_style);
+    try std.testing.expectEqualStrings("", danger_style);
+    try std.testing.expect(!std.mem.eql(u8, "1. Yes", "3. No"));
 }
 
 test "resume handoff uses one row only when the full instruction fits" {

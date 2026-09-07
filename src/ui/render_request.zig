@@ -1,5 +1,6 @@
 const std = @import("std");
 const activity_status = @import("../core/output/activity_status.zig");
+const ui_preferences = @import("../core/config/ui_preferences.zig");
 const paint_plan = @import("render_engine/paint_plan.zig");
 
 pub const Reason = enum {
@@ -70,6 +71,10 @@ pub const max_consecutive_input_pending_aborts: u8 = 4;
 /// Marker blink half-period: 10 frames on, 10 frames off at the 50ms cadence,
 /// matching the 1s period of the wall-clock-synced thinking blink.
 pub const blink_half_period_frames: i16 = 10;
+
+pub fn animationEnabled(motion: ui_preferences.Motion) bool {
+    return motion == .full;
+}
 
 comptime {
     // The blink must complete whole on/off periods within one phase cycle or
@@ -689,4 +694,9 @@ test "animation retry preserves the same candidate and later requests" {
     try std.testing.expect(retry.snapshot.reasons.contains(.animation));
     try std.testing.expect(retry.snapshot.reasons.contains(.footer));
     retry.restore();
+}
+
+test "reduced motion removes shimmer frames" {
+    try std.testing.expect(animationEnabled(.full));
+    try std.testing.expect(!animationEnabled(.reduced));
 }

@@ -30,12 +30,19 @@ const accent_dark = "\x1b[38;5;252m";
 const accent_light = "\x1b[38;5;238m";
 var accent_style: []const u8 = accent_dark;
 var truecolor = true;
+var color_enabled = true;
 
 pub var user_message_style: []const u8 = fallback_bar_dark;
 var user_message_style_buf: [64]u8 = undefined;
 var marker_style: []const u8 = dark_marker_style;
 
 pub fn setStyle(light: bool, terminal_bg: ?Rgb) void {
+    if (!color_enabled) {
+        user_message_style = "";
+        marker_style = "";
+        accent_style = "";
+        return;
+    }
     user_message_style = computeCardStyle(light, terminal_bg, &user_message_style_buf);
     marker_style = if (light) light_marker_style else dark_marker_style;
     accent_style = if (light) accent_light else accent_dark;
@@ -49,7 +56,17 @@ pub fn setTruecolor(enabled: bool) void {
     truecolor = enabled;
 }
 
+pub fn setColorEnabled(enabled: bool) void {
+    color_enabled = enabled;
+    if (!enabled) {
+        user_message_style = "";
+        marker_style = "";
+        accent_style = "";
+    }
+}
+
 fn computeCardStyle(light: bool, terminal_bg: ?Rgb, buf: []u8) []const u8 {
+    if (!color_enabled) return "";
     if (!truecolor) return if (light) fallback_bar_light else fallback_bar_dark;
     if (terminal_bg) |bg| {
         const card_bg = tintBackground(light, bg);
@@ -88,8 +105,10 @@ fn tintBackground(light: bool, terminal_bg: Rgb) Rgb {
 fn emitRow(writer: *std.Io.Writer, content: []const u8, mode: presentation_mode.MaxxingMode) !void {
     if (mode == .legacy) try writer.writeAll(user_message_style);
     try writer.writeAll(content);
-    if (mode == .legacy) try writer.writeAll("\x1b[K");
-    try writer.writeAll(reset_style);
+    if (mode == .legacy) {
+        if (color_enabled) try writer.writeAll("\x1b[K");
+    }
+    if (color_enabled) try writer.writeAll(reset_style);
     try writer.writeByte('\n');
 }
 
@@ -358,7 +377,7 @@ fn renderSkillTokensForCard(
         }
         try out.writer.writeAll(switch (mode) {
             .legacy => user_message_style,
-            .minimal => restore_minimal_text_style,
+            .minimal => if (color_enabled) restore_minimal_text_style else "",
         });
         pos = token.raw_end;
     }
@@ -383,7 +402,7 @@ fn writeRowPrefix(writer: *std.Io.Writer, first_row: bool, mode: presentation_mo
         .minimal => {
             try writer.writeAll(marker_style);
             try writer.writeAll(user_turn_rail);
-            try writer.writeAll(reset_style);
+            if (color_enabled) try writer.writeAll(reset_style);
             try writer.writeByte(' ');
             try writer.writeAll(minimal_text_style);
         },

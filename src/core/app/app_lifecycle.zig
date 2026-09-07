@@ -514,8 +514,9 @@ pub fn bootstrapInteractiveApp(cfg: BootstrapConfig) !StartupState {
         io_mod.getenv("COLORTERM"),
         io_mod.getenv("TERM_PROGRAM"),
     ));
+    ui_render.setColorEnabled(io_mod.getenvProduct("OMFX_NO_COLOR", "NO_COLOR") == null);
     const theme = ui_render.detectThemeForPreference(cfg.alloc, cfg.terminal, state.ui_theme);
-    ui_render.initTheme(theme.light, theme.rgb);
+    ui_render.initThemePreference(state.ui_theme, theme.light, theme.rgb);
     state.theme_monitor_enabled = ui_render.explicitThemeOverride() == null and state.ui_theme == .auto;
 
     const cursor = cfg.terminal.queryCursorPosition() catch blk: {

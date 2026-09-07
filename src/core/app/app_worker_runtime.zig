@@ -567,6 +567,9 @@ pub fn Runtime(comptime App: type) type {
                     const requests = app.subagents.activeRenderRequests();
                     const status_expired = child_shell.worker_status_state().expire_transient(now_ms);
                     if (status_expired) requests.request(.footer);
+                    if (comptime @hasField(App, "ui_motion")) {
+                        if (!render_request.animationEnabled(app.ui_motion)) return status_expired;
+                    }
                     if (!view.chat.busy() or !child_shell.shimmer_active) return status_expired;
                     const previous_deadline = requests.animation_next_deadline_ms;
                     if (!requests.requestAnimationDue(now_ms)) return status_expired;
@@ -584,6 +587,10 @@ pub fn Runtime(comptime App: type) type {
                 !app.shell.shimmer_active)
             {
                 return false;
+            }
+
+            if (comptime @hasField(App, "ui_motion")) {
+                if (!render_request.animationEnabled(app.ui_motion)) return false;
             }
 
             var label_buf: [256]u8 = undefined;

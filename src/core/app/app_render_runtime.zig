@@ -10,6 +10,7 @@ const terminal_ui_projection = @import("../terminal/ui_projection.zig");
 const worker_runtime = @import("../agent/worker_runtime.zig");
 const auth_runtime = @import("../auth/auth_runtime.zig");
 const model_capabilities = @import("../config/model_capabilities.zig");
+const ui_preferences = @import("../config/ui_preferences.zig");
 const picker_state = @import("../input/picker_state.zig");
 const core_input_runtime = @import("../input/runtime.zig");
 const command_specs = @import("../slash_commands/command_specs.zig");
@@ -360,7 +361,13 @@ pub fn Runtime(comptime App: type) type {
                 return;
             };
             app.pacer.rethemeInlineCode(light);
-            ui_render.initTheme(light, rgb);
+            const preference = if (comptime @hasField(App, "ui_theme"))
+                app.ui_theme
+            else if (light)
+                @as(ui_preferences.Theme, .light)
+            else
+                @as(ui_preferences.Theme, .dark);
+            ui_render.initThemePreference(preference, light, rgb);
             app.shell.setCommandOutputRenderPolicy(shellStyles());
             try app.shell.requestTerminalReset(&app.metrics);
             app.shell.render_requests.request(.transcript);
