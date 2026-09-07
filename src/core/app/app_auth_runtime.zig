@@ -1222,6 +1222,16 @@ const TestAuth = struct {
         return try alloc.dupe(u8, url);
     }
 
+    fn openSignInPicker(self: *TestAuth, _: std.mem.Allocator) !bool {
+        self.picker_opened = true;
+        return true;
+    }
+
+    fn openSignInPickerFromRoot(self: *TestAuth, _: std.mem.Allocator) !bool {
+        self.picker_opened = true;
+        return true;
+    }
+
     fn openChatGptSignInPickerFromRoot(self: *TestAuth, _: std.mem.Allocator) !bool {
         self.chatgpt_root_sign_in_opened = true;
         return true;
