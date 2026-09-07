@@ -1222,16 +1222,6 @@ const TestAuth = struct {
         return try alloc.dupe(u8, url);
     }
 
-    fn openSignInPicker(self: *TestAuth, _: std.mem.Allocator) !bool {
-        self.picker_opened = true;
-        return true;
-    }
-
-    fn openSignInPickerFromRoot(self: *TestAuth, _: std.mem.Allocator) !bool {
-        self.picker_opened = true;
-        return true;
-    }
-
     fn openChatGptSignInPickerFromRoot(self: *TestAuth, _: std.mem.Allocator) !bool {
         self.chatgpt_root_sign_in_opened = true;
         return true;
@@ -1420,7 +1410,7 @@ test "Codex onboarding sign-in enters the provider activation flow" {
     var app: TestApp = .{};
     defer app.deinit();
 
-    try Runtime(TestApp).applyPickerChoice(&app, .{ .action = .chatgpt_login });
+    try Runtime(TestApp).beginChatGptSignIn(&app);
 
     try std.testing.expect(app.auth.chatgpt_provider_sign_in_opened);
     try std.testing.expect(!app.auth.chatgpt_root_sign_in_opened);
