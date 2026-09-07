@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const grok_session = @import("grok_session.zig");
 const debug_trace = @import("../shared/debug_trace.zig");
 const host = @import("../hosts/host.zig");
@@ -184,7 +185,7 @@ fn deinitBrowserLoginContext(raw: ?*anyopaque, alloc: Allocator) void {
 
 fn bindBrowserCallback() !std.Io.net.Server {
     var address = try std.Io.net.IpAddress.parse("127.0.0.1", 0);
-    return address.listen(io_mod.getIo(), .{ .reuse_address = true });
+    return address.listen(io_mod.getIo(), .{ .reuse_address = false });
 }
 
 fn randomUrlSafeSecret(alloc: Allocator) ![]u8 {
@@ -218,9 +219,8 @@ fn pollBrowserToken(
     if (comptime host_target.is_wasm) return error.GrokOAuthUnavailable;
     if (cancel_flag.load(.seq_cst)) return error.Cancelled;
     const context: *BrowserLoginContext = @ptrCast(@alignCast(raw.?));
-    if (!try browserCallbackReady(&context.listener, cancel_flag)) return .pending;
+    var stream = (try acceptBrowserCallback(&context.listener, cancel_flag)) orelse return .pending;
 
-    var stream = try context.listener.accept(io_mod.getIo());
     defer stream.close(io_mod.getIo());
     setBrowserSocketTimeouts(stream.socket.handle);
     const target = try readBrowserCallbackTarget(alloc, stream);
@@ -264,11 +264,56 @@ fn pollBrowserToken(
     } };
 }
 
-fn browserCallbackReady(
+const BrowserCallbackWait = union(enum) {
+    accepted: std.Io.net.Server.AcceptError!std.Io.net.Stream,
+    timed_out: std.Io.Cancelable!void,
+};
+const BrowserCallbackSelect = std.Io.Select(BrowserCallbackWait);
+
+fn acceptBrowserCallback(
     listener: *std.Io.net.Server,
     cancel_flag: *std.atomic.Value(bool),
-) !bool {
+) !?std.Io.net.Stream {
     if (cancel_flag.load(.seq_cst)) return error.Cancelled;
+
+    // `std.Io.net` uses AFD handles on Windows, not Winsock SOCKET values.
+    // Race the native AFD accept against a short timer instead of passing the
+    // handle to a Winsock-only readiness API.
+    if (comptime builtin.os.tag == .windows) {
+        var results: [2]BrowserCallbackWait = undefined;
+        var select: BrowserCallbackSelect = .init(io_mod.getIo(), &results);
+        select.async(.accepted, acceptBrowserCallbackTask, .{listener});
+        select.async(.timed_out, waitBrowserCallbackTask, .{});
+
+        const result = select.await() catch |err| {
+            drainBrowserCallbackSelect(&select);
+            return err;
+        };
+        switch (result) {
+            .accepted => |accepted| {
+                var stream = accepted catch |err| {
+                    drainBrowserCallbackSelect(&select);
+                    return err;
+                };
+                drainBrowserCallbackSelect(&select);
+                if (cancel_flag.load(.seq_cst)) {
+                    stream.close(io_mod.getIo());
+                    return error.Cancelled;
+                }
+                return stream;
+            },
+            .timed_out => |timed_out| {
+                timed_out catch |err| {
+                    drainBrowserCallbackSelect(&select);
+                    return err;
+                };
+                drainBrowserCallbackSelect(&select);
+                if (cancel_flag.load(.seq_cst)) return error.Cancelled;
+                return null;
+            },
+        }
+    }
+
     var fds = [_]std.posix.pollfd{.{
         .fd = listener.socket.handle,
         .events = std.posix.POLL.IN,
@@ -276,11 +321,36 @@ fn browserCallbackReady(
     }};
     const ready = try std.posix.poll(&fds, browser_callback_poll_ms);
     if (cancel_flag.load(.seq_cst)) return error.Cancelled;
-    if (ready == 0) return false;
+    if (ready == 0) return null;
     if ((fds[0].revents & std.posix.POLL.IN) == 0) {
         return error.InvalidGrokOAuthCallback;
     }
-    return true;
+    return try listener.accept(io_mod.getIo());
+}
+
+fn acceptBrowserCallbackTask(listener: *std.Io.net.Server) std.Io.net.Server.AcceptError!std.Io.net.Stream {
+    return listener.accept(io_mod.getIo());
+}
+
+fn waitBrowserCallbackTask() std.Io.Cancelable!void {
+    return std.Io.Timeout.sleep(.{ .duration = .{
+        .raw = .fromMilliseconds(browser_callback_poll_ms),
+        .clock = .awake,
+    } }, io_mod.getIo());
+}
+
+fn drainBrowserCallbackSelect(select: *BrowserCallbackSelect) void {
+    while (select.cancel()) |result| {
+        switch (result) {
+            .accepted => |accepted| {
+                if (accepted) |stream| {
+                    var owned = stream;
+                    owned.close(io_mod.getIo());
+                } else |_| {}
+            },
+            .timed_out => {},
+        }
+    }
 }
 
 fn readBrowserCallbackTarget(alloc: Allocator, stream: std.Io.net.Stream) ![]u8 {
@@ -323,6 +393,11 @@ fn writeBrowserCallbackResponse(stream: std.Io.net.Stream, success: bool) !void 
 }
 
 fn setBrowserSocketTimeouts(socket: std.posix.socket_t) void {
+    // Winsock takes DWORD milliseconds (30s here), not timeval.
+    if (comptime builtin.os.tag == .windows) {
+        io_mod.setSocketTimeoutMs(@intFromPtr(socket), 30_000);
+        return;
+    }
     const timeout = std.posix.timeval{ .sec = browser_callback_io_timeout_seconds, .usec = 0 };
     const bytes = std.mem.asBytes(&timeout);
     std.posix.setsockopt(socket, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, bytes) catch |err| {
