@@ -79,10 +79,13 @@ $env:OMFX_UI_MOTION = "reduced"
 $env:OMFX_SHOW_KEY_HINTS = "false"
 $env:OMFX_MODEL = "gpt-5.6-luna"
 $env:OMFX_NO_OPEN_BROWSER = "1"
+$env:OMFX_AUTO_UPGRADE = "false"
 ```
 
 On Windows, `OMFX_NO_OPEN_BROWSER=1` is useful in SSH sessions, CI, or when
 you want to copy the complete authorization URL into a browser yourself.
+`OMFX_AUTO_UPGRADE=false` disables background update checks for a downloaded
+artifact; `FX_AUTO_UPGRADE` remains the compatibility spelling.
 
 ## Providers and model identity
 

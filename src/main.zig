@@ -656,7 +656,7 @@ const App = struct {
         if (comptime host_profile.durable_sessions) {
             SessionAppRuntime.primeSessionPicker(&app);
         }
-        const env_disabled = if (io_mod.getenv("FX_AUTO_UPGRADE")) |val|
+        const env_disabled = if (io_mod.getenvProduct("OMFX_AUTO_UPGRADE", "FX_AUTO_UPGRADE")) |val|
             std.mem.eql(u8, val, "0") or std.ascii.eqlIgnoreCase(val, "false")
         else
             false;
