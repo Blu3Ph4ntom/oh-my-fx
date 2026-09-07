@@ -2852,8 +2852,15 @@ pub fn Runtime(comptime App: type) type {
             comptime count_only: bool,
         ) !void {
             const host = app_session_runtime.Runtime(App).subagentHost(app) orelse {
-                app.subagents.setDegraded(app.alloc, .store_failure);
-                requestSubagentSurfaceFrame(app, .subagent_panel);
+                // The manager projection is refreshed from the worker tick
+                // even while its screen is closed. A missing optional host is
+                // therefore a normal background state, not a visible-frame
+                // change. Only publish the degraded state and invalidate the
+                // surface after the user has opened the manager.
+                if (app.subagents.isViewActive()) {
+                    app.subagents.setDegraded(app.alloc, .store_failure);
+                    requestSubagentSurfaceFrame(app, .subagent_panel);
+                }
                 return;
             };
             const now_ms = io_mod.milliTimestamp();
