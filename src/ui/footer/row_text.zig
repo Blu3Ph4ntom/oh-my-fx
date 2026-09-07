@@ -1,4 +1,5 @@
 const std = @import("std");
+const ansi = @import("../../core/agent/presentation/ansi.zig");
 const image_attachments = @import("../../core/images/image_attachments.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const ui_render = @import("../render.zig");
@@ -49,6 +50,32 @@ pub fn appendClipped(alloc: Allocator, out: *std.ArrayList(u8), bytes: []const u
         visible += cell_width;
         i += unit.byte_len;
     }
+}
+
+/// Writes a bounded visible label whose OSC 8 target remains the complete URL.
+/// The label is clipped independently so long URLs never become truncated
+/// terminal links.
+pub fn appendHyperlinkClipped(
+    alloc: Allocator,
+    out: *std.ArrayList(u8),
+    url: []const u8,
+    label: []const u8,
+    width: u16,
+) !void {
+    if (width == 0) return;
+    if (!isSafeHyperlinkUrl(url)) return appendClipped(alloc, out, label, width);
+
+    try out.appendSlice(alloc, "\x1b]8;;");
+    try out.appendSlice(alloc, url);
+    try out.appendSlice(alloc, "\x1b\\\x1b[4m");
+    try appendClipped(alloc, out, label, width);
+    try out.appendSlice(alloc, "\x1b[24m\x1b]8;;\x1b\\");
+}
+
+fn isSafeHyperlinkUrl(url: []const u8) bool {
+    if (url.len == 0 or url.len > ansi.max_link_url_bytes) return false;
+    for (url) |byte| if (byte < 0x20 or byte == 0x7f) return false;
+    return true;
 }
 
 const EllipsisPlacement = enum {
@@ -184,6 +211,20 @@ test "footer clipping never splits Unicode display units" {
     defer text.deinit(alloc);
     try appendClipped(alloc, &text, text_presentation, 1);
     try std.testing.expectEqualStrings(text_presentation, text.items);
+}
+
+test "clipped footer hyperlinks preserve the complete target" {
+    const alloc = std.testing.allocator;
+    const url = "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=full-value";
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(alloc);
+    try appendHyperlinkClipped(alloc, &out, url, "   Open   authorization page", 24);
+
+    try std.testing.expect(std.mem.find(u8, out.items, "\x1b]8;;" ++ url ++ "\x1b\\") != null);
+    try std.testing.expect(std.mem.find(u8, out.items, "   Open   authorization") != null);
+    try std.testing.expect(std.mem.find(u8, out.items, "redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback") != null);
+    try std.testing.expectEqual(@as(usize, 24), display_width.visibleWidthIgnoringAnsi(out.items));
 }
 
 test "single line ellipsis projections preserve semantic tails" {

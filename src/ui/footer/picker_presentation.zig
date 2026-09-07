@@ -249,37 +249,38 @@ fn composeSignInPickerRow(
         else
             ui_render.dim_style,
     );
-    var label_buf: [512]u8 = undefined;
-    const label = switch (row_index) {
-        0 => if (source == .chatgpt_subscription) "   Sign in with Codex" else "   Sign in with Vercel",
-        1, 4 => "",
-        2 => std.fmt.bufPrint(
-            &label_buf,
-            "   Open   {s}",
-            .{snapshot.verification_uri},
-        ) catch if (source == .chatgpt_subscription)
-            "   Open the Codex authorization page"
+    if (row_index == 2) {
+        const browser_url = snapshot.verification_uri_complete orelse snapshot.verification_uri;
+        const browser_label = if (source == .chatgpt_subscription)
+            "   Open   Codex authorization page"
         else
-            "   Open the Vercel device authorization page",
-        3 => if (snapshot.user_code.len == 0)
-            ""
-        else
-            std.fmt.bufPrint(
-                &label_buf,
-                "   Code   {s}",
-                .{snapshot.user_code},
-            ) catch "   Code unavailable",
-        5 => switch (snapshot.state) {
-            .idle => "   Preparing sign-in…",
-            .polling => "   Waiting for authorization…",
-            .succeeded => "   Authorization complete",
-            .failed => "   Sign-in failed",
-            .cancelled => "   Sign-in cancelled",
-        },
-        6 => "   Enter reopens browser · Esc cancels",
-        else => "",
-    };
-    try row_text.appendClipped(alloc, &row, label, width);
+            "   Open   Vercel device authorization page";
+        try row_text.appendHyperlinkClipped(alloc, &row, browser_url, browser_label, width);
+    } else {
+        var label_buf: [96]u8 = undefined;
+        const label = switch (row_index) {
+            0 => if (source == .chatgpt_subscription) "   Sign in with Codex" else "   Sign in with Vercel",
+            1, 4 => "",
+            3 => if (snapshot.user_code.len == 0)
+                ""
+            else
+                std.fmt.bufPrint(
+                    &label_buf,
+                    "   Code   {s}",
+                    .{snapshot.user_code},
+                ) catch "   Code unavailable",
+            5 => switch (snapshot.state) {
+                .idle => "   Preparing sign-in…",
+                .polling => "   Waiting for authorization…",
+                .succeeded => "   Authorization complete",
+                .failed => "   Sign-in failed",
+                .cancelled => "   Sign-in cancelled",
+            },
+            6 => "   Enter reopens browser · Esc cancels",
+            else => "",
+        };
+        try row_text.appendClipped(alloc, &row, label, width);
+    }
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
 }
@@ -1794,6 +1795,7 @@ test "sign-in stage renders the complete device authorization screen" {
         .sign_in = .{
             .state = .polling,
             .verification_uri = "https://vercel.test/verify",
+            .verification_uri_complete = "https://vercel.test/verify?code=TEST-CODE&state=full",
             .user_code = "TEST-CODE",
         },
     };
@@ -1809,13 +1811,14 @@ test "sign-in stage renders the complete device authorization screen" {
     }
     for ([_][]const u8{
         "Sign in with Vercel",
-        "Open   https://vercel.test/verify",
+        "Open   Vercel device authorization page",
         "Code   TEST-CODE",
         "Waiting for authorization",
         "Enter reopens browser · Esc cancels",
     }) |expected| {
         try std.testing.expect(std.mem.find(u8, screen.items, expected) != null);
     }
+    try std.testing.expect(std.mem.find(u8, screen.items, "\x1b]8;;https://vercel.test/verify?code=TEST-CODE&state=full\x1b\\") != null);
 }
 
 test "partially visible auth picker shows a source window without duplicates" {
