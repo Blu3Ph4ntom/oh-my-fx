@@ -991,6 +991,30 @@ test "ChatGPT browser callback requires the exact path and state" {
     );
 }
 
+test "Windows browser callback readiness sees std.Io listener connections" {
+    if (comptime builtin.os.tag != .windows) return;
+
+    var address = try std.Io.net.IpAddress.parse("127.0.0.1", 0);
+    var listener = try address.listen(io_mod.getIo(), .{ .reuse_address = false });
+    defer listener.deinit(io_mod.getIo());
+
+    const Connect = struct {
+        fn run(port: u16) void {
+            var target = std.Io.net.IpAddress.parse("127.0.0.1", port) catch return;
+            var stream = target.connect(io_mod.getIo(), .{ .mode = .stream }) catch return;
+            stream.close(io_mod.getIo());
+        }
+    };
+
+    const thread = try std.Thread.spawn(.{}, Connect.run, .{listener.socket.address.getPort()});
+    defer thread.join();
+
+    var cancel_flag = std.atomic.Value(bool).init(false);
+    try std.testing.expect(try browserCallbackReady(&listener, &cancel_flag));
+    var stream = try listener.accept(io_mod.getIo());
+    stream.close(io_mod.getIo());
+}
+
 test "browser login cancellation releases callback listener" {
     const alloc = std.testing.allocator;
     var runtime: login_flow.SignInRuntime = .{};
