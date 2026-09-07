@@ -37,7 +37,7 @@ zig build run
 
 ## Verification Workflow
 
-Keep the local development loop focused: run the narrowest test that covers the changed path, build omfx, and exercise the change using `./zig-out/bin/fx`. The installed `fx` on `PATH` is not valid development evidence; that path is the repository's development compatibility artifact.
+Keep the local development loop focused: run the narrowest test that covers the changed path, build omfx, and exercise the change using `./zig-out/bin/fx`. The build output keeps the compatibility filename `fx`; Windows CI stages the same binary as `omfx.exe`. The installed `fx` on `PATH` is not valid development evidence; that path is the repository's development compatibility artifact.
 
 Once the focused checks pass, create a clean checkpoint commit, push the non-`main` feature branch, and open a draft PR immediately. The **Full CI** workflow runs the complete deterministic suite on native Linux x86_64, Linux aarch64, macOS x86_64, and macOS aarch64 runners. The native matrix builds, tests, and smoke-tests ReleaseSafe on every platform; formatting and the public-surface audit run in those ReleaseSafe jobs. Four duration-balanced, isolated ReleaseSafe E2E shards per platform use checked-in weights to assign every Bun test file once; files inside each shard run sequentially in separate Bun processes so terminal fixtures and process state cannot leak between files. A failed file receives one bounded retry after tmux is reset.
 

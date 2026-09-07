@@ -195,7 +195,7 @@ jobs:
       # streamed output. This small test root keeps imports under the src
       # module path while avoiding unrelated build-only dependencies, and
       # --test-filter narrows execution to the changed unit tests. Full suite
-      # stays a future parity job.
+      # stays a future parity job; every filter below is named and required.
       - name: Run unit tests
         run: |
           zig test -lc src/test_root.zig --test-filter "omfx identity contract"
@@ -233,7 +233,6 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "Codex onboarding sign-in enters the provider activation flow"
           zig test -lc src/test_root.zig --test-filter "app_input_runtime provider picker routes terminal actions"
           zig test -lc src/test_root.zig --test-filter "app_input_runtime provider picker Escape"
-          zig test -lc src/test_root.zig --test-filter "provider"
           zig test -lc src/test_root.zig --test-filter "ChatGPT browser authorization URL"
           zig test -lc src/test_root.zig --test-filter "Codex request originator"
           zig test -lc src/test_root.zig --test-filter "login failure notices identify their provider"

@@ -122,7 +122,9 @@ Add reusable instructions with [skills](https://fx.sh/docs/capabilities/skills),
 
 ## Documentation
 
-Read the [omfx documentation](https://fx.sh/docs).
+Read the [omfx documentation](https://fx.sh/docs), or start with the local
+[customization guide](docs/customization.md) for the Night Signal palette,
+keyboard surfaces, profile settings, providers, and Windows-native usage.
 
 ## Build from source
 
