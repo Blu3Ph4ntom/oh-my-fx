@@ -220,5 +220,6 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "Codex request originator"
           zig test -lc src/test_root.zig --test-filter "login failure notices identify their provider"
           zig test -lc src/test_root.zig --test-filter "Windows browser callback readiness sees"
+          zig test -lc src/test_root.zig --test-filter "Windows fixed callback ports reject"
           zig test -lc src/test_root.zig --test-filter "browser login cancellation releases callback listener"
           zig test -lc src/test_root.zig --test-filter "loadSkills loads managed skills under HOME"

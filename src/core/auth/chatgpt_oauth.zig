@@ -1015,6 +1015,18 @@ test "Windows browser callback readiness sees std.Io listener connections" {
     stream.close(io_mod.getIo());
 }
 
+test "Windows fixed callback ports reject a second listener" {
+    if (comptime builtin.os.tag != .windows) return;
+
+    var first = try bindBrowserCallback(false);
+    defer first.deinit(io_mod.getIo());
+    const first_port = first.socket.address.getPort();
+
+    var second = try bindBrowserCallback(false);
+    defer second.deinit(io_mod.getIo());
+    try std.testing.expect(second.socket.address.getPort() != first_port);
+}
+
 test "browser login cancellation releases callback listener" {
     const alloc = std.testing.allocator;
     var runtime: login_flow.SignInRuntime = .{};
