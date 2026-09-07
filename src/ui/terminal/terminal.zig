@@ -13,6 +13,11 @@ pub const theme_background_query_with_fence = theme_background_query ++ theme_re
 pub const alternate_screen_leave_sequence = "\x1b[?1049l";
 pub const alternate_mouse_tracking_leave_sequence = "\x1b[?1000l\x1b[?1006l";
 
+pub const KeyboardProtocol = enum {
+    legacy_csi,
+    kitty,
+};
+
 pub fn alternateScreenLeaveSequence(mouse_tracking_active: bool) []const u8 {
     return if (mouse_tracking_active)
         alternate_mouse_tracking_leave_sequence ++ alternate_screen_leave_sequence
@@ -28,10 +33,14 @@ pub fn alternateScreenFrameRestoreSequence(mouse_tracking_active: bool) []const 
 }
 
 pub fn interactiveModeEnableSequence(tmux: ?[]const u8) []const u8 {
-    return if (tmux == null)
-        interactive_mode_enable_sequence
-    else
-        tmux_interactive_mode_enable_sequence;
+    return switch (keyboardProtocolFor(tmux)) {
+        .kitty => interactive_mode_enable_sequence,
+        .legacy_csi => tmux_interactive_mode_enable_sequence,
+    };
+}
+
+pub fn keyboardProtocolFor(tmux: ?[]const u8) KeyboardProtocol {
+    return if (tmux == null) .kitty else .legacy_csi;
 }
 
 extern "kernel32" fn GetStdHandle(nStdHandle: std.os.windows.DWORD) callconv(.winapi) std.os.windows.HANDLE;
@@ -136,6 +145,7 @@ test "alternate screen frame restore leaves the cursor hidden for repaint" {
 }
 
 test "interactive mode preserves direct terminal keyboard protocols" {
+    try std.testing.expectEqual(KeyboardProtocol.kitty, keyboardProtocolFor(null));
     try std.testing.expectEqualStrings(
         interactive_mode_enable_sequence,
         interactiveModeEnableSequence(null),
@@ -143,6 +153,7 @@ test "interactive mode preserves direct terminal keyboard protocols" {
 }
 
 test "interactive mode leaves kitty keyboard negotiation to tmux" {
+    try std.testing.expectEqual(KeyboardProtocol.legacy_csi, keyboardProtocolFor(""));
     const sequence = interactiveModeEnableSequence("");
 
     try std.testing.expectEqualStrings(

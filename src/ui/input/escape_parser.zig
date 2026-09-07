@@ -36,10 +36,20 @@ const sgr_mouse_max_bytes: u8 = 18;
 const control_sequence_discard_max_bytes: u16 = 32;
 const kitty_up_key: u16 = 57352;
 const kitty_down_key: u16 = 57353;
+const kitty_right_key: u16 = 57354;
+const kitty_left_key: u16 = 57355;
 const shift_modifier: u16 = 0x01;
 const alt_modifier: u16 = 0x02;
 const ctrl_modifier: u16 = 0x04;
 const super_modifier: u16 = 0x08;
+const supported_modifier_mask: u16 = shift_modifier | alt_modifier | ctrl_modifier | super_modifier;
+
+fn modifierFromParameter(parameter: u16) ?u16 {
+    if (parameter == 0) return null;
+    const modifiers = parameter - 1;
+    if ((modifiers & ~supported_modifier_mask) != 0) return null;
+    return modifiers;
+}
 
 fn composerMove(kind: input_action.MoveKind, modifiers: u16) InputEscapeAction {
     return .{ .composer_shortcut = .{ .move = .{
@@ -95,16 +105,30 @@ fn ctrlOKeyAction(meta_prefixed: bool, modifiers: u16) InputEscapeAction {
 // single-parameter and modifier stages, and never returns null so the leading
 // ESC's pending-cancel is always cleared.
 fn kittyUnicodeKeyAction(keycode: u16, modifiers: u16, meta_prefixed: bool) InputEscapeAction {
-    if (keycode == 27 and modifiers == 0) return .escape;
-    if (keycode == kitty_up_key or keycode == kitty_down_key) {
+    if ((modifiers & ~supported_modifier_mask) != 0) return .ignore;
+    if (keycode == 27) return .escape;
+    if (keycode == kitty_up_key or
+        keycode == kitty_down_key or
+        keycode == kitty_right_key or
+        keycode == kitty_left_key)
+    {
+        const arrow = switch (keycode) {
+            kitty_up_key => 'A',
+            kitty_down_key => 'B',
+            kitty_right_key => 'C',
+            kitty_left_key => 'D',
+            else => unreachable,
+        };
         if (meta_prefixed or modifiers != 0) {
-            return modifiedArrowAction(
-                if (keycode == kitty_up_key) 'A' else 'B',
-                modifiers,
-                meta_prefixed,
-            ) orelse .ignore;
+            return modifiedArrowAction(arrow, modifiers, meta_prefixed) orelse .ignore;
         }
-        return if (keycode == kitty_up_key) .cursor_up else .cursor_down;
+        return switch (arrow) {
+            'A' => .cursor_up,
+            'B' => .cursor_down,
+            'C' => .cursor_right,
+            'D' => .cursor_left,
+            else => unreachable,
+        };
     }
     if (keycode == 13 and (modifiers & (shift_modifier | alt_modifier)) != 0) {
         return .insert_newline;
@@ -565,14 +589,20 @@ pub fn consumeInputEscapeByteWithMouse(
             if (byte == 'u') {
                 const meta_prefixed = hasMetaPrefix(stage.*);
                 const keycode = param2.*;
-                const modifiers = if (param.* > 0) param.* - 1 else 0;
+                const modifiers = modifierFromParameter(param.*) orelse {
+                    resetMouseEscapeDecode(stage, param, param2, mouse);
+                    return .ignore;
+                };
                 resetMouseEscapeDecode(stage, param, param2, mouse);
                 return kittyUnicodeKeyAction(keycode, modifiers, meta_prefixed);
             }
 
             if (byte == '~') {
                 const keycode = param2.*;
-                const modifiers = if (param.* > 0) param.* - 1 else 0;
+                const modifiers = modifierFromParameter(param.*) orelse {
+                    resetMouseEscapeDecode(stage, param, param2, mouse);
+                    return .ignore;
+                };
                 resetMouseEscapeDecode(stage, param, param2, mouse);
                 if (keycode == 3 and (modifiers & 0x08) != 0) {
                     return .delete_to_line_end;
@@ -604,27 +634,34 @@ pub fn consumeInputEscapeByteWithMouse(
             }
 
             const meta_prefixed = hasMetaPrefix(stage.*);
-            const modifiers = if (param.* > 0) param.* - 1 else 0;
-            if (byte == 'Z' and modifiers != 0) {
+            const modifier_value = modifierFromParameter(param.*);
+            if (byte == 'Z' and modifier_value != null and modifier_value.? != 0) {
                 resetMouseEscapeDecode(stage, param, param2, mouse);
                 return .toggle_permission_mode;
             }
-            if (modifiedArrowAction(byte, modifiers, meta_prefixed)) |action| {
+            if (byte == 'A' or byte == 'B' or byte == 'C' or byte == 'D' or byte == 'H' or byte == 'F') {
+                const modifiers = modifier_value orelse {
+                    resetMouseEscapeDecode(stage, param, param2, mouse);
+                    return .ignore;
+                };
+                if (modifiedArrowAction(byte, modifiers, meta_prefixed)) |action| {
+                    resetMouseEscapeDecode(stage, param, param2, mouse);
+                    return action;
+                }
+
+                const action: InputEscapeAction = switch (byte) {
+                    'A' => .cursor_up,
+                    'B' => .cursor_down,
+                    'C' => .cursor_right,
+                    'D' => .cursor_left,
+                    'H' => .home,
+                    'F' => .end,
+                    else => unreachable,
+                };
                 resetMouseEscapeDecode(stage, param, param2, mouse);
                 return action;
             }
-
-            const action: InputEscapeAction = switch (byte) {
-                'A' => .cursor_up,
-                'B' => .cursor_down,
-                'C' => .cursor_right,
-                'D' => .cursor_left,
-                'H' => .home,
-                'F' => .end,
-                else => return beginControlSequenceDiscard(stage, param, param2, mouse, byte),
-            };
-            resetMouseEscapeDecode(stage, param, param2, mouse);
-            return action;
+            return beginControlSequenceDiscard(stage, param, param2, mouse, byte);
         },
         // Stage 6: third parameter (e.g. modifyOtherKeys: ESC[27;modifier;keycode~)
         6 => {
@@ -636,7 +673,10 @@ pub fn consumeInputEscapeByteWithMouse(
             if (byte == '~') {
                 const meta_prefixed = hasMetaPrefix(stage.*);
                 const keycode = param.*;
-                const modifiers = if (param2.* > 0) param2.* - 1 else 0;
+                const modifiers = modifierFromParameter(param2.*) orelse {
+                    resetMouseEscapeDecode(stage, param, param2, mouse);
+                    return .ignore;
+                };
                 resetMouseEscapeDecode(stage, param, param2, mouse);
                 return kittyUnicodeKeyAction(keycode, modifiers, meta_prefixed);
             }

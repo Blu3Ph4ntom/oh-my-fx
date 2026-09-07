@@ -23,6 +23,15 @@ fn attemptFinalFrameCommit(callbacks: EventLoopCallbacks, reason: []const u8) vo
     );
 }
 
+fn attemptFinalDeliveryCommit(callbacks: EventLoopCallbacks, reason: []const u8) void {
+    callbacks.settle_delivery_epoch(callbacks.ctx) catch |err| debug_trace.logf(
+        "event_loop",
+        "final_delivery_settle_failed reason={s} err={s}",
+        .{ reason, @errorName(err) },
+    );
+    attemptFinalFrameCommit(callbacks, reason);
+}
+
 pub const ExitCause = enum {
     requested_exit,
     input_closed,
@@ -44,7 +53,7 @@ pub fn pump_ready_input(terminal: anytype, should_exit: *bool, callbacks: EventL
     while (poll_result.readable and input_reads < max_input_reads_per_fact_collection) : (input_reads += 1) {
         const read_len = try terminal.read(&buf);
         if (read_len == 0) {
-            if (input_reads > 0) attemptFinalFrameCommit(callbacks, "eof");
+            if (handled_input) attemptFinalDeliveryCommit(callbacks, "eof");
             return .input_closed;
         }
 
@@ -58,11 +67,12 @@ pub fn pump_ready_input(terminal: anytype, should_exit: *bool, callbacks: EventL
     }
 
     if (poll_result.readable) {
+        try callbacks.settle_delivery_epoch(callbacks.ctx);
         try callbacks.commit_frame(callbacks.ctx);
         return null;
     }
     if (poll_result.closed()) {
-        if (input_reads > 0) attemptFinalFrameCommit(callbacks, "hangup");
+        if (handled_input) attemptFinalDeliveryCommit(callbacks, "hangup");
         return .input_closed;
     }
 
@@ -77,10 +87,12 @@ pub fn run(terminal: anytype, should_exit: *bool, poll_timeout_ms: i32, callback
     var buf: [128]u8 = undefined;
 
     while (!should_exit.*) {
+        var handled_input = false;
         try callbacks.collect_facts(callbacks.ctx);
         if (should_exit.*) return .requested_exit;
 
         while (callbacks.next_collected_byte(callbacks.ctx)) |byte| {
+            handled_input = true;
             try callbacks.handle_byte(callbacks.ctx, byte);
             if (should_exit.*) return .requested_exit;
         }
@@ -94,10 +106,11 @@ pub fn run(terminal: anytype, should_exit: *bool, poll_timeout_ms: i32, callback
         while (poll_result.readable and input_reads < max_input_reads_per_fact_collection) : (input_reads += 1) {
             const read_len = try terminal.read(&buf);
             if (read_len == 0) {
-                if (input_reads > 0) attemptFinalFrameCommit(callbacks, "eof");
+                if (handled_input) attemptFinalDeliveryCommit(callbacks, "eof");
                 return .input_closed;
             }
 
+            handled_input = true;
             record_tape.recordStdin(buf[0..read_len]);
             for (buf[0..read_len]) |byte| {
                 try callbacks.handle_byte(callbacks.ctx, byte);
@@ -107,11 +120,12 @@ pub fn run(terminal: anytype, should_exit: *bool, poll_timeout_ms: i32, callback
         }
 
         if (poll_result.readable) {
+            try callbacks.settle_delivery_epoch(callbacks.ctx);
             try callbacks.commit_frame(callbacks.ctx);
             continue;
         }
         if (poll_result.closed()) {
-            if (input_reads > 0) attemptFinalFrameCommit(callbacks, "hangup");
+            if (handled_input) attemptFinalDeliveryCommit(callbacks, "hangup");
             return .input_closed;
         }
 
@@ -252,7 +266,7 @@ test "event loop commits once after every byte from the current read" {
     });
 
     try std.testing.expectEqual(ExitCause.input_closed, exit_cause);
-    try std.testing.expectEqualStrings("tabc", trace.bytes[0..trace.len]);
+    try std.testing.expectEqualStrings("tabsc", trace.bytes[0..trace.len]);
 }
 
 test "event loop batches already readable input before committing a frame" {
@@ -272,6 +286,65 @@ test "event loop batches already readable input before committing a frame" {
 
     try std.testing.expectEqual(ExitCause.requested_exit, exit_cause);
     try std.testing.expectEqualStrings("tabdesc", trace.bytes[0..trace.len]);
+}
+
+test "event loop commits once per readable input epoch" {
+    const BurstTerminal = struct {
+        read_index: *usize,
+
+        fn pollInput(self: @This(), _: i32) !shell_runtime.PollResult {
+            return if (self.read_index.* < 2) .{ .readable = true } else .{};
+        }
+
+        fn read(self: @This(), buf: []u8) !usize {
+            const chunks = [_][]const u8{ "\r\x1b", "[A" };
+            const chunk = chunks[self.read_index.*];
+            @memcpy(buf[0..chunk.len], chunk);
+            self.read_index.* += 1;
+            return chunk.len;
+        }
+    };
+    const Trace = struct {
+        handled: usize = 0,
+        settled: usize = 0,
+        committed: usize = 0,
+        should_exit: *bool,
+
+        fn collect(_: *anyopaque) !void {}
+        fn next(_: *anyopaque) ?u8 {
+            return null;
+        }
+        fn handle(ctx: *anyopaque, _: u8) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.handled += 1;
+        }
+        fn settle(ctx: *anyopaque) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.settled += 1;
+        }
+        fn commit(ctx: *anyopaque) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.committed += 1;
+            self.should_exit.* = true;
+        }
+    };
+
+    var should_exit = false;
+    var read_index: usize = 0;
+    var trace = Trace{ .should_exit = &should_exit };
+    const exit_cause = try run(BurstTerminal{ .read_index = &read_index }, &should_exit, 8, .{
+        .ctx = &trace,
+        .collect_facts = Trace.collect,
+        .next_collected_byte = Trace.next,
+        .handle_byte = Trace.handle,
+        .settle_delivery_epoch = Trace.settle,
+        .commit_frame = Trace.commit,
+    });
+
+    try std.testing.expectEqual(ExitCause.requested_exit, exit_cause);
+    try std.testing.expectEqual(@as(usize, 4), trace.handled);
+    try std.testing.expectEqual(@as(usize, 1), trace.settled);
+    try std.testing.expectEqual(@as(usize, 1), trace.committed);
 }
 
 test "cooperative input pump renders ready input without collecting facts" {
@@ -393,7 +466,7 @@ test "event loop dispatches probe-collected input before polled input" {
     });
 
     try std.testing.expectEqual(ExitCause.input_closed, exit_cause);
-    try std.testing.expectEqualStrings("txabc", trace.bytes[0..trace.len]);
+    try std.testing.expectEqualStrings("txabsc", trace.bytes[0..trace.len]);
 }
 
 test "event loop stops after fact collection requests exit" {
@@ -501,7 +574,7 @@ test "event loop treats a failed final commit after hangup as a clean close" {
 
     try std.testing.expectEqual(ExitCause.input_closed, exit_cause);
     try std.testing.expect(!should_exit);
-    try std.testing.expectEqualStrings("tabc", trace.bytes[0..trace.len]);
+    try std.testing.expectEqualStrings("tabsc", trace.bytes[0..trace.len]);
 }
 
 test "event loop commits a frame before sustained readable input can starve it" {
@@ -527,9 +600,7 @@ test "event loop commits a frame before sustained readable input can starve it" 
             const self: *@This() = @ptrCast(@alignCast(ctx));
             self.handled += 1;
         }
-        fn settle(_: *anyopaque) !void {
-            return error.UnexpectedSettlement;
-        }
+        fn settle(_: *anyopaque) !void {}
         fn commit(ctx: *anyopaque) !void {
             const self: *@This() = @ptrCast(@alignCast(ctx));
             self.should_exit.* = true;

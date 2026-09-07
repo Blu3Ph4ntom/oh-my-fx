@@ -14,5 +14,8 @@ test {
     _ = @import("core/config/model_provider.zig");
     _ = @import("core/config/ui_preferences.zig");
     _ = @import("core/app/app_input_runtime.zig");
+    _ = @import("ui/event_loop.zig");
+    _ = @import("ui/input/runtime.zig");
     _ = @import("ui/input/terminal_action_decoder.zig");
+    _ = @import("ui/terminal/terminal.zig");
 }

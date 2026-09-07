@@ -446,6 +446,14 @@ test "question bytes translate to typed prompt actions" {
         questionActionFromByte('\r', false).?,
     );
     try std.testing.expectEqual(
+        question_prompt.Action.submit,
+        questionActionFromByte('\r', true).?,
+    );
+    try std.testing.expectEqual(
+        question_prompt.Action.submit,
+        questionActionFromByte('\n', false).?,
+    );
+    try std.testing.expectEqual(
         question_prompt.Action.next_entry,
         questionActionFromByte('\t', false).?,
     );
@@ -645,6 +653,7 @@ test "terminal reply ownership precedes active paste transport" {
 test "approval bytes translate to typed decision actions" {
     try std.testing.expectEqual(approval_decision.Action.deny, approvalActionFromByte(3).?);
     try std.testing.expectEqual(approval_decision.Action.submit, approvalActionFromByte('\r').?);
+    try std.testing.expectEqual(approval_decision.Action.submit, approvalActionFromByte('\n').?);
     try std.testing.expectEqual(approval_decision.Action.tab, approvalActionFromByte('\t').?);
     try std.testing.expectEqual(approval_decision.Action.backspace, approvalActionFromByte(0x7F).?);
     try std.testing.expectEqual(
@@ -2333,6 +2342,35 @@ test "input escape parser preserves modified arrow intent" {
     try expectEscapeAction("[57353;5u", moveEscape(.visual_down, false));
     try expectEscapeAction("[57353;9u", moveEscape(.draft_end, false));
     try expectEscapeAction("[1;4D", moveEscape(.word_left, true));
+}
+
+test "input escape parser covers Windows modifier and Kitty key forms" {
+    try expectEscapeAction("[1;5A", moveEscape(.visual_up, false));
+    try expectEscapeAction("[1;5B", moveEscape(.visual_down, false));
+    try expectEscapeAction("[1;5C", moveEscape(.word_right, false));
+    try expectEscapeAction("[1;5D", moveEscape(.word_left, false));
+    try expectEscapeAction("[1;2A", moveEscape(.visual_up, true));
+    try expectEscapeAction("[1;2B", moveEscape(.visual_down, true));
+    try expectEscapeAction("[1;2C", moveEscape(.character_right, true));
+    try expectEscapeAction("[1;2D", moveEscape(.character_left, true));
+    try expectEscapeAction("[1;3A", moveEscape(.paragraph_up, false));
+    try expectEscapeAction("[1;3B", moveEscape(.paragraph_down, false));
+    try expectEscapeAction("[1;3C", moveEscape(.word_right, false));
+    try expectEscapeAction("[1;3D", moveEscape(.word_left, false));
+    try expectEscapeAction("[1;5H", moveEscape(.draft_start, false));
+    try expectEscapeAction("[1;5F", moveEscape(.draft_end, false));
+
+    try expectEscapeAction("[57354;1u", .cursor_right);
+    try expectEscapeAction("[57355;1u", .cursor_left);
+    try expectEscapeAction("[27;5u", .escape);
+    try expectEscapeAction("[13;2u", .insert_newline);
+    try expectEscapeAction("[9;1u", .{ .remapped_byte = '\t' });
+
+    // Invalid modifier fields are consumed as one ignored sequence and never
+    // fall through as printable payload.
+    try expectEscapeAction("[1;0A", .ignore);
+    try expectEscapeAction("[1;99A", .ignore);
+    try expectEscapeAction("[57354;99u", .ignore);
 }
 
 test "input escape parser preserves double escape meta behavior" {

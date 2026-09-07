@@ -68,6 +68,7 @@ pub const TerminalState = struct {
     // a field default. Windows replaces this handle before terminal use.
     stdin_fd: std.posix.fd_t = if (builtin.os.tag == .windows) std.os.windows.INVALID_HANDLE_VALUE else std.posix.STDIN_FILENO,
     windows_console_mode: std.os.windows.DWORD = 0,
+    keyboard_protocol: ui_terminal.KeyboardProtocol = .legacy_csi,
     original_termios: std.posix.termios = undefined,
     raw_enabled: bool = false,
     alternate_screen_owner: AlternateScreenOwner = .none,
@@ -109,6 +110,7 @@ pub const TerminalState = struct {
 
     pub fn captureOriginalTermios(self: *TerminalState) !void {
         if (comptime builtin.os.tag == .wasi) return;
+        self.keyboard_protocol = ui_terminal.keyboardProtocolFor(io_mod.getenv("TMUX"));
         if (comptime builtin.os.tag == .windows) {
             self.stdin_fd = io_mod.stdinFd();
             self.windows_console_mode = io_mod.windowsConsoleGetMode() orelse return error.NotATerminal;
@@ -123,6 +125,9 @@ pub const TerminalState = struct {
             return;
         }
         if (comptime builtin.os.tag == .windows) {
+            // captureOriginalTermios has already validated the native input
+            // handle and captured its original mode. Do not enable VT input
+            // against an unvalidated or replaced standard handle.
             if (io_mod.windowsConsoleSetRaw() == null) return error.NotATerminal;
             self.raw_enabled = true;
             return;

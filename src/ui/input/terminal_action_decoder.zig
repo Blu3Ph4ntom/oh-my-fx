@@ -317,9 +317,10 @@ fn expectDecodedFlushAction(
     try std.testing.expectEqual(@as(usize, 1), event_count);
     try std.testing.expect(ingress.replay_byte_after_routing == null);
     try std.testing.expect(!decoder.hasPending());
+    try std.testing.expect(decoder.flush(now_ms + timeout_ms + 1, timeout_ms, false).event == null);
 }
 
-test "terminal decoder key matrix" {
+test "terminal decoder key matrix does not emit duplicate events" {
     // Parser/decoder stage: CSI terminal bytes become exactly one semantic action.
     try expectDecodedAction(&.{ 0x1b, '[', 'A' }, .cursor_up);
     try expectDecodedAction(&.{ 0x1b, '[', 'B' }, .cursor_down);
@@ -366,7 +367,21 @@ test "terminal decoder key matrix" {
     }
 }
 
-test "bare Escape emits once" {
+test "terminal decoder preserves CR and LF as surface input" {
+    for ([_]u8{ '\r', '\n' }) |byte| {
+        var decoder = Decoder{};
+        const ingress = decoder.feed(byte, decoderMatrixContext(1, false));
+        const event = ingress.event orelse return error.MissingTerminalIngress;
+        switch (event) {
+            .raw => |raw| try std.testing.expectEqual(byte, raw.byte),
+            else => return error.UnexpectedTerminalIngress,
+        }
+        try std.testing.expect(ingress.replay_byte_after_routing == null);
+        try std.testing.expect(!decoder.hasPending());
+    }
+}
+
+test "bare Escape emits once after quiet timeout" {
     try expectDecodedFlushAction(&.{0x1b}, 31, 30, .escape);
 }
 
