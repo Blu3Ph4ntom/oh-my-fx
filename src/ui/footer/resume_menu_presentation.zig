@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const list_window = @import("../../core/shared/list_window.zig");
 const session_catalog = @import("../../core/session/session_catalog.zig");
@@ -196,6 +198,15 @@ pub fn composeSessionMenuRow(
 ) !std.ArrayList(u8) {
     const row: std.ArrayList(u8) = .empty;
     if (width == 0 or row_index >= row_budget) return row;
+    if (row_budget == 1) {
+        const count = projection.navigationItemCount();
+        if (projection.load_state != .ready or count == 0) return composeStateRow(alloc, projection, width);
+        if (projection.selection_failure) |failure| return composeSelectionFailureRow(alloc, failure, width);
+        const selected = projection.selected_index % count;
+        if (projection.isLoadMoreIndex(selected)) return composeLoadMoreRow(alloc, true, projection.loading_more, width);
+        const summary = projection.itemAt(selected) orelse return row;
+        return composeTitleRow(alloc, summary.*, true, projection.now_ms, .{}, width);
+    }
     if (row_index == 0) return composeHeaderRow(alloc, projection, width);
 
     const layout = SessionMenuLayout.build(projection, row_budget);
@@ -275,7 +286,7 @@ fn composeHeaderRow(alloc: Allocator, projection: SessionMenuProjection, width: 
 }
 
 fn appendHeaderTitle(alloc: Allocator, row: *std.ArrayList(u8), count: usize) !void {
-    try row.appendSlice(alloc, ui_render.selected_completion_style);
+    try row.appendSlice(alloc, ui_render.brand_style);
     var buf: [48]u8 = undefined;
     const title = std.fmt.bufPrint(&buf, "Sessions {d}", .{count}) catch "Sessions";
     try row.appendSlice(alloc, title);
@@ -283,7 +294,7 @@ fn appendHeaderTitle(alloc: Allocator, row: *std.ArrayList(u8), count: usize) !v
 }
 
 fn appendScopeTab(alloc: Allocator, row: *std.ArrayList(u8), scope: session_catalog.Scope, active: bool) !void {
-    try row.appendSlice(alloc, if (active) ui_render.selected_completion_style else ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (active) .active else .normal, ui_render.color_enabled));
     if (active) try row.append(alloc, '[');
     try row.appendSlice(alloc, switch (scope) {
         .current_workspace => "Current workspace",
@@ -349,8 +360,9 @@ fn composeTitleRow(
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
 
-    const indent_width: usize = if (width <= 4) 0 else 2;
-    if (indent_width > 0) try row.appendSlice(alloc, "  ");
+    const indent_width: usize = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent_width));
 
     // Right cluster: "<workspace> · <age> · N turns", all dim, laid out in
     // fixed columns. @max with the row's own widths keeps it self-sizing when
@@ -373,9 +385,6 @@ fn composeTitleRow(
     else
         @as(usize, width) -| prefix_width;
 
-    // Selection is signaled by brightness: bold bright white when selected,
-    // dim gray otherwise, so the two are clearly distinct. No marker glyph.
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
     try row_text.appendSingleLineMiddleEllipsized(alloc, &row, session_catalog.displayTitle(summary), title_budget);
     try row.appendSlice(alloc, ui_render.reset_style);
 
@@ -383,7 +392,7 @@ fn composeTitleRow(
         try row_text.appendSpacesToColumn(alloc, &row, content_width - metadata_width);
         // The metadata cluster tracks the row's selection: bold bright with the
         // selected title, dim gray otherwise, so the whole selected row stands out.
-        try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
         // Workspace and turn count left-aligned, age right-aligned: each column
         // keeps its own digits in line. The turn count closes the row, so it
         // needs no trailing padding.
@@ -405,11 +414,12 @@ fn composeLoadMoreRow(
     loading: bool,
     width: u16,
 ) !std.ArrayList(u8) {
+    if (loading) return input_presentation.composeStatusRow(alloc, .loading, "↓ Loading more…", width);
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    const indent_width: usize = if (width <= 4) 0 else 2;
-    if (indent_width > 0) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+    const indent_width: usize = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent_width));
     try row_text.appendSingleLineEllipsized(
         alloc,
         &row,
@@ -426,13 +436,11 @@ fn composeStateRow(alloc: Allocator, projection: SessionMenuProjection, width: u
         .failed => "Unable to load sessions.",
         .ready => "No sessions found.",
     };
-    var row: std.ArrayList(u8) = .empty;
-    errdefer row.deinit(alloc);
-    if (width > 4) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, ui_render.dim_style);
-    try row_text.appendClipped(alloc, &row, message, width -| 2);
-    try row.appendSlice(alloc, ui_render.reset_style);
-    return row;
+    return input_presentation.composeStatusRow(alloc, switch (projection.load_state) {
+        .loading => .loading,
+        .failed => .danger,
+        .ready => .disabled,
+    }, message, width);
 }
 
 fn composeSelectionFailureRow(
@@ -440,24 +448,12 @@ fn composeSelectionFailureRow(
     failure: session_catalog.ResumeFailure,
     width: u16,
 ) !std.ArrayList(u8) {
-    var row: std.ArrayList(u8) = .empty;
-    errdefer row.deinit(alloc);
-    const indent_width: usize = if (width > 4) 2 else 0;
-    if (indent_width > 0) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, ui_render.red_style);
     const message = switch (failure) {
         .open_elsewhere => "This session is open in another omfx. Close it there, then press Enter to retry.",
         .being_updated => "This session is being updated. Wait a moment, then press Enter to retry.",
         .unavailable => "Unable to resume this session.",
     };
-    try row_text.appendSingleLineEllipsized(
-        alloc,
-        &row,
-        message,
-        @as(usize, width) -| indent_width,
-    );
-    try row.appendSlice(alloc, ui_render.reset_style);
-    return row;
+    return input_presentation.composeStatusRow(alloc, .danger, message, width);
 }
 
 fn composeCompactFailureTitleRow(
@@ -563,9 +559,11 @@ test "resume menu renders each session on one line with a right metadata cluster
 
     var title = try composeSessionMenuRow(alloc, projection, 2, 120, 4);
     defer title.deinit(alloc);
-    // Single line, no selection marker: title plus the dim right cluster
+    // Single line with a selection marker: title plus the dim right cluster
     // "<workspace> · <age> · N turns" using the workspace basename.
     try std.testing.expect(std.mem.find(u8, title.items, "Redesign resume menu") != null);
+    try std.testing.expect(std.mem.find(u8, title.items, "> ") != null);
+    try std.testing.expect(std.mem.find(u8, title.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
     try std.testing.expect(std.mem.find(u8, title.items, "resume-catalog · 8m · 24 turns") != null);
     try std.testing.expect(std.mem.find(u8, title.items, "●") == null);
     try std.testing.expect(std.mem.find(u8, title.items, "○") == null);

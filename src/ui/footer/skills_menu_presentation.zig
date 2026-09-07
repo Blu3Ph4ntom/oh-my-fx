@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const skill_runtime = @import("../../core/skills/skill_runtime.zig");
 const list_window = @import("../../core/shared/list_window.zig");
@@ -41,6 +43,8 @@ const SkillsMenuLayout = struct {
             return .{
                 .match_count = match_count,
                 .selected = selected,
+                .visible_items = 1,
+                .first_item_row = 0,
                 .row_count = 1,
             };
         }
@@ -156,7 +160,7 @@ pub fn composeSkillsMenuRow(
 ) !std.ArrayList(u8) {
     const row: std.ArrayList(u8) = .empty;
     if (width == 0 or row_index >= prepared.layout.row_count) return row;
-    if (row_index == 0) {
+    if (row_index == 0 and prepared.layout.row_count > 1) {
         return composeHeaderRow(
             alloc,
             prepared.layout.match_count,
@@ -223,7 +227,7 @@ fn composeHeaderRow(
     defer compact.deinit(alloc);
     try appendHeaderTitle(alloc, &compact, match_count);
     try compact.appendSlice(alloc, "    ");
-    try compact.appendSlice(alloc, ui_render.dim_style);
+    try compact.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try compact.appendSlice(alloc, "Source ");
     try compact.appendSlice(alloc, ui_render.reset_style);
     try appendSourceTab(alloc, &compact, source_filter, true);
@@ -245,7 +249,7 @@ fn composeHeaderRow(
 }
 
 fn appendHeaderTitle(alloc: Allocator, row: *std.ArrayList(u8), count: usize) !void {
-    try row.appendSlice(alloc, ui_render.selected_completion_style);
+    try row.appendSlice(alloc, ui_render.brand_style);
     var buf: [48]u8 = undefined;
     const title = std.fmt.bufPrint(&buf, "Skills {d}", .{count}) catch "Skills";
     try row.appendSlice(alloc, title);
@@ -258,7 +262,7 @@ fn appendSourceTab(
     filter: skill_runtime.SkillMenuSourceFilter,
     active: bool,
 ) !void {
-    try row.appendSlice(alloc, if (active) ui_render.selected_completion_style else ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (active) .active else .normal, ui_render.color_enabled));
     if (active) try row.append(alloc, '[');
     try row.appendSlice(alloc, skill_runtime.skillMenuFilterLabel(filter));
     if (active) try row.append(alloc, ']');
@@ -275,8 +279,9 @@ fn composeSkillTitleRow(
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
 
-    const indent_width: usize = if (width <= 4) 0 else 2;
-    if (indent_width > 0) try row.appendSlice(alloc, "  ");
+    const indent_width: usize = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent_width));
 
     const scope = skillSourceScopeLabel(skill.source);
     const scope_width = @max(scope_col, display_width.visibleWidth(scope));
@@ -288,10 +293,6 @@ fn composeSkillTitleRow(
     else
         @as(usize, width) -| prefix_width;
 
-    // Selection by brightness: bold bright white when selected, dim gray
-    // otherwise, applied to the whole row (name and scope). No marker glyph.
-    const style = if (selected) ui_render.selected_completion_style else ui_render.dim_style;
-    try row.appendSlice(alloc, style);
     try row_text.appendSingleLineEllipsized(alloc, &row, skill.name, name_budget);
 
     if (show_scope) {
@@ -310,7 +311,7 @@ fn composeEmptyRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     const text = if (catalog_empty)
         "No skills available."
     else if (source_filter == .all)
@@ -389,10 +390,12 @@ test "skills menu renders source tabs and single-line results" {
     defer gap.deinit(alloc);
     try std.testing.expectEqual(@as(usize, 0), gap.items.len);
 
-    // Selected skill on a single line: name + scope, no marker, no description.
+    // Selected skill on a single line: name + scope, a selection marker and no description.
     var selected = try composeSkillsMenuRow(alloc, prepared, 3, 120);
     defer selected.deinit(alloc);
     try std.testing.expect(std.mem.find(u8, selected.items, "workspace") != null);
+    try std.testing.expect(std.mem.find(u8, selected.items, "> ") != null);
+    try std.testing.expect(std.mem.find(u8, selected.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
     try std.testing.expect(std.mem.find(u8, selected.items, "Codex · Workspace") != null);
     try std.testing.expect(std.mem.find(u8, selected.items, "/tmp/") == null);
     try std.testing.expect(std.mem.find(u8, selected.items, "●") == null);
@@ -581,7 +584,7 @@ test "prepared skills menu keeps a mixed-source scrolled window aligned" {
         display_width.visibleWidthIgnoringAnsi(first.items[0..first_scope]),
         display_width.visibleWidthIgnoringAnsi(second.items[0..second_scope]),
     );
-    try std.testing.expect(std.mem.find(u8, second.items, ui_render.selected_completion_style) != null);
+    try std.testing.expect(std.mem.find(u8, second.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
 }
 
 test "skills menu result rows preserve content within one through four columns" {

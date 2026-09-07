@@ -1,8 +1,11 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const question_prompt = @import("../../core/agent/question_prompt.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const types = @import("../../core/shared/types.zig");
 const ui_render = @import("../render.zig");
+const row_text = @import("row_text.zig");
 const question_freeform_layout = @import("question_freeform_layout.zig");
 
 const Allocator = std.mem.Allocator;
@@ -62,7 +65,16 @@ pub fn composeQuestionPanelText(
 
     try out.writer.writeByte('\n');
 
-    return out.toOwnedSlice();
+    var clipped: std.ArrayList(u8) = .empty;
+    errdefer clipped.deinit(alloc);
+    var lines = std.mem.splitScalar(u8, out.writer.buffered(), '\n');
+    var first_line = true;
+    while (lines.next()) |line| {
+        if (!first_line) try clipped.append(alloc, '\n');
+        first_line = false;
+        try row_text.appendClipped(alloc, &clipped, line, cols);
+    }
+    return clipped.toOwnedSlice(alloc);
 }
 
 fn writeQuestionPanelQuestion(
@@ -79,7 +91,7 @@ fn writeQuestionPanelQuestion(
         else
             nextWrappedTextLine(question, start, content_width);
         try writer.writeAll("  ");
-        try writer.writeAll(ui_render.bold_style);
+        try writer.writeAll(ui_render.brand_style);
         try writer.writeAll(question[start..line.content_end]);
         try writer.writeAll(ui_render.reset_style);
         try writer.writeByte('\n');
@@ -101,8 +113,7 @@ fn writeQuestionPanelOptionLine(
     row_budget: usize,
 ) !void {
     const selected = index == entry.choice_index;
-    // No caret: selection reads purely from the white-vs-gray contrast.
-    const option_style = if (selected) ui_render.selected_completion_style else ui_render.dim_style;
+    const option_style = surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled);
 
     var ordinal_buf: [16]u8 = undefined;
     const ordinal = std.fmt.bufPrint(&ordinal_buf, "{d}) ", .{index + 1}) catch "";
@@ -139,7 +150,8 @@ fn writeQuestionPanelOptionLine(
 
             if (row_index == 0) {
                 try writer.writeAll(option_style);
-                try writer.writeAll(question_freeform_layout.option_row_indent);
+                try writer.writeAll("  ");
+                try writer.writeAll(surface_style.marker(if (selected) .focus else .normal));
                 try writer.writeAll(ordinal);
             } else {
                 try writer.splatByteAll(' ', prefix_width);
@@ -158,7 +170,7 @@ fn writeQuestionPanelOptionLine(
                 } else {
                     try writer.writeByte(' ');
                 }
-                try writer.writeAll(ui_render.dim_style);
+                try writer.writeAll(surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
                 try writer.writeAll(description[description_start..description_line.content_end]);
                 try writer.writeAll(ui_render.reset_style);
             }
@@ -180,7 +192,8 @@ fn writeQuestionPanelOptionLine(
 
         if (first) {
             try writer.writeAll(option_style);
-            try writer.writeAll(question_freeform_layout.option_row_indent);
+            try writer.writeAll("  ");
+            try writer.writeAll(surface_style.marker(if (selected) .focus else .normal));
             try writer.writeAll(ordinal);
         } else {
             try writer.splatByteAll(' ', prefix_width);
@@ -200,7 +213,7 @@ fn writeQuestionPanelOptionLine(
         while (description_start < description.len) {
             const line = nextWrappedTextLine(description, description_start, description_width);
             try writer.splatByteAll(' ', prefix_width);
-            try writer.writeAll(ui_render.dim_style);
+            try writer.writeAll(surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
             try writer.writeAll(description[description_start..line.content_end]);
             try writer.writeAll(ui_render.reset_style);
             try writer.writeByte('\n');
@@ -335,7 +348,7 @@ fn writeSelectedFreeformOptionLines(
     const content_width = question_freeform_layout.contentWidth(entry.choice_index, row_budget);
 
     if (buffer.len == 0) {
-        try writer.writeAll(ui_render.selected_completion_style);
+        try writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled));
         try writer.writeAll(question_freeform_layout.option_row_indent);
         try writer.writeAll(ordinal);
         try writer.writeAll(ui_render.reset_style);
@@ -357,12 +370,12 @@ fn writeSelectedFreeformOptionLines(
         trailing_hard_break = line.hard_break and line.next_start == buffer.len;
 
         if (first) {
-            try writer.writeAll(ui_render.selected_completion_style);
+            try writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled));
             try writer.writeAll(question_freeform_layout.option_row_indent);
             try writer.writeAll(ordinal);
         } else {
             try writer.splatByteAll(' ', prefix_width);
-            try writer.writeAll(ui_render.selected_completion_style);
+            try writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled));
         }
 
         if (cursor >= start and cursor < end) {
@@ -374,7 +387,7 @@ fn writeSelectedFreeformOptionLines(
             try writer.writeAll(buffer[cursor..cursor_end]);
             try writer.writeAll(ui_render.reset_style);
             if (cursor_end < end) {
-                try writer.writeAll(ui_render.selected_completion_style);
+                try writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled));
                 try writer.writeAll(buffer[cursor_end..end]);
             }
         } else {
@@ -639,14 +652,14 @@ test "compose question panel renders only the current paginated entry" {
     try std.testing.expect(std.mem.find(u8, text, "Q0?") == null);
     try std.testing.expect(std.mem.find(u8, text, "Q1?") != null);
     try std.testing.expect(std.mem.find(u8, text, "Q2?") == null);
-    // No caret: the selected option is the one carrying the white style.
+    // The fixed-width marker identifies selection without color.
     try std.testing.expect(std.mem.find(u8, text, "❯") == null);
     try std.testing.expect(std.mem.find(u8, text, "[✓]") == null);
     var sel_buf: [64]u8 = undefined;
-    const selected_one = try std.fmt.bufPrint(&sel_buf, "{s}    1) One", .{ui_render.selected_completion_style});
+    const selected_one = try std.fmt.bufPrint(&sel_buf, "{s}  > 1) One", .{surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)});
     try std.testing.expect(std.mem.find(u8, text, selected_one) != null);
     var unsel_buf: [64]u8 = undefined;
-    const unselected_two = try std.fmt.bufPrint(&unsel_buf, "{s}    2) Two", .{ui_render.dim_style});
+    const unselected_two = try std.fmt.bufPrint(&unsel_buf, "{s}    2) Two", .{surface_style.rowStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled)});
     try std.testing.expect(std.mem.find(u8, text, unselected_two) != null);
 }
 
@@ -863,7 +876,7 @@ test "compose question panel shows dim placeholder when freeform slot is not sel
     defer std.testing.allocator.free(text);
 
     try std.testing.expect(std.mem.find(u8, text, question_prompt.freeform_option_label) != null);
-    try std.testing.expect(std.mem.find(u8, text, ui_render.dim_style) != null);
+    try std.testing.expect(std.mem.find(u8, text, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled)) != null);
 }
 
 test "compose question panel renders typed buffer in place of placeholder" {
@@ -888,6 +901,7 @@ test "compose question panel renders typed buffer in place of placeholder" {
 
     try std.testing.expect(std.mem.find(u8, text, "hi") != null);
     try std.testing.expect(std.mem.find(u8, text, "\x1b[7m") != null);
+    try std.testing.expect(std.mem.find(u8, text, "> ") == null);
 }
 
 test "selected freeform answer wraps into measured continuation rows" {
@@ -942,7 +956,7 @@ test "long predefined answer labels wrap into measured continuation rows" {
     const text = try composeQuestionPanelText(std.testing.allocator, prompt.projection().?, width);
     defer std.testing.allocator.free(text);
 
-    try std.testing.expect(std.mem.find(u8, text, "  1) Run the complete") != null);
+    try std.testing.expect(std.mem.find(u8, text, "> 1) Run the complete") != null);
     try std.testing.expect(std.mem.find(u8, text, "❯") == null);
     try expectVisibleIndentBefore(text, "verification suite", 7);
     try expectVisibleIndentBefore(text, "before pushing", 7);

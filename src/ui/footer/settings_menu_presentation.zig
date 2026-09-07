@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const settings_catalog = @import("../../core/config/settings_catalog.zig");
 const render_input = @import("render_input.zig");
@@ -227,7 +229,7 @@ fn browseBodyRowAt(projection: SettingsMenuProjection, width: u16, layout: Layou
 }
 
 fn composeBrowseHeader(alloc: Allocator, _: SettingsMenuProjection, width: u16) !std.ArrayList(u8) {
-    return composeStyledText(alloc, "Settings", width, ui_render.selected_completion_style, 0);
+    return composeStyledText(alloc, "Settings", width, ui_render.brand_style, 0);
 }
 
 fn composeCategoryRow(
@@ -239,7 +241,7 @@ fn composeCategoryRow(
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
     _ = projection;
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, category.label(), width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -255,9 +257,9 @@ fn composeItemRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    const indent: usize = if (width <= 2) 0 else 2;
-    if (indent > 0) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+    const indent: usize = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent));
     try row_text.appendSingleLineEllipsized(
         alloc,
         &row,
@@ -269,7 +271,7 @@ fn composeItemRow(
 
     const option_count = settings_catalog.optionCount(&snapshot, item.id);
     if (option_count == 0) {
-        try row.appendSlice(alloc, ui_render.selected_completion_style);
+        try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), .active, ui_render.color_enabled));
         try row_text.appendSingleLineEllipsized(alloc, &row, item.value, @as(usize, width) -| value_col);
         try row.appendSlice(alloc, ui_render.reset_style);
         return row;
@@ -277,10 +279,12 @@ fn composeItemRow(
 
     var option_index: usize = 0;
     while (option_index < option_count) : (option_index += 1) {
-        if (option_index > 0) try row.appendSlice(alloc, "  ");
+        const before_option = display_width.visibleWidthIgnoringAnsi(row.items);
+        if (before_option >= width) break;
+        if (option_index > 0) try row.appendNTimes(alloc, ' ', @min(@as(usize, 2), @as(usize, width) - before_option));
         const option = settings_catalog.optionAt(&snapshot, item.id, option_index) orelse continue;
         const current = std.ascii.eqlIgnoreCase(option, item.value);
-        try row.appendSlice(alloc, if (current) ui_render.selected_completion_style else ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (current) .active else .normal, ui_render.color_enabled));
         const used = display_width.visibleWidthIgnoringAnsi(row.items);
         try row_text.appendSingleLineEllipsized(alloc, &row, option, @as(usize, width) -| used);
         try row.appendSlice(alloc, ui_render.reset_style);
@@ -302,7 +306,11 @@ fn composeModelRow(
             .ready => "No models found",
             .failed => "Models unavailable",
         };
-        return composeStyledText(alloc, label, width, ui_render.dim_style, 4);
+        return input_presentation.composeStatusRow(alloc, switch (projection.models.load_state) {
+            .loading => .loading,
+            .failed => .danger,
+            .ready => .disabled,
+        }, label, width);
     }
 
     const match_count = projection.models.filteredItemCount();
@@ -318,8 +326,9 @@ fn composeModelRow(
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
     try row_text.appendSpacesToColumn(alloc, &row, value_col);
-    try row.appendSlice(alloc, if (display_index == selected) ui_render.selected_completion_style else ui_render.dim_style);
-    try row_text.appendSingleLineEllipsized(alloc, &row, model.id, @as(usize, width) -| value_col);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (display_index == selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (display_index == selected) .focus else .normal), @intCast(@as(usize, width) -| value_col));
+    try row_text.appendSingleLineEllipsized(alloc, &row, model.id, @as(usize, width) -| value_col -| 2);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
 }
@@ -338,7 +347,7 @@ fn centeredValueColumn(snapshot: settings_catalog.Snapshot, width: u16) usize {
 }
 
 fn composeEmptyRow(alloc: Allocator, width: u16) !std.ArrayList(u8) {
-    return composeStyledText(alloc, "No settings found.", width, ui_render.dim_style, 0);
+    return composeStyledText(alloc, "No settings found.", width, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled), 0);
 }
 
 fn composeStyledText(alloc: Allocator, text: []const u8, width: u16, style: []const u8, indent: usize) !std.ArrayList(u8) {
@@ -396,6 +405,8 @@ test "settings menu renders each setting on one row at wide and narrow widths" {
     var item = try composeSettingsMenuRow(alloc, projection, 3, 100, wide_rows);
     defer item.deinit(alloc);
     try std.testing.expect(std.mem.find(u8, item.items, "Input appearance") != null);
+    try std.testing.expect(std.mem.find(u8, item.items, "> ") != null);
+    try std.testing.expect(std.mem.find(u8, item.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
     try std.testing.expect(std.mem.find(u8, item.items, "tint") != null);
     try std.testing.expect(std.mem.find(u8, item.items, "Choose the composer") == null);
     try std.testing.expectEqual(@as(?usize, null), std.mem.findScalar(u8, item.items, '\n'));

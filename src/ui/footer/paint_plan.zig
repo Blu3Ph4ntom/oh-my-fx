@@ -1,4 +1,5 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
 const question_state = @import("../../core/agent/question_prompt.zig");
 const debug_trace = @import("../../core/shared/debug_trace.zig");
 const display_width = @import("../../core/shared/display_width.zig");
@@ -1011,7 +1012,7 @@ fn composeTranscriptViewerFooterFrame(
     try navigation_row.appendSlice(alloc, ui_render.reset_style);
     if (width > 1) {
         try navigation_row.append(alloc, ' ');
-        try navigation_row.appendSlice(alloc, ui_render.statusline_style);
+        try navigation_row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         try row_text.appendSingleLineEllipsized(alloc, &navigation_row, navigation, width - 2);
         try navigation_row.appendSlice(alloc, ui_render.reset_style);
     }
@@ -2248,10 +2249,7 @@ fn expectGenericPickerSelectionAtRow(
     defer frame.deinit(alloc);
 
     const selected_row = frame_plan.paint.footer.picker_start + relative_row;
-    const selected_style = switch (kind) {
-        .model_stage => ui_render.selected_completion_style,
-        else => ui_render.approval_button_inactive_style,
-    };
+    const selected_style = surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled);
     var saw_selected_bottom = false;
     for (frame.rows.items) |row| {
         if (row.row != selected_row) continue;

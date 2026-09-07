@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const settings_catalog = @import("../../core/config/settings_catalog.zig");
 const usage_report = @import("../../core/session/usage_report.zig");
 const display_width = @import("../../core/shared/display_width.zig");
@@ -61,7 +63,7 @@ fn composeSettingsRow(
 ) !std.ArrayList(u8) {
     const empty: std.ArrayList(u8) = .empty;
     if (row_index == 0) {
-        return composeStyledRow(alloc, title(projection), width, ui_render.selected_completion_style);
+        return composeStyledRow(alloc, title(projection), width, ui_render.brand_style);
     }
     if (row_index < settings_row_offset) return empty;
     const choice_index = row_index - settings_row_offset;
@@ -143,19 +145,16 @@ fn composeUsageRow(
             alloc,
             header,
             width,
-            ui_render.selected_completion_style,
+            ui_render.brand_style,
         );
     }
     const snapshot = projection.snapshot orelse {
         if (row_index != 1) return empty;
-        return composeStyledRow(
+        return input_presentation.composeStatusRow(
             alloc,
-            if (projection.refresh_error != null)
-                "Usage unavailable · press R to retry"
-            else
-                "Loading usage",
+            if (projection.refresh_error != null) .danger else .loading,
+            if (projection.refresh_error != null) "Usage unavailable · press R to retry" else "Loading usage",
             width,
-            ui_render.dim_style,
         );
     };
     if (row_index == 1) {
@@ -173,7 +172,7 @@ fn composeUsageRow(
                 alloc,
                 completenessMessage(snapshot.*),
                 width,
-                ui_render.dim_style,
+                surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
             );
         }
         const activity = snapshot.session_activity orelse return empty;
@@ -279,7 +278,7 @@ fn composeUsageRow(
             alloc,
             "  No model usage in this scope.",
             width,
-            ui_render.dim_style,
+            surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
         );
     }
     return composeUsageModelRow(
@@ -400,7 +399,7 @@ fn composeUsageStatusRow(
         completenessMessage(snapshot)
     else
         "Local omfx activity";
-    return composeStyledRow(alloc, status, width, ui_render.dim_style);
+    return input_presentation.composeStatusRow(alloc, if (projection.refresh_error != null) .danger else if (snapshot.completeness != .complete) .warning else .normal, status, width);
 }
 
 fn completenessMessage(snapshot: usage_report.Snapshot) []const u8 {
@@ -495,7 +494,7 @@ fn composeUsageModelRow(
                     alloc,
                     detail,
                     width,
-                    ui_render.dim_style,
+                    surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
                 );
             }
             logical_row += 1;
@@ -514,7 +513,7 @@ fn composeWorkspaceRow(
 ) !std.ArrayList(u8) {
     const empty: std.ArrayList(u8) = .empty;
     return switch (row_index) {
-        0 => composeStyledRow(alloc, "Workspace:", width, ui_render.selected_completion_style),
+        0 => composeStyledRow(alloc, "Workspace:", width, ui_render.brand_style),
         1 => empty,
         2 => blk: {
             var safe_path = try text_utils.encodeTerminalSafe(
@@ -648,8 +647,8 @@ fn composeWorkspaceActionRow(
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
 
-    try row.appendSlice(alloc, if (selected) ui_render.system_notice_label_style else ui_render.dim_style);
-    try row_text.appendClipped(alloc, &row, if (selected) "❯ " else "  ", width);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), width);
     const used_prefix = display_width.visibleWidthIgnoringAnsi(row.items);
     const total_width: usize = width;
     if (used_prefix >= total_width) {
@@ -674,7 +673,7 @@ fn composeWorkspaceActionRow(
     const used = display_width.visibleWidthIgnoringAnsi(row.items);
     if (used >= info_column) return row;
     try row.appendNTimes(alloc, ' ', info_column - used);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, info, total_width - info_column);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -728,7 +727,7 @@ fn composeLabelValueRow(
     const actual_target = @max(target, used + 1);
     if (actual_target >= total_width) return row;
     try row.appendNTimes(alloc, ' ', actual_target - used);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, value, total_width - actual_target);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -741,9 +740,9 @@ fn composeChoiceRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    const indent: usize = if (width <= 2) 0 else 2;
-    if (indent > 0) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, if (choice.selected) ui_render.selected_completion_style else ui_render.dim_style);
+    const indent: usize = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (choice.selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (choice.selected) .focus else .normal), @intCast(indent));
     const value_col = settingsValueColumn(choice.snapshot, choice.setting, width);
     const description_col: usize = if (choice.setting == .sandbox and width >= 48)
         @max(@as(usize, width) / 3, indent + 18)
@@ -753,7 +752,7 @@ fn composeChoiceRow(
     try row.appendSlice(alloc, ui_render.reset_style);
     if (description_col < value_col) {
         try row_text.appendSpacesToColumn(alloc, &row, description_col);
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         try row_text.appendSingleLineEllipsized(
             alloc,
             &row,
@@ -772,7 +771,7 @@ fn composeChoiceRow(
         if (option_index > 0) try row.appendNTimes(alloc, ' ', @min(@as(usize, 2), @as(usize, width) - before_option));
         const option = settings_catalog.optionAt(&choice.snapshot, choice.setting, option_index) orelse continue;
         const current = std.ascii.eqlIgnoreCase(option, choice.snapshot.value(choice.setting));
-        try row.appendSlice(alloc, if (current) ui_render.selected_completion_style else ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (current) .active else .normal, ui_render.color_enabled));
         const used = display_width.visibleWidthIgnoringAnsi(row.items);
         try row_text.appendSingleLineEllipsized(alloc, &row, option, @as(usize, width) -| used);
         try row.appendSlice(alloc, ui_render.reset_style);
@@ -969,7 +968,7 @@ test "usage menu renders expanded details for the last visible session model" {
         100,
     );
     defer selected.deinit(std.testing.allocator);
-    try std.testing.expect(std.mem.find(u8, selected.items, "❯ provider/model") != null);
+    try std.testing.expect(std.mem.find(u8, selected.items, "> provider/model") != null);
 
     var details = try composeCompactCommandMenuRow(
         std.testing.allocator,
@@ -1180,7 +1179,7 @@ test "workspace menu keeps launch-only roots visible but not selectable" {
 
     var saved = try composeCompactCommandMenuRow(std.testing.allocator, projection, 7, 9, 80);
     defer saved.deinit(std.testing.allocator);
-    try std.testing.expect(std.mem.find(u8, saved.items, "❯ /tmp/saved") != null);
+    try std.testing.expect(std.mem.find(u8, saved.items, "> /tmp/saved") != null);
 }
 
 test "compact command menu rows stay single-line and width safe" {

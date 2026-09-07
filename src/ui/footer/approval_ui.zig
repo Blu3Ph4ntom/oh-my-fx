@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const diff_mod = @import("../../core/output/diff.zig");
 const approval_decision = @import("../../core/permissions/approval_decision.zig");
 const approval_prompt = @import("../../core/permissions/approval_prompt.zig");
@@ -1095,15 +1097,10 @@ fn composeFileApprovalChoiceRowWithBlocked(
         &remaining,
     );
 
-    const row_style: []const u8 = if (blocked)
-        ui_render.statusline_style
-    else if (selected)
-        ui_render.tag_style
-    else
-        "";
+    const row_style = surface_style.rowStyle(input_presentation.surfacePalette(), if (blocked) .disabled else if (selected) .focus else .normal, ui_render.color_enabled);
     if (row_style.len > 0) try row.appendSlice(alloc, row_style);
 
-    const marker = if (selected) "❯ " else "  ";
+    const marker = surface_style.marker(if (blocked) .disabled else if (selected) .focus else .normal);
     _ = try appendTerminalSafeClipped(
         alloc,
         &row,
@@ -1115,10 +1112,10 @@ fn composeFileApprovalChoiceRowWithBlocked(
         _ = try appendTerminalSafeClipped(
             alloc,
             &row,
-            "! ",
+            "disabled: ",
             remaining,
         );
-        remaining -|= 2;
+        remaining -|= display_width.visibleWidth("disabled: ");
     }
 
     var number_buf: [2]u8 = .{ '1' + row_index, 0 };
@@ -1507,7 +1504,7 @@ fn buildApprovalPanelLineWithLabel(
     width: u16,
 ) []const u8 {
     const b = ui_render.bold_style;
-    const dim = ui_render.dim_style;
+    const dim = surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled);
     const r = ui_render.reset_style;
     const target = approvalTarget(label);
     const explanation = approval.request.explanation;
@@ -1569,8 +1566,8 @@ fn composeApprovalAmendmentPanelRow(
     var raw: std.Io.Writer.Allocating = .init(alloc);
     defer raw.deinit();
 
-    try raw.writer.writeAll("  ❯ ");
-    try raw.writer.writeAll(ui_render.tag_style);
+    try raw.writer.writeAll("  > ");
+    try raw.writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled));
     const draft = approval.draftForChoice(choice);
     const choice_prefix = approvalChoicePrefix(choice);
     try raw.writer.writeAll(choice_prefix);
@@ -1582,7 +1579,7 @@ fn composeApprovalAmendmentPanelRow(
             draft,
             approval.draftCursorForChoice(choice),
             @as(usize, width) -|
-                (display_width.visibleWidth("  ❯ ") +
+                (display_width.visibleWidth("  > ") +
                     display_width.visibleWidth(choice_prefix)),
         );
     }
@@ -1758,16 +1755,35 @@ pub fn composeInlineApprovalHintRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, approvalHint(approval, width), width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
 }
 
+test "blocked approval choice remains explicitly unavailable without focus" {
+    const saved_color = ui_render.color_enabled;
+    defer ui_render.color_enabled = saved_color;
+    for ([_]bool{ true, false }) |color| {
+        ui_render.color_enabled = color;
+        const request: permission_request.FileApprovalRequest = .{
+            .kind = .edit,
+            .intent = .mutation,
+            .scope = .workspace_files,
+            .preview = .{ .path = "src/example.zig", .lines = &.{}, .additions = 0, .deletions = 0, .truncated = false },
+        };
+        var row = try composeFileApprovalChoiceRowWithBlocked(std.testing.allocator, request, 0, 0, null, 80, true);
+        defer row.deinit(std.testing.allocator);
+        try std.testing.expect(std.mem.find(u8, row.items, "disabled: ") != null);
+        try std.testing.expect(std.mem.find(u8, row.items, "> ") == null);
+        try std.testing.expect(display_width.visibleWidthIgnoringAnsi(row.items) <= 80);
+    }
+}
+
 fn approvalChoiceLine(buf: []u8, selected: bool, label: []const u8) []const u8 {
-    const marker: []const u8 = if (selected) "❯ " else "  ";
-    const label_style = if (selected) ui_render.tag_style else "";
-    const suffix_style = if (selected) ui_render.reset_style else "";
+    const marker: []const u8 = surface_style.marker(if (selected) .focus else .normal);
+    const label_style = surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled);
+    const suffix_style = ui_render.reset_style;
     return std.fmt.bufPrint(buf, "  {s}{s}{s}{s}", .{ marker, label_style, label, suffix_style }) catch label;
 }
 
@@ -1907,7 +1923,7 @@ fn approvalReasonLine(
     explanation: ?[]const u8,
     dynamic_mcp: bool,
 ) []const u8 {
-    const dim = ui_render.dim_style;
+    const dim = surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled);
     const r = ui_render.reset_style;
     if (explanation) |text| {
         return std.fmt.bufPrint(buf, "  {s}{s}{s}", .{ dim, text, r }) catch "  Auto agent couldn’t approve because this request needs your review.";
@@ -2810,7 +2826,7 @@ test "generic approval uses compact permission header and pointer marker" {
         interaction_state.approval_panel_rows_spacious,
     );
     defer choice.deinit(alloc);
-    try std.testing.expect(std.mem.find(u8, choice.items, "❯ ") != null);
+    try std.testing.expect(std.mem.find(u8, choice.items, "> ") != null);
     try std.testing.expect(std.mem.find(u8, choice.items, "1. Yes") != null);
     try std.testing.expect(std.mem.find(u8, choice.items, "›") == null);
 }
@@ -2950,7 +2966,7 @@ test "file approval uses compact review header path question and pointer marker"
         null,
     );
     defer choice.text.deinit(alloc);
-    try std.testing.expect(std.mem.find(u8, choice.text.items, "❯ ") != null);
+    try std.testing.expect(std.mem.find(u8, choice.text.items, "> ") != null);
     try std.testing.expect(std.mem.find(
         u8,
         choice.text.items,

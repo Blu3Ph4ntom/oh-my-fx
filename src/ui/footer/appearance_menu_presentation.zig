@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const settings_catalog = @import("../../core/config/settings_catalog.zig");
 const render_input = @import("render_input.zig");
@@ -28,7 +30,7 @@ pub noinline fn composeAppearanceMenuRow(
             width,
         );
     }
-    if (row_index == 0) return composeStyledRow(alloc, "Appearance", width, ui_render.selected_completion_style);
+    if (row_index == 0) return composeStyledRow(alloc, "Appearance", width, ui_render.brand_style);
     if (visible_rows >= row_count and row_index == 1) return empty;
 
     const setting_row = row_index - if (visible_rows >= row_count) @as(u16, 2) else 1;
@@ -69,9 +71,9 @@ fn composeSettingRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    const indent: usize = if (width <= 2) 0 else 2;
-    if (indent > 0) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+    const indent: usize = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent));
     const value_col = valueColumn(projection.snapshot, setting, width);
     try row_text.appendSingleLineEllipsized(
         alloc,
@@ -89,7 +91,7 @@ fn composeSettingRow(
         if (index > 0) try row.appendNTimes(alloc, ' ', @min(@as(usize, 2), @as(usize, width) - before_option));
         const option = settings_catalog.optionAt(&projection.snapshot, setting, index) orelse continue;
         const current = std.ascii.eqlIgnoreCase(option, projection.snapshot.value(setting));
-        try row.appendSlice(alloc, if (current) ui_render.selected_completion_style else ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (current) .active else .normal, ui_render.color_enabled));
         const used = display_width.visibleWidthIgnoringAnsi(row.items);
         try row_text.appendSingleLineEllipsized(alloc, &row, option, @as(usize, width) -| used);
         try row.appendSlice(alloc, ui_render.reset_style);
@@ -113,7 +115,7 @@ fn valueColumn(snapshot: settings_catalog.Snapshot, setting: settings_catalog.Se
     return right_column_start + (right_column_width - block_width) / 2;
 }
 
-test "appearance menu matches settings rows without markers or descriptions" {
+test "appearance menu matches settings rows with a fixed selection marker" {
     const projection: AppearanceMenuProjection = .{
         .active = true,
         .selected_index = 0,
@@ -127,6 +129,8 @@ test "appearance menu matches settings rows without markers or descriptions" {
     var input = try composeAppearanceMenuRow(std.testing.allocator, projection, 2, row_count, 80);
     defer input.deinit(std.testing.allocator);
     try std.testing.expect(std.mem.find(u8, input.items, "Input appearance") != null);
+    try std.testing.expect(std.mem.find(u8, input.items, "> ") != null);
+    try std.testing.expect(std.mem.find(u8, input.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
     try std.testing.expect(std.mem.find(u8, input.items, "lines") != null);
     try std.testing.expect(std.mem.find(u8, input.items, "tint") != null);
     try std.testing.expect(std.mem.find(u8, input.items, "✓") == null);

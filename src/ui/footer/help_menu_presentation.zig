@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const command_specs = @import("../../core/slash_commands/command_specs.zig");
 const render_input = @import("render_input.zig");
@@ -201,7 +203,7 @@ fn bodyRowAt(projection: HelpMenuProjection, width: u16, layout: Layout, target:
 fn composeHeaderRow(alloc: Allocator, projection: HelpMenuProjection, width: u16) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.selected_completion_style);
+    try row.appendSlice(alloc, ui_render.brand_style);
     var buf: [48]u8 = undefined;
     const title = std.fmt.bufPrint(&buf, "Commands {d}", .{projection.filteredItemCount()}) catch "Commands";
     try row_text.appendSingleLineEllipsized(alloc, &row, title, width);
@@ -216,7 +218,7 @@ fn composeCategoryRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, category.label(), width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -231,16 +233,17 @@ fn composeCommandRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    const indent: usize = if (width <= 2) 0 else 2;
+    const indent: usize = @min(width, 2);
     const gutter: usize = if (description_col >= indent + 2) 2 else 0;
-    if (indent > 0) try row.appendSlice(alloc, "  ");
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent));
 
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, spec.help_entry.?, description_col -| indent -| gutter);
     try row.appendSlice(alloc, ui_render.reset_style);
     try row_text.appendSpacesToColumn(alloc, &row, description_col);
 
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(
         alloc,
         &row,
@@ -271,7 +274,7 @@ fn descriptionColumn(projection: HelpMenuProjection, width: u16) usize {
 fn composeEmptyRow(alloc: Allocator, width: u16) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, "No commands found.", width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -304,13 +307,14 @@ test "help menu keeps descriptions close at wide widths without changing narrow 
     var selected = try composeHelpMenuRow(alloc, projection, 3, 160, rows);
     defer selected.deinit(alloc);
     try std.testing.expect(std.mem.find(u8, selected.items, "/help") != null);
+    try std.testing.expect(std.mem.find(u8, selected.items, "> /help") != null);
     try std.testing.expect(std.mem.find(u8, selected.items, "●") == null);
     try std.testing.expect(std.mem.find(u8, selected.items, "show available slash commands") != null);
     try std.testing.expectEqual(@as(?usize, null), std.mem.findScalar(u8, selected.items, '\n'));
     const description_start = std.mem.find(u8, selected.items, "show available slash commands").?;
-    const selected_style_start = description_start - ui_render.selected_completion_style.len;
+    const selected_style_start = description_start - surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled).len;
     try std.testing.expectEqualStrings(
-        ui_render.selected_completion_style,
+        surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled),
         selected.items[selected_style_start..description_start],
     );
     try std.testing.expectEqual(

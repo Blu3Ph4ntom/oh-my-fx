@@ -1,4 +1,5 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
 const auth_runtime = @import("../../core/auth/auth_runtime.zig");
 const credentials = @import("../../core/auth/credentials.zig");
 const login_flow = @import("../../core/auth/login_flow.zig");
@@ -13,6 +14,41 @@ const input_presentation = @import("input_presentation.zig");
 const row_text = @import("row_text.zig");
 
 const Allocator = std.mem.Allocator;
+
+test "transient picker selection and status survive no color and narrow widths" {
+    const saved_color = ui_render.color_enabled;
+    const saved_focus = ui_render.focus_style;
+    const saved_danger = ui_render.danger_style;
+    defer {
+        ui_render.color_enabled = saved_color;
+        ui_render.focus_style = saved_focus;
+        ui_render.danger_style = saved_danger;
+    }
+    const palette = @import("../../core/shared/product_theme.zig").paletteFor(.{ .truecolor = false, .variant = .dark });
+    ui_render.focus_style = palette.focus;
+    ui_render.danger_style = palette.danger;
+    for ([_]bool{ true, false }) |color| {
+        ui_render.color_enabled = color;
+        for ([_]input_presentation.PickerKind{ .model_stage, .file, .slash, .auth }) |kind| {
+            var selected = try composePickerOptionRow(std.testing.allocator, kind, 1, "Readable choice", true, 40);
+            defer selected.deinit(std.testing.allocator);
+            try std.testing.expect(std.mem.find(u8, selected.items, "> Readable choice") != null);
+            if (color) try std.testing.expect(std.mem.find(u8, selected.items, ui_render.focus_style) != null);
+            for ([_]u16{ 1, 2, 8 }) |width| {
+                var narrow = try composePickerOptionRow(std.testing.allocator, kind, 1, "Readable choice", true, width);
+                defer narrow.deinit(std.testing.allocator);
+                try std.testing.expect(display_width.visibleWidthIgnoringAnsi(narrow.items) <= width);
+            }
+        }
+        var failure = try composePickerStatusRow(std.testing.allocator, .file, .model, false, true, 1, 60);
+        defer failure.deinit(std.testing.allocator);
+        try std.testing.expect(std.mem.find(u8, failure.items, "error: unable to index files") != null);
+        if (color) try std.testing.expect(std.mem.find(u8, failure.items, ui_render.danger_style) != null);
+        var progress = try composePickerStatusRow(std.testing.allocator, .file, .model, true, false, 1, 60);
+        defer progress.deinit(std.testing.allocator);
+        try std.testing.expect(std.mem.find(u8, progress.items, "loading: indexing files") != null);
+    }
+}
 const team_query_prefix = "   Choose a Vercel team · Search: ";
 const compact_team_query_prefix = "Search: ";
 
@@ -81,7 +117,7 @@ pub noinline fn composeAuthPickerRow(
 
     const show_header = row_index == 0 and (row_count > 1 or view.stage == .change_team);
     if (show_header) {
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         if (view.stage == .change_team) {
             const projection = teamQueryProjection(view.team_query, width);
             try row_text.appendClipped(alloc, &row, projection.prefix, width);
@@ -112,7 +148,7 @@ pub noinline fn composeAuthPickerRow(
         break :blk view.choiceAt(choice_index);
     } else null;
     const choice = maybe_choice orelse {
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         try row_text.appendClipped(alloc, &row, switch (view.stage) {
             .root => "",
             .provider => "     No providers available",
@@ -130,23 +166,21 @@ pub noinline fn composeAuthPickerRow(
 
     const selected = view.choiceIsSelected(choice);
     const enabled = view.choiceEnabled(choice);
-    try row.appendSlice(
-        alloc,
-        if (selected and enabled) ui_render.selected_completion_style else ui_render.dim_style,
-    );
-
-    var label_buf: [96]u8 = undefined;
-    const label = std.fmt.bufPrint(
-        &label_buf,
-        "{s}{s}",
-        .{ if (selected) "   › " else "     ", view.choiceLabel(choice) },
-    ) catch view.choiceLabel(choice);
-    try row_text.appendClipped(alloc, &row, label, width);
-
+    const description = view.choiceDescription(choice);
+    const connected = std.mem.eql(u8, description, "connected") or std.mem.eql(u8, description, "current");
+    const state: surface_style.SurfaceState = if (!enabled) .disabled else if (selected) .focus else if (connected) .success else .normal;
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), state, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, "   ", width);
+    try row_text.appendClipped(alloc, &row, surface_style.marker(state), width -| 3);
+    if (!enabled) try row_text.appendClipped(alloc, &row, "disabled: ", width -| 5);
+    const used = display_width.visibleWidthIgnoringAnsi(row.items);
     const description_col = authPickerDescriptionColumn(view);
-    if (width >= description_col) {
+    const show_description = width >= description_col and description.len > 0;
+    const label_budget = if (show_description) @as(usize, description_col) -| used -| 2 else @as(usize, width) -| used;
+    try row_text.appendSingleLineEllipsized(alloc, &row, view.choiceLabel(choice), label_budget);
+    if (show_description) {
         try row_text.appendAbsoluteColumn(alloc, &row, description_col);
-        const description = view.choiceDescription(choice);
+        try row.appendSlice(alloc, surface_style.statusStyle(input_presentation.surfacePalette(), if (!enabled) .disabled else if (connected) .success else .normal, ui_render.color_enabled));
         try row_text.appendClipped(alloc, &row, description, width - description_col + 1);
     }
     try row.appendSlice(alloc, ui_render.reset_style);
@@ -196,12 +230,12 @@ fn composeOnboardingPickerRow(
     if (maybe_choice_index) |choice_index| {
         const choice = view.choiceAt(choice_index) orelse return row;
         const selected = view.choiceIsSelected(choice);
-        try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
         var label_buf: [96]u8 = undefined;
         const label = std.fmt.bufPrint(
             &label_buf,
-            "{s}{s}",
-            .{ if (selected) "   › " else "     ", view.choiceLabel(choice) },
+            "   {s}{s}",
+            .{ surface_style.marker(if (selected) .focus else .normal), view.choiceLabel(choice) },
         ) catch view.choiceLabel(choice);
         try row_text.appendClipped(alloc, &row, label, width);
         try row.appendSlice(alloc, ui_render.reset_style);
@@ -245,10 +279,26 @@ fn composeSignInPickerRow(
     try row.appendSlice(
         alloc,
         if (row_index == 2 or row_index == 3)
-            ui_render.selected_completion_style
+            surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)
         else
-            ui_render.dim_style,
+            surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
     );
+    if (row_index == 5) {
+        row.deinit(alloc);
+        row = .empty;
+        return input_presentation.composeStatusRow(alloc, switch (snapshot.state) {
+            .idle, .polling => .loading,
+            .succeeded => .success,
+            .failed => .danger,
+            .cancelled => .warning,
+        }, switch (snapshot.state) {
+            .idle => "Preparing sign-in…",
+            .polling => "Waiting for authorization…",
+            .succeeded => "Authorization complete",
+            .failed => "Sign-in failed",
+            .cancelled => "Sign-in cancelled",
+        }, width);
+    }
     if (row_index == 2) {
         const browser_url = snapshot.verification_uri_complete orelse snapshot.verification_uri;
         const browser_label = if (source == .chatgpt_subscription)
@@ -296,15 +346,15 @@ fn composeApiKeyPickerRow(
     if (width == 0) return row;
 
     try row.appendSlice(alloc, if (row_index == 1)
-        ui_render.selected_completion_style
+        surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)
     else
-        ui_render.dim_style);
+        surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     switch (row_index) {
         0 => try row_text.appendClipped(alloc, &row, "   Paste your AI Gateway API key", width),
         1 => {
             try row_text.appendClipped(alloc, &row, "   ┃ ", width);
             if (mask_count == 0) {
-                try row.appendSlice(alloc, ui_render.dim_style);
+                try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
                 try row_text.appendClipped(alloc, &row, "Paste or type a key", width -| 5);
             } else {
                 for (0..@min(mask_count, width -| 5)) |_| try row.appendSlice(alloc, "•");
@@ -330,7 +380,7 @@ fn authPickerDescriptionColumn(view: auth_runtime.PickerView) u16 {
     var column: usize = 31;
     var index: usize = 0;
     while (view.choiceAt(index)) |choice| : (index += 1) {
-        const label_end = 5 + display_width.visibleWidth(view.choiceLabel(choice));
+        const label_end = 5 + (if (view.choiceEnabled(choice)) @as(usize, 0) else 10) + display_width.visibleWidth(view.choiceLabel(choice));
         column = @max(column, label_end + 2);
     }
     return @intCast(@min(column, std.math.maxInt(u16)));
@@ -434,17 +484,12 @@ pub noinline fn composePickerOptionRow(
     if (width_usize == 0 or start_col == 0 or start_col > width) return row;
 
     if (start_col > 1) try row_text.appendAbsoluteColumn(alloc, &row, start_col);
-    // The model picker (including its effort and fast stages) signals
-    // selection by brightness alone, like the question panel; the other
-    // pickers keep the filled row.
-    const selected_style = switch (kind) {
-        .model_stage => ui_render.selected_completion_style,
-        .file, .slash, .auth => ui_render.approval_button_inactive_style,
-    };
-    try row.appendSlice(alloc, if (selected) selected_style else ui_render.dim_style);
+    _ = kind;
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
 
     const label_width: u16 = @intCast(width_usize - @as(usize, start_col - 1));
-    try row_text.appendClipped(alloc, &row, item, label_width);
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), label_width);
+    try row_text.appendClipped(alloc, &row, item, label_width -| 2);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
 }
@@ -461,13 +506,14 @@ pub fn composeFilePickerOptionRow(
     if (width_usize == 0 or start_col == 0 or start_col > width) return row;
 
     if (start_col > 1) try row_text.appendAbsoluteColumn(alloc, &row, start_col);
-    const base_style = if (selected) ui_render.approval_button_inactive_style else ui_render.dim_style;
+    const base_style = surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled);
     try row.appendSlice(alloc, base_style);
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), width -| (start_col - 1));
     try appendFilePickerLabel(
         alloc,
         &row,
         item,
-        @intCast(width_usize - @as(usize, start_col - 1)),
+        @intCast((width_usize - @as(usize, start_col - 1)) -| 2),
         base_style,
     );
     try row.appendSlice(alloc, ui_render.reset_style);
@@ -488,7 +534,6 @@ pub fn composePickerStatusRow(
     if (width_usize == 0 or start_col == 0 or start_col > width) return row;
 
     if (start_col > 1) try row_text.appendAbsoluteColumn(alloc, &row, start_col);
-    try row.appendSlice(alloc, ui_render.dim_style);
 
     const label = switch (kind) {
         .model_stage => switch (model_stage) {
@@ -511,7 +556,9 @@ pub fn composePickerStatusRow(
         .auth => "authentication actions unavailable",
     };
 
-    try row_text.appendClipped(alloc, &row, label, @intCast(width_usize - @as(usize, start_col - 1)));
+    var status = try input_presentation.composeStatusRow(alloc, if (failed) .danger else if (loading) .loading else .disabled, label, @intCast(width_usize - @as(usize, start_col - 1)));
+    defer status.deinit(alloc);
+    try row.appendSlice(alloc, status.items);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
 }
@@ -757,7 +804,7 @@ pub fn composeSlashMenuHeaderRow(
     else
         content_width;
 
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, left, left_width);
     if (range_width > 0 and content_width > range_width + 2) {
         try appendSpacesToVisibleWidth(alloc, &row, content_width - range_width);
@@ -836,10 +883,8 @@ pub noinline fn composeSlashMenuOptionRow(
     errdefer row.deinit(alloc);
     if (width == 0) return row;
 
-    // Selection is signaled by brightness alone (like the model picker); no
-    // caret marker. The two-column indent stays fixed so rows stay aligned.
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
-    try row.appendSlice(alloc, "  ");
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), width);
 
     const content_width: usize = @as(usize, width) -| 1;
     const marker_width: usize = 2;
@@ -868,12 +913,12 @@ pub noinline fn composeSlashMenuOptionRow(
         content_width - description_start;
 
     if (content.description.len > 0 and description_width > 0) {
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         try row_text.appendSingleLineEllipsized(alloc, &row, content.description, description_width);
     }
     if (show_metadata) {
         try appendSpacesToVisibleWidth(alloc, &row, metadata_start);
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         try row.appendSlice(alloc, content.metadata);
     }
     try row.appendSlice(alloc, ui_render.reset_style);
@@ -908,17 +953,18 @@ pub fn composeSlashCompletionOptionRow(
     if (before_label_width >= width_usize) return row;
     const remaining: u16 = @intCast(width_usize - before_label_width);
 
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
-    try row_text.appendClipped(alloc, &row, label, remaining);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), remaining);
+    try row_text.appendClipped(alloc, &row, label, remaining -| 2);
     try row.appendSlice(alloc, ui_render.reset_style);
 
-    var visible = display_width.visibleWidth(label);
+    var visible = @min(display_width.visibleWidth(label) + 2, remaining);
     while (visible < command_width and before_label_width + visible < width_usize) : (visible += 1) {
         try row.append(alloc, ' ');
     }
 
     if (description.len > 0 and before_label_width + visible < width_usize) {
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         const desc_remaining: u16 = @intCast(width_usize - before_label_width - visible);
         try row_text.appendClipped(alloc, &row, description, desc_remaining);
         try row.appendSlice(alloc, ui_render.reset_style);
@@ -963,18 +1009,19 @@ fn composeSkillCompletionOptionRow(
     if (before_label_width >= width_usize) return row;
     const remaining: u16 = @intCast(width_usize - before_label_width);
 
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
-    try row_text.appendClipped(alloc, &row, skill.name, remaining);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), remaining);
+    try row_text.appendClipped(alloc, &row, skill.name, remaining -| 2);
     try row.appendSlice(alloc, ui_render.reset_style);
 
-    var visible = display_width.visibleWidth(skill.name);
+    var visible = @min(display_width.visibleWidth(skill.name) + 2, remaining);
     while (visible < command_width and before_label_width + visible < width_usize) : (visible += 1) {
         try row.append(alloc, ' ');
     }
 
     const source = skill_runtime.skillSourceShortLabel(skill.source);
     if (before_label_width + visible < width_usize) {
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         const desc_remaining: u16 = @intCast(width_usize - before_label_width - visible);
         try row_text.appendClipped(alloc, &row, source, desc_remaining);
         try row.appendSlice(alloc, ui_render.reset_style);
@@ -1060,7 +1107,7 @@ test "slash menu rows prioritize marker label description and category by width"
 
     var wide = try composeSlashMenuOptionRow(std.testing.allocator, picker_test_slash_registry, "/m", &.{}, 0, true, column_widths, 100, true);
     defer wide.deinit(std.testing.allocator);
-    try std.testing.expect(std.mem.startsWith(u8, wide.items, ui_render.selected_completion_style));
+    try std.testing.expect(std.mem.startsWith(u8, wide.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)));
     try std.testing.expect(std.mem.find(u8, wide.items, ui_render.system_notice_label_style) == null);
     try std.testing.expect(std.mem.find(u8, wide.items, "❯") == null);
     try std.testing.expect(std.mem.find(u8, wide.items, "/model") != null);
@@ -1143,7 +1190,7 @@ test "slash completion option row clips styled descriptions safely" {
     var row = try composeSlashCompletionOptionRow(alloc, picker_test_slash_registry, "/mo", 0, true, 1, 8, 30);
     defer row.deinit(alloc);
 
-    try std.testing.expect(std.mem.find(u8, row.items, ui_render.selected_completion_style) != null);
+    try std.testing.expect(std.mem.find(u8, row.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
     try std.testing.expect(std.mem.find(u8, row.items, ui_render.reset_style) != null);
     try std.testing.expect(display_width.visibleWidthIgnoringAnsi(row.items) <= 30);
     try std.testing.expect(std.mem.findScalar(u8, row.items, '\n') == null);
@@ -1397,15 +1444,15 @@ test "typed file picker rows render directory slash and restore base styles arou
     var unselected = try composeFilePickerOptionRow(alloc, 1, item, false, 40);
     defer unselected.deinit(alloc);
     try std.testing.expect(std.mem.endsWith(u8, unselected.items, "/" ++ ui_render.reset_style));
-    try expectOrderedSubstrings(unselected.items, &.{ ui_render.bold_style, "m", ui_render.reset_style, ui_render.dim_style });
+    try expectOrderedSubstrings(unselected.items, &.{ ui_render.bold_style, "m", ui_render.reset_style, surface_style.rowStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled) });
     const first_restore = std.mem.find(u8, unselected.items, ui_render.reset_style ++ "") orelse return error.TestUnexpectedResult;
-    try expectOrderedSubstrings(unselected.items[first_restore + ui_render.reset_style.len ..], &.{ ui_render.bold_style, "i", ui_render.reset_style, ui_render.dim_style });
-    try std.testing.expectEqual(display_width.visibleWidth(item.path) + 1, display_width.visibleWidthIgnoringAnsi(unselected.items));
+    try expectOrderedSubstrings(unselected.items[first_restore + ui_render.reset_style.len ..], &.{ ui_render.bold_style, "i", ui_render.reset_style, surface_style.rowStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled) });
+    try std.testing.expectEqual(display_width.visibleWidth(item.path) + 3, display_width.visibleWidthIgnoringAnsi(unselected.items));
 
     var selected = try composeFilePickerOptionRow(alloc, 1, item, true, 40);
     defer selected.deinit(alloc);
-    try expectOrderedSubstrings(selected.items, &.{ ui_render.bold_style, "m", ui_render.reset_style, ui_render.approval_button_inactive_style });
-    try std.testing.expectEqual(display_width.visibleWidth(item.path) + 1, display_width.visibleWidthIgnoringAnsi(selected.items));
+    try expectOrderedSubstrings(selected.items, &.{ ui_render.bold_style, "m", ui_render.reset_style, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled) });
+    try std.testing.expectEqual(display_width.visibleWidth(item.path) + 3, display_width.visibleWidthIgnoringAnsi(selected.items));
 }
 
 test "typed file picker clipping maps spans to retained source segments" {
@@ -1452,9 +1499,9 @@ test "typed file picker highlighting preserves Unicode display clusters" {
     }, false, 40);
     defer row.deinit(alloc);
 
-    try expectOrderedSubstrings(row.items, &.{ ui_render.bold_style, "e\u{0301}", ui_render.reset_style, ui_render.dim_style });
+    try expectOrderedSubstrings(row.items, &.{ ui_render.bold_style, "e\u{0301}", ui_render.reset_style, surface_style.rowStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled) });
     try std.testing.expect(std.unicode.utf8ValidateSlice(row.items));
-    try std.testing.expectEqual(display_width.visibleWidth(path), display_width.visibleWidthIgnoringAnsi(row.items));
+    try std.testing.expectEqual(display_width.visibleWidth(path) + 2, display_width.visibleWidthIgnoringAnsi(row.items));
 }
 
 test "typed file picker basename clipping does not detach combining continuations" {
@@ -1488,7 +1535,7 @@ test "typed file picker basename clipping does not detach combining continuation
         &highlighted,
         .{ .path = highlighted_path, .kind = .file, .matched_spans = &spans },
         9,
-        ui_render.dim_style,
+        surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
     );
 
     try expectOrderedSubstrings(highlighted.items, &.{
@@ -1496,7 +1543,7 @@ test "typed file picker basename clipping does not detach combining continuation
         ui_render.bold_style,
         "d\u{0301}",
         ui_render.reset_style,
-        ui_render.dim_style,
+        surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
         "e",
     });
     try std.testing.expect(std.unicode.utf8ValidateSlice(highlighted.items));
@@ -1591,7 +1638,7 @@ test "auth onboarding composes the welcome copy and setup choices" {
 
     var selected_row = try composeAuthPickerRow(alloc, view, 8, authPickerRowCount(view), 100);
     defer selected_row.deinit(alloc);
-    try std.testing.expect(std.mem.find(u8, selected_row.items, "› Sign in with Vercel") != null);
+    try std.testing.expect(std.mem.find(u8, selected_row.items, "> Sign in with Vercel") != null);
 
     var chatgpt_row = try composeAuthPickerRow(alloc, view, 9, authPickerRowCount(view), 100);
     defer chatgpt_row.deinit(alloc);
@@ -1773,14 +1820,14 @@ test "api key field reads as a text field rather than a selectable row" {
     try std.testing.expect(std.mem.find(u8, empty.items, "┃") != null);
     try std.testing.expect(std.mem.find(u8, empty.items, "›") == null);
     const placeholder = std.mem.find(u8, empty.items, "Paste or type a key").?;
-    const dim = std.mem.find(u8, empty.items, ui_render.dim_style).?;
+    const dim = std.mem.find(u8, empty.items, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled)).?;
     try std.testing.expect(dim < placeholder);
 
     view.api_key_mask_count = 3;
     var typed = try composeAuthPickerRow(alloc, view, 1, 4, 80);
     defer typed.deinit(alloc);
     try std.testing.expect(std.mem.find(u8, typed.items, "┃") != null);
-    try std.testing.expect(std.mem.find(u8, typed.items, ui_render.dim_style) == null);
+    try std.testing.expect(std.mem.find(u8, typed.items, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled)) == null);
 }
 
 test "sign-in stage renders the complete device authorization screen" {
@@ -1819,6 +1866,11 @@ test "sign-in stage renders the complete device authorization screen" {
         try std.testing.expect(std.mem.find(u8, screen.items, expected) != null);
     }
     try std.testing.expect(std.mem.find(u8, screen.items, "\x1b]8;;https://vercel.test/verify?code=TEST-CODE&state=full\x1b\\") != null);
+    var narrow = try composeAuthPickerRow(alloc, view, 2, 7, 12);
+    defer narrow.deinit(alloc);
+    try std.testing.expect(display_width.visibleWidthIgnoringAnsi(narrow.items) <= 12);
+    try std.testing.expect(std.mem.find(u8, narrow.items, "\x1b]8;;https://vercel.test/verify?code=TEST-CODE&state=full\x1b\\") != null);
+    try std.testing.expect(std.mem.endsWith(u8, narrow.items, "\x1b[24m\x1b]8;;\x1b\\" ++ ui_render.reset_style));
 }
 
 test "partially visible auth picker shows a source window without duplicates" {

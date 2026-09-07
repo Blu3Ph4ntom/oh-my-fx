@@ -13,8 +13,70 @@ const ui_render = @import("../render.zig");
 const picker_presentation = @import("picker_presentation.zig");
 const render_input = @import("render_input.zig");
 const row_text = @import("row_text.zig");
+const surface_style = @import("../surface_style.zig");
+const product_theme = @import("../../core/shared/product_theme.zig");
+
+/// Snapshot the renderer's negotiated palette, including 256-color themes.
+pub fn surfacePalette() product_theme.Palette {
+    return .{
+        .brand = ui_render.brand_style,
+        .focus = ui_render.focus_style,
+        .success = ui_render.success_style,
+        .warning = ui_render.warning_style,
+        .danger = ui_render.danger_style,
+        .text = ui_render.hint_style,
+        .muted = ui_render.dim_style,
+        .border = ui_render.border_style,
+    };
+}
+
+/// Caller owns the returned row. Status text remains explicit without color or motion.
+pub fn composeStatusRow(
+    alloc: std.mem.Allocator,
+    state: surface_style.SurfaceState,
+    text: []const u8,
+    width: u16,
+) !std.ArrayList(u8) {
+    var row: std.ArrayList(u8) = .empty;
+    errdefer row.deinit(alloc);
+    const tokens = surface_style.row(surfacePalette(), state, ui_render.color_enabled);
+    try row.appendSlice(alloc, surface_style.statusStyle(surfacePalette(), state, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, tokens.marker, width);
+    var used = display_width.visibleWidthIgnoringAnsi(row.items);
+    try row_text.appendSingleLineEllipsized(alloc, &row, tokens.status_label, @as(usize, width) -| used);
+    used = display_width.visibleWidthIgnoringAnsi(row.items);
+    if (tokens.status_label.len > 0) {
+        try row_text.appendClipped(alloc, &row, ": ", @intCast(@as(usize, width) -| used));
+    }
+    used = display_width.visibleWidthIgnoringAnsi(row.items);
+    try row_text.appendSingleLineEllipsized(alloc, &row, text, @as(usize, width) -| used);
+    try row.appendSlice(alloc, ui_render.reset_style);
+    return row;
+}
 
 const Allocator = std.mem.Allocator;
+
+test "surface status rows compose stable semantic text at every width" {
+    const saved_color = ui_render.color_enabled;
+    defer ui_render.color_enabled = saved_color;
+    for ([_]bool{ true, false }) |color| {
+        ui_render.color_enabled = color;
+        for ([_]surface_style.SurfaceState{ .disabled, .loading, .success, .warning, .danger }) |state| {
+            var wide = try composeStatusRow(std.testing.allocator, state, "Readable status", 60);
+            defer wide.deinit(std.testing.allocator);
+            try std.testing.expect(std.mem.find(u8, wide.items, surface_style.statusLabel(state)) != null);
+            try std.testing.expect(std.mem.find(u8, wide.items, "Readable status") != null);
+            var repeated = try composeStatusRow(std.testing.allocator, state, "Readable status", 60);
+            defer repeated.deinit(std.testing.allocator);
+            try std.testing.expectEqualStrings(wide.items, repeated.items);
+            for ([_]u16{ 0, 1, 2, 8, 18 }) |width| {
+                var narrow = try composeStatusRow(std.testing.allocator, state, "Readable status", width);
+                defer narrow.deinit(std.testing.allocator);
+                try std.testing.expect(display_width.visibleWidthIgnoringAnsi(narrow.items) <= width);
+            }
+        }
+    }
+}
 const InputRuntime = core_input_runtime.Runtime;
 const RenderContext = render_input.RenderContext;
 
@@ -62,7 +124,7 @@ pub fn composeQueuedSummaryRow(
     width: u16,
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
-    try row.appendSlice(alloc, ui_render.hint_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
 
     // The paused hint row already owns the controls, so it drops the affordance.
     const affordance = if (queued_paused) "" else " · ↑ to edit";
@@ -86,7 +148,7 @@ pub fn composeQueueReviewHintRow(
     cancel_all_available: bool,
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     const hint = if (cancel_all_available)
         "paused · enter to send · press esc to cancel all queued"
     else if (empty_draft)
@@ -371,7 +433,7 @@ pub fn composeHintRow(
         width;
 
     var row: std.ArrayList(u8) = .empty;
-    try row.appendSlice(alloc, if (question_hint != null) ui_render.dim_style else ui_render.statusline_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint_line, left_width);
     try row.appendSlice(alloc, ui_render.reset_style);
 
@@ -385,7 +447,7 @@ pub fn composeHintRow(
     {
         const tag_col: u16 = @intCast(width_usize - right_width + 1);
         try row_text.appendAbsoluteColumn(alloc, &row, tag_col);
-        try row.appendSlice(alloc, if (danger_visible) ui_render.red_style else ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.statusStyle(surfacePalette(), if (danger_visible) .danger else .normal, ui_render.color_enabled));
         try row.appendSlice(alloc, right_text);
         try row.appendSlice(alloc, ui_render.reset_style);
     }
@@ -430,7 +492,7 @@ pub fn composeHelpMenuHintRow(alloc: Allocator, width: u16, ctrl_c_pending: bool
     if (ctrl_c_pending) {
         var warning: std.ArrayList(u8) = .empty;
         errdefer warning.deinit(alloc);
-        try warning.appendSlice(alloc, ui_render.statusline_style);
+        try warning.appendSlice(alloc, surface_style.statusStyle(surfacePalette(), .warning, ui_render.color_enabled));
         try row_text.appendClipped(alloc, &warning, "press ctrl+c again to exit", width);
         try warning.appendSlice(alloc, ui_render.reset_style);
         return warning;
@@ -453,7 +515,7 @@ pub fn composeHelpMenuHintRow(alloc: Allocator, width: u16, ctrl_c_pending: bool
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -467,7 +529,7 @@ pub fn composeSettingsMenuHintRow(
     if (ctrl_c_pending) {
         var warning: std.ArrayList(u8) = .empty;
         errdefer warning.deinit(alloc);
-        try warning.appendSlice(alloc, ui_render.statusline_style);
+        try warning.appendSlice(alloc, surface_style.statusStyle(surfacePalette(), .warning, ui_render.color_enabled));
         try row_text.appendClipped(alloc, &warning, "press ctrl+c again to exit", width);
         try warning.appendSlice(alloc, ui_render.reset_style);
         return warning;
@@ -490,7 +552,7 @@ pub fn composeSettingsMenuHintRow(
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -514,7 +576,7 @@ pub fn composeAppearanceMenuHintRow(alloc: Allocator, width: u16) !std.ArrayList
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -557,7 +619,7 @@ pub fn composeCompactCommandMenuHintRow(
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -573,7 +635,7 @@ fn composeCatalogMenuHintRow(alloc: Allocator, width: u16, ctrl_c_pending: bool,
     if (ctrl_c_pending) {
         var warning: std.ArrayList(u8) = .empty;
         errdefer warning.deinit(alloc);
-        try warning.appendSlice(alloc, ui_render.statusline_style);
+        try warning.appendSlice(alloc, surface_style.statusStyle(surfacePalette(), .warning, ui_render.color_enabled));
         try row_text.appendClipped(alloc, &warning, "press ctrl+c again to exit", width);
         try warning.appendSlice(alloc, ui_render.reset_style);
         return warning;
@@ -615,7 +677,7 @@ fn composeCatalogMenuHintRow(alloc: Allocator, width: u16, ctrl_c_pending: bool,
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -639,7 +701,7 @@ pub fn composeSlashMenuHintRow(alloc: Allocator, width: u16) !std.ArrayList(u8) 
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, hint, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -761,7 +823,7 @@ pub fn appendInlineCompletionSuffix(
 
     const tint = inputRowTint(appearance);
     if (tint.len != 0) try row.appendSlice(alloc, tint);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(
         alloc,
         row,
@@ -788,14 +850,14 @@ fn startComposedInputRow(
     const prefix = visual_layout.inputPrefix(row_index);
     switch (prefix_style) {
         .arrow => if (hidden_above) {
-            try row.appendSlice(alloc, ui_render.hint_style);
+            try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
             try row_text.appendClipped(alloc, row, "↑ ", width);
             try row.appendSlice(alloc, if (tint.len > 0) tint else ui_render.reset_style);
         } else {
             try row_text.appendClipped(alloc, row, prefix.bytes, width);
         },
         .rail => {
-            try row.appendSlice(alloc, ui_render.hint_style);
+            try row.appendSlice(alloc, surface_style.hintStyle(surfacePalette(), .normal, ui_render.color_enabled));
             try row_text.appendClipped(alloc, row, if (hidden_above) "┃↑" else "┃", width);
             try row.appendSlice(alloc, if (tint.len > 0) tint else ui_render.reset_style);
             if (!hidden_above and width > 1) try row_text.appendClipped(alloc, row, " ", width - 1);
@@ -1669,7 +1731,7 @@ test "compose hint row prioritizes red yolo warning with compact fallback" {
     var full = try composeHintRow(std.testing.allocator, false, null, ctx, 80);
     defer full.deinit(std.testing.allocator);
     try std.testing.expect(std.mem.find(u8, full.items, ctx.danger_status) != null);
-    try std.testing.expect(std.mem.find(u8, full.items, ui_render.red_style) != null);
+    try std.testing.expect(std.mem.find(u8, full.items, ui_render.danger_style) != null);
 
     var compact = try composeHintRow(std.testing.allocator, false, null, ctx, 24);
     defer compact.deinit(std.testing.allocator);

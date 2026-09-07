@@ -2546,8 +2546,7 @@ test "current footer transcript state clamps stale viewport selection after shri
 
 test "retargetSurfaceFooterFrame moves composed rows to solved footer plan" {
     const alloc = std.testing.allocator;
-    var first = std.ArrayList(u8).empty;
-    try first.appendSlice(alloc, "top");
+    var first = try input_presentation.composeStatusRow(alloc, .danger, "Catalog unavailable", 40);
     var input = std.ArrayList(u8).empty;
     try input.appendSlice(alloc, "input");
 
@@ -2570,6 +2569,7 @@ test "retargetSurfaceFooterFrame moves composed rows to solved footer plan" {
 
     try std.testing.expectEqual(@as(u16, 20), frame.paint.footer.top);
     try std.testing.expectEqual(@as(u16, 20), frame.composed.rows.items[0].row);
+    try std.testing.expect(std.mem.find(u8, frame.composed.rows.items[0].text.items, "! error: Catalog unavailable") != null);
     try std.testing.expectEqual(@as(u16, 21), frame.composed.rows.items[1].row);
     try std.testing.expectEqual(@as(u16, 21), frame.composed.cursor.row);
     try std.testing.expectEqual(

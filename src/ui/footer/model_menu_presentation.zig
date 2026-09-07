@@ -1,4 +1,6 @@
 const std = @import("std");
+const surface_style = @import("../surface_style.zig");
+const input_presentation = @import("input_presentation.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const list_window = @import("../../core/shared/list_window.zig");
 const model_cache_runtime = @import("../../core/app/model_cache_runtime.zig");
@@ -81,12 +83,18 @@ pub fn composeModelMenuRow(
 ) !std.ArrayList(u8) {
     const row: std.ArrayList(u8) = .empty;
     if (width == 0 or row_index >= row_count) return row;
+    if (row_count == 1) {
+        const count = projection.filteredItemCount();
+        if (projection.load_state != .ready or count == 0) return composeStateRow(alloc, projection, width);
+        const item = projection.itemAt(projection.selected_index % count) orelse return row;
+        return composeTitleRow(alloc, item.*, true, null, width);
+    }
     if (row_index == 0) return composeHeaderRow(alloc, projection, width);
 
     const layout = ModelMenuLayout.build(projection, row_count);
     if (projection.load_state == .ready and row_index == header_rows and row_index < layout.row_count - 1) {
         const text = loadedCatalogStatusText(projection.catalog_state) orelse return row;
-        return composeDimmedRow(alloc, text, width);
+        return input_presentation.composeStatusRow(alloc, if (projection.catalog_state.failure != null) .danger else if (projection.catalog_state.private_models_hidden) .warning else .success, text, width);
     }
     if (projection.load_state != .ready or layout.match_count == 0) {
         if (row_index < layout.row_count -| 1) return row;
@@ -165,7 +173,7 @@ fn composeHeaderRow(alloc: Allocator, projection: ModelMenuProjection, width: u1
 }
 
 fn appendHeaderTitle(alloc: Allocator, row: *std.ArrayList(u8), count: usize) !void {
-    try row.appendSlice(alloc, ui_render.selected_completion_style);
+    try row.appendSlice(alloc, ui_render.brand_style);
     var buf: [48]u8 = undefined;
     const title = std.fmt.bufPrint(&buf, "Models {d}", .{count}) catch "Models";
     try row.appendSlice(alloc, title);
@@ -173,7 +181,7 @@ fn appendHeaderTitle(alloc: Allocator, row: *std.ArrayList(u8), count: usize) !v
 }
 
 fn appendProviderTab(alloc: Allocator, row: *std.ArrayList(u8), label: []const u8, active: bool) !void {
-    try row.appendSlice(alloc, if (active) ui_render.selected_completion_style else ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (active) .active else .normal, ui_render.color_enabled));
     if (active) try row.append(alloc, '[');
     try row.appendSlice(alloc, label);
     if (active) try row.append(alloc, ']');
@@ -190,7 +198,7 @@ fn appendProviderTabAt(
 }
 
 fn appendProviderOverflowMarker(alloc: Allocator, row: *std.ArrayList(u8)) !void {
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row.appendSlice(alloc, "…");
     try row.appendSlice(alloc, ui_render.reset_style);
 }
@@ -227,7 +235,7 @@ fn providerRangeWidth(
 }
 
 fn modelFactsColumn(projection: ModelMenuProjection, width: u16) ?usize {
-    const indent_width: usize = if (width <= 2) 0 else 2;
+    const indent_width: usize = @min(width, 2);
     const content_width: usize = width;
     var facts_width: usize = 0;
     for (projection.items) |item| {
@@ -246,9 +254,9 @@ fn composeTitleRow(
 ) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    const indent_width: u16 = if (width <= 2) 0 else 2;
-    if (indent_width > 0) try row.appendSlice(alloc, "  ");
-    try row.appendSlice(alloc, if (selected) ui_render.selected_completion_style else ui_render.dim_style);
+    const indent_width: u16 = @min(width, 2);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), if (selected) .focus else .normal, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, surface_style.marker(if (selected) .focus else .normal), @intCast(indent_width));
 
     var facts: std.ArrayList(u8) = .empty;
     defer facts.deinit(alloc);
@@ -260,11 +268,11 @@ fn composeTitleRow(
     const show_facts = facts.items.len > 0 and facts_start >= prefix_width + 8 + 2;
     const id_budget = if (show_facts) facts_start - prefix_width - 2 else content_width -| prefix_width;
     try row_text.appendSingleLineMiddleEllipsized(alloc, &row, item.id, id_budget);
-    if (selected) try row.appendSlice(alloc, ui_render.reset_style);
+    try row.appendSlice(alloc, ui_render.reset_style);
 
     if (show_facts) {
         try row_text.appendSpacesToColumn(alloc, &row, facts_start);
-        try row.appendSlice(alloc, ui_render.dim_style);
+        try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
         try row_text.appendSingleLineEllipsized(alloc, &row, facts.items, content_width - facts_start);
         try row.appendSlice(alloc, ui_render.reset_style);
     }
@@ -331,7 +339,11 @@ fn composeStateRow(alloc: Allocator, projection: ModelMenuProjection, width: u16
         .failed => retryableFailureText(projection.catalog_state.failure) orelse "Unable to load models.",
         .ready => if (projection.items.len == 0) "No models available." else "No models found.",
     };
-    return composeDimmedRow(alloc, text, width);
+    return input_presentation.composeStatusRow(alloc, switch (projection.load_state) {
+        .loading => .loading,
+        .failed => .danger,
+        .ready => .disabled,
+    }, text, width);
 }
 
 fn loadedCatalogStatusText(state: model_cache_runtime.ModelMenuCatalogState) ?[]const u8 {
@@ -378,7 +390,7 @@ fn retryableFailureText(failure: ?model_cache_runtime.ModelMenuCatalogState.Fail
 fn composeDimmedRow(alloc: Allocator, text: []const u8, width: u16) !std.ArrayList(u8) {
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.dim_style);
+    try row.appendSlice(alloc, surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendSingleLineEllipsized(alloc, &row, text, width);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
@@ -432,6 +444,8 @@ test "model menu renders provider tabs and compact model facts" {
     var title = try composeModelMenuRow(alloc, projection, 2, 120, rows);
     defer title.deinit(alloc);
     try std.testing.expect(std.mem.find(u8, title.items, "anthropic/claude-opus-4.8") != null);
+    try std.testing.expect(std.mem.find(u8, title.items, "> ") != null);
+    try std.testing.expect(std.mem.find(u8, title.items, surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled)) != null);
     try std.testing.expect(std.mem.find(u8, title.items, "●") == null);
     try std.testing.expect(std.mem.find(u8, title.items, "○") == null);
     try std.testing.expect(std.mem.find(u8, title.items, "1M context · 128K output · Fast") != null);
