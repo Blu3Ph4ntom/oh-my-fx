@@ -214,7 +214,6 @@ pub fn Runtime(comptime App: type) type {
                 .record_requested = record_requested,
             });
             defer startup.deinit(app.alloc);
-            debug_trace.logf("startup", "bootstrap_interactive_app returned", .{});
 
             app.workspace_root = startup.takeWorkspaceRoot();
             if (comptime @hasDecl(App, "adoptWorkspaceAccess")) {
@@ -242,7 +241,6 @@ pub fn Runtime(comptime App: type) type {
             if (startup_auth_view.active_source == null and !startup_auth_view.onboarding_skipped) {
                 app.auth.openOnboardingPicker(app.alloc);
             }
-            debug_trace.logf("startup", "auth inventory and onboarding prepared", .{});
             if (comptime @hasField(App, "terminal_input_runtime") and @hasField(App, "terminal")) {
                 // Own theme protocol bytes even under FX_THEME; probing stays gated.
                 app.terminal_input_runtime.terminal_theme_monitor.start();
@@ -265,9 +263,6 @@ pub fn Runtime(comptime App: type) type {
                         startup.prompt_history_store_allowed,
                     )) == .unavailable;
             }
-            debug_trace.logf("startup", "prompt history initialized unavailable={s}", .{
-                if (prompt_history_unavailable) "true" else "false",
-            });
             if (comptime @hasField(App, "session") and
                 @hasDecl(@TypeOf(app.session), "initializeProfileUsage"))
             {
@@ -276,7 +271,6 @@ pub fn Runtime(comptime App: type) type {
                     shared_io.getenv("HOME"),
                 );
             }
-            debug_trace.logf("startup", "profile usage initialized", .{});
 
             var selected_model = startup.takeSelectedModel();
             defer if (selected_model.len > 0) app.alloc.free(selected_model);
@@ -295,7 +289,6 @@ pub fn Runtime(comptime App: type) type {
                 startup.effort,
                 startup.fast_mode,
             );
-            debug_trace.logf("startup", "session preferences configured", .{});
             app.permission_engine.mode = startup.permission_mode;
             app.permission_engine.replaceRules(app.alloc, startup.takePermissionRules());
             app.agent_step_limit = startup.agent_step_limit;
@@ -335,9 +328,6 @@ pub fn Runtime(comptime App: type) type {
                 app,
                 app.requested_resume != null,
             );
-            debug_trace.logf("startup", "persistence initialized store={s}", .{
-                if (app.session_persistence.store != null) "true" else "false",
-            });
             const staged_resume_view = if (app.requested_resume != null)
                 deps.stage_requested_resume_view(app)
             else
@@ -348,7 +338,6 @@ pub fn Runtime(comptime App: type) type {
             } else {
                 app.mcp_runtime = profile_mcp;
             }
-            debug_trace.logf("startup", "MCP runtime loaded", .{});
 
             const loaded = try deps.load_skills(
                 std.heap.c_allocator,
@@ -357,7 +346,6 @@ pub fn Runtime(comptime App: type) type {
             );
             skill_runtime.traceDiagnostics("interactive_startup", loaded.diagnostics);
             app.skills.replaceLoaded(std.heap.c_allocator, loaded.dir, loaded.skills, loaded.diagnostics);
-            debug_trace.logf("startup", "skills loaded", .{});
 
             if (app.requested_resume == null) {
                 const welcome_message = try deps.welcome_message(app.alloc);
@@ -481,16 +469,12 @@ pub fn Runtime(comptime App: type) type {
                 deps.enable_session_stores(app);
                 app_session_runtime.Runtime(App).syncTerminalTitleWith(app, deps.terminal_title);
             }
-            debug_trace.logf("startup", "fresh session prepared writable={s}", .{
-                if (app.session_persistence.writable != null) "true" else "false",
-            });
 
             switch (staged_resume_view) {
                 .none => {},
                 .ready => |entry_id| try deps.publish_staged_resume_view(app, entry_id),
             }
             app.shell.render_requests.request(.first_frame);
-            debug_trace.logf("startup", "bootstrap complete", .{});
         }
     };
 }

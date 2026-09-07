@@ -15,7 +15,6 @@ const agent_stream_provider = @import("../agent/stream_provider.zig");
 const host = @import("../hosts/host.zig");
 const host_target = @import("../hosts/target.zig");
 const io_mod = @import("../shared/io.zig");
-const debug_trace = @import("../shared/debug_trace.zig");
 const permission_auto_classifier = @import("../permissions/auto_classifier.zig");
 const prompt_policy = @import("../config/prompt_policy.zig");
 const sandbox = @import("../permissions/sandbox.zig");
@@ -284,12 +283,9 @@ fn runInteractiveWithDeps(comptime App: type, comptime cooperative: bool, alloc:
             },
         }
     };
-    debug_trace.logf("startup", "App.init returned", .{});
     if (comptime !cooperative) {
         if (@hasDecl(App, "startMcpDiscovery")) app.startMcpDiscovery();
-        debug_trace.logf("startup", "MCP discovery started", .{});
         if (@hasDecl(App, "rebindAfterInit")) app.rebindAfterInit();
-        debug_trace.logf("startup", "post-init bindings complete", .{});
     }
     var app_needs_deinit = true;
     defer if (app_needs_deinit) app.deinit();
@@ -301,21 +297,15 @@ fn runInteractiveWithDeps(comptime App: type, comptime cooperative: bool, alloc:
     if (comptime !cooperative) {
         if (resume_requested) app.startResumedSessionReconciliation();
         if (@hasDecl(App, "configureNotifications")) try app.configureNotifications();
-        debug_trace.logf("startup", "notifications configured", .{});
         if (@hasDecl(App, "playStartupSound")) app.playStartupSound();
-        debug_trace.logf("startup", "startup sound handled", .{});
         if (@hasDecl(App, "startAutoUpgrade")) app.startAutoUpgrade();
-        debug_trace.logf("startup", "auto upgrade started", .{});
         if (@hasDecl(App, "startFileIndex")) app.startFileIndex();
-        debug_trace.logf("startup", "file index started", .{});
         startWorkerThread(App, &app, deps) catch |err| {
             app.releaseTerminal();
             reportUnexpectedInteractiveError(deps, err);
             return err;
         };
-        debug_trace.logf("startup", "worker thread started", .{});
         app.startModelCacheWarmup();
-        debug_trace.logf("startup", "model cache warmup started", .{});
     }
 
     app.run() catch |err| {
