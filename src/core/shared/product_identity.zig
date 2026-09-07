@@ -8,7 +8,7 @@ pub const command = "omfx";
 pub const compatibility_command = "fx";
 pub const website = "https://fx.sh";
 pub const docs_url = "https://fx.sh/docs";
-pub const codex_protocol_originator = "codex_cli_rs";
+pub const codex_protocol_originator = "fx";
 
 test "omfx identity contract" {
     const std = @import("std");
@@ -16,5 +16,5 @@ test "omfx identity contract" {
     try std.testing.expectEqualStrings("omfx", name);
     try std.testing.expectEqualStrings("omfx", command);
     try std.testing.expectEqualStrings("fx", compatibility_command);
-    try std.testing.expectEqualStrings("codex_cli_rs", codex_protocol_originator);
+    try std.testing.expectEqualStrings("fx", codex_protocol_originator);
 }
