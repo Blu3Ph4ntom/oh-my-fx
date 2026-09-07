@@ -951,6 +951,125 @@ test "Night Signal render variants do not retain prior colors" {
     try std.testing.expect(std.mem.find(u8, focus_style, "38;5;") != null);
 }
 
+test "Night Signal render aliases use semantic status roles" {
+    const ThemeSnapshot = struct {
+        is_light: bool,
+        theme_variant: product_theme.Variant,
+        color_enabled: bool,
+        input_bar_style: []const u8,
+        brand_style: []const u8,
+        focus_style: []const u8,
+        success_style: []const u8,
+        danger_style: []const u8,
+        border_style: []const u8,
+        divider_style: []const u8,
+        hint_style: []const u8,
+        statusline_style: []const u8,
+        tag_style: []const u8,
+        subtitle_style: []const u8,
+        system_notice_label_style: []const u8,
+        system_notice_text_style: []const u8,
+        dim_style: []const u8,
+        warning_style: []const u8,
+        green_style: []const u8,
+        red_style: []const u8,
+        diff_added_style: []const u8,
+        diff_removed_style: []const u8,
+        diff_added_marker_style: []const u8,
+        diff_removed_marker_style: []const u8,
+        approval_button_active_style: []const u8,
+        approval_button_inactive_style: []const u8,
+        selected_completion_style: []const u8,
+        permission_auto_style: []const u8,
+        active_terminal_background: ?TerminalRgb,
+        truecolor_enabled: bool,
+
+        fn capture() @This() {
+            return .{
+                .is_light = is_light,
+                .theme_variant = theme_variant,
+                .color_enabled = color_enabled,
+                .input_bar_style = input_bar_style,
+                .brand_style = brand_style,
+                .focus_style = focus_style,
+                .success_style = success_style,
+                .danger_style = danger_style,
+                .border_style = border_style,
+                .divider_style = divider_style,
+                .hint_style = hint_style,
+                .statusline_style = statusline_style,
+                .tag_style = tag_style,
+                .subtitle_style = subtitle_style,
+                .system_notice_label_style = system_notice_label_style,
+                .system_notice_text_style = system_notice_text_style,
+                .dim_style = dim_style,
+                .warning_style = warning_style,
+                .green_style = green_style,
+                .red_style = red_style,
+                .diff_added_style = diff_added_style,
+                .diff_removed_style = diff_removed_style,
+                .diff_added_marker_style = diff_added_marker_style,
+                .diff_removed_marker_style = diff_removed_marker_style,
+                .approval_button_active_style = approval_button_active_style,
+                .approval_button_inactive_style = approval_button_inactive_style,
+                .selected_completion_style = selected_completion_style,
+                .permission_auto_style = permission_auto_style,
+                .active_terminal_background = active_terminal_background,
+                .truecolor_enabled = truecolor_enabled,
+            };
+        }
+
+        fn restore(self: @This()) void {
+            is_light = self.is_light;
+            theme_variant = self.theme_variant;
+            color_enabled = self.color_enabled;
+            input_bar_style = self.input_bar_style;
+            brand_style = self.brand_style;
+            focus_style = self.focus_style;
+            success_style = self.success_style;
+            danger_style = self.danger_style;
+            border_style = self.border_style;
+            divider_style = self.divider_style;
+            hint_style = self.hint_style;
+            statusline_style = self.statusline_style;
+            tag_style = self.tag_style;
+            subtitle_style = self.subtitle_style;
+            system_notice_label_style = self.system_notice_label_style;
+            system_notice_text_style = self.system_notice_text_style;
+            dim_style = self.dim_style;
+            warning_style = self.warning_style;
+            green_style = self.green_style;
+            red_style = self.red_style;
+            diff_added_style = self.diff_added_style;
+            diff_removed_style = self.diff_removed_style;
+            diff_added_marker_style = self.diff_added_marker_style;
+            diff_removed_marker_style = self.diff_removed_marker_style;
+            approval_button_active_style = self.approval_button_active_style;
+            approval_button_inactive_style = self.approval_button_inactive_style;
+            selected_completion_style = self.selected_completion_style;
+            permission_auto_style = self.permission_auto_style;
+            active_terminal_background = self.active_terminal_background;
+            truecolor_enabled = self.truecolor_enabled;
+            assistant_presentation.setInlineCodeTheme(self.is_light);
+            user_message_card.setTruecolor(self.truecolor_enabled);
+            user_message_card.setColorEnabled(self.color_enabled);
+            user_message_card.setStyle(self.is_light, self.active_terminal_background);
+        }
+    };
+    const previous = ThemeSnapshot.capture();
+    defer previous.restore();
+
+    setColorEnabled(true);
+    setTruecolorSupport(false);
+    initTheme(false, null);
+    const palette = product_theme.paletteFor(.{ .truecolor = false, .variant = .dark });
+    try std.testing.expectEqualStrings(palette.warning, warning_style);
+    try std.testing.expectEqualStrings(palette.success, green_style);
+    try std.testing.expectEqualStrings(palette.danger, red_style);
+    try std.testing.expectEqualStrings(palette.success, diff_added_style);
+    try std.testing.expectEqualStrings(palette.danger, diff_removed_style);
+}
+
 test "no color keeps approval decisions distinguishable" {
     defer setColorEnabled(true);
     setColorEnabled(false);

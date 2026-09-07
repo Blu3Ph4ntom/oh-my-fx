@@ -1,72 +1,53 @@
 const std = @import("std");
 const product_theme = @import("../core/shared/product_theme.zig");
-const ui_render = @import("render.zig");
 const surface_style = @import("surface_style.zig");
 
-test "omfx surface states keep focus visible without color" {
-    const palette = product_theme.paletteFor(.{ .truecolor = false, .variant = .dark });
-    const focused = surface_style.row(palette, .focus, true);
-    const focused_no_color = surface_style.row(palette, .focus, false);
-
-    try std.testing.expectEqualStrings("> ", focused.marker);
-    try std.testing.expectEqualStrings(palette.focus, focused.style);
-    try std.testing.expectEqualStrings("selected", focused.status_label);
-    try std.testing.expectEqualStrings("> ", focused_no_color.marker);
-    try std.testing.expectEqualStrings("", focused_no_color.style);
-    try std.testing.expectEqualStrings("selected", focused_no_color.status_label);
-}
-
-test "omfx surface states map status feedback to semantic roles" {
-    const palette = product_theme.paletteFor(.{ .truecolor = true, .variant = .dark });
-
-    const normal = surface_style.row(palette, .normal, true);
-    const disabled = surface_style.row(palette, .disabled, true);
-    const loading = surface_style.row(palette, .loading, true);
-    const success = surface_style.row(palette, .success, true);
-    const warning = surface_style.row(palette, .warning, true);
-    const danger = surface_style.row(palette, .danger, true);
-
-    try std.testing.expectEqualStrings("  ", normal.marker);
-    try std.testing.expectEqualStrings(palette.text, normal.style);
-    try std.testing.expectEqualStrings("", normal.status_label);
-    try std.testing.expectEqualStrings(palette.muted, disabled.style);
-    try std.testing.expectEqualStrings("disabled", disabled.status_label);
-    try std.testing.expectEqualStrings(palette.warning, loading.style);
-    try std.testing.expectEqualStrings("loading", loading.status_label);
-    try std.testing.expectEqualStrings(palette.success, success.style);
-    try std.testing.expectEqualStrings("success", success.status_label);
-    try std.testing.expectEqualStrings(palette.warning, warning.style);
-    try std.testing.expectEqualStrings("warning", warning.status_label);
-    try std.testing.expectEqualStrings(palette.danger, danger.style);
-    try std.testing.expectEqualStrings("error", danger.status_label);
-}
-
-test "omfx surface state styles support every palette variant" {
+test "omfx surface states map every role across palette capabilities" {
+    const Contract = struct {
+        state: surface_style.SurfaceState,
+        row_role: product_theme.Role,
+        hint_role: product_theme.Role,
+        marker: []const u8,
+        status_label: []const u8,
+    };
+    const contracts = [_]Contract{
+        .{ .state = .normal, .row_role = .text, .hint_role = .muted, .marker = "  ", .status_label = "" },
+        .{ .state = .hover, .row_role = .focus, .hint_role = .muted, .marker = "> ", .status_label = "" },
+        .{ .state = .focus, .row_role = .focus, .hint_role = .focus, .marker = "> ", .status_label = "selected" },
+        .{ .state = .active, .row_role = .focus, .hint_role = .focus, .marker = "> ", .status_label = "active" },
+        .{ .state = .disabled, .row_role = .muted, .hint_role = .muted, .marker = "  ", .status_label = "disabled" },
+        .{ .state = .loading, .row_role = .warning, .hint_role = .warning, .marker = "  ", .status_label = "loading" },
+        .{ .state = .success, .row_role = .success, .hint_role = .success, .marker = "  ", .status_label = "success" },
+        .{ .state = .warning, .row_role = .warning, .hint_role = .warning, .marker = "! ", .status_label = "warning" },
+        .{ .state = .danger, .row_role = .danger, .hint_role = .danger, .marker = "! ", .status_label = "error" },
+    };
     const variants = [_]product_theme.Variant{ .dark, .light, .high_contrast };
     for (variants) |variant| {
-        const palette = product_theme.paletteFor(.{ .truecolor = false, .variant = variant });
-        const states = [_]surface_style.State{ .normal, .focus, .disabled, .loading, .success, .warning, .danger };
-        for (states) |state| {
-            const row = surface_style.row(palette, state, true);
-            try std.testing.expect(row.style.len > 0);
-            if (state != .normal) try std.testing.expect(row.status_label.len > 0);
+        for ([_]bool{ true, false }) |truecolor| {
+            const palette = product_theme.paletteFor(.{ .truecolor = truecolor, .variant = variant });
+            for (contracts) |contract| {
+                try std.testing.expectEqualStrings(palette.style(contract.row_role), surface_style.rowStyle(palette, contract.state, true));
+                try std.testing.expectEqualStrings(palette.style(contract.row_role), surface_style.statusStyle(palette, contract.state, true));
+                try std.testing.expectEqualStrings(palette.style(contract.hint_role), surface_style.hintStyle(palette, contract.state, true));
+                try std.testing.expectEqualStrings(contract.marker, surface_style.marker(contract.state));
+                try std.testing.expectEqualStrings(contract.status_label, surface_style.statusLabel(contract.state));
+            }
         }
     }
 }
 
-test "omfx render wires semantic status roles" {
-    ui_render.setColorEnabled(true);
-    ui_render.setTruecolorSupport(false);
-    defer {
-        ui_render.setTruecolorSupport(true);
-        ui_render.initTheme(false, null);
-    }
-
-    ui_render.initTheme(false, null);
+test "omfx surface states retain visible markers and labels without color" {
     const palette = product_theme.paletteFor(.{ .truecolor = false, .variant = .dark });
-    try std.testing.expectEqualStrings(palette.warning, ui_render.warning_style);
-    try std.testing.expectEqualStrings(palette.success, ui_render.green_style);
-    try std.testing.expectEqualStrings(palette.danger, ui_render.red_style);
-    try std.testing.expectEqualStrings(palette.success, ui_render.diff_added_style);
-    try std.testing.expectEqualStrings(palette.danger, ui_render.diff_removed_style);
+    const states = [_]surface_style.SurfaceState{ .normal, .hover, .focus, .active, .disabled, .loading, .success, .warning, .danger };
+    for (states) |state| {
+        const styled_row = surface_style.row(palette, state, false);
+        try std.testing.expectEqualStrings("", surface_style.rowStyle(palette, state, false));
+        try std.testing.expectEqualStrings("", surface_style.statusStyle(palette, state, false));
+        try std.testing.expectEqualStrings("", surface_style.hintStyle(palette, state, false));
+        try std.testing.expectEqualStrings(surface_style.marker(state), styled_row.marker);
+        try std.testing.expectEqualStrings(surface_style.statusLabel(state), styled_row.status_label);
+        if (state != .normal) {
+            try std.testing.expect(surface_style.marker(state).len > 0 or surface_style.statusLabel(state).len > 0);
+        }
+    }
 }
