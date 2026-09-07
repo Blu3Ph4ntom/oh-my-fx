@@ -18,6 +18,7 @@ test {
     _ = @import("ui/input/runtime.zig");
     _ = @import("ui/input/interaction_contract.zig");
     _ = @import("ui/input/terminal_action_decoder.zig");
+    _ = @import("ui/surface_style_contract_test.zig");
     _ = @import("ui/render_request.zig");
     _ = @import("ui/render.zig");
     _ = @import("ui/terminal/terminal.zig");
