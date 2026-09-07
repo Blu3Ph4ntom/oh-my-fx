@@ -7685,8 +7685,8 @@ test "attempt source projections leave transcript runtime and commit state uncha
 
 fn checkPrepareTranscriptSourceAllocationFailures(alloc: Allocator) !void {
     const welcome =
-        "Fx welcome banner line one\n" ++
-        "Fx welcome banner line two\n";
+        "omfx welcome banner line one\n" ++
+        "omfx welcome banner line two\n";
     const summary = "● 2 command lines folded\n";
     var runtime = TranscriptRuntime{
         .layout = transcriptTestLayout(24, 10, 6),
@@ -14657,7 +14657,7 @@ test "transcript lifecycle terminal and finalization transitions stay batch safe
         const expected_line = if (case.kind == .cancelled)
             try std.fmt.bufPrint(
                 &expected,
-                "{s}{s}{s} {s}{s}{s} · What can fx do differently?\n",
+                "{s}{s}{s} {s}{s}{s} · What can omfx do differently?\n",
                 .{
                     case.marker_style,
                     case.marker,
@@ -14780,7 +14780,7 @@ test "transcript lifecycle terminal markers preserve ANSI summaries and normaliz
     try expectRawEntryBytes(&runtime, styled_cancelled_entry_id, try std.fmt.bufPrint(
         &styled_cancelled_expected,
         "{s}■{s}{s} Cancelled\x1b[0m \x1b[38;5;245msleep 30\x1b[0m{s}" ++
-            " · What can fx do differently?\n",
+            " · What can omfx do differently?\n",
         .{
             ui_render.warning_style,
             ui_render.reset_style,
@@ -14812,7 +14812,7 @@ test "transcript lifecycle terminal markers preserve ANSI summaries and normaliz
     var cancelled_expected: [128]u8 = undefined;
     try expectRawEntryBytes(&runtime, cancelled_entry_id, try std.fmt.bufPrint(
         &cancelled_expected,
-        "{s}■{s} {s}Tool cancelled{s} · What can fx do differently?\n",
+        "{s}■{s} {s}Tool cancelled{s} · What can omfx do differently?\n",
         .{
             ui_render.warning_style,
             ui_render.reset_style,

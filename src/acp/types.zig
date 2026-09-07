@@ -308,7 +308,7 @@ test "writeInitializeResponse contains required fields" {
     const mcp_capabilities = agent_capabilities.get("mcpCapabilities").?.object;
     try std.testing.expect(std.mem.find(u8, out.writer.buffered(), "\"protocolVersion\":1") != null);
     try std.testing.expect(std.mem.find(u8, out.writer.buffered(), "\"loadSession\":true") != null);
-    try std.testing.expect(std.mem.find(u8, out.writer.buffered(), "\"name\":\"fx\"") != null);
+    try std.testing.expect(std.mem.find(u8, out.writer.buffered(), "\"name\":\"omfx\"") != null);
     try std.testing.expectEqualStrings(
         build_options.app_version,
         parsed.value.object.get("agentInfo").?.object.get("version").?.string,

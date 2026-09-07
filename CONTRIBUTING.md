@@ -157,7 +157,7 @@ The interactive agent can also install skills via the `install_skill` tool when 
 
 ## MCP
 
-fx negotiates MCP `2026-07-28` over local stdio and stateless Streamable HTTP.
+omfx negotiates MCP `2026-07-28` over local stdio and stateless Streamable HTTP.
 Version-scoped adapters retain legacy stdio,
 `2025-11-25`/`2025-06-18`/`2025-03-26` Streamable HTTP, and deprecated
 `2024-11-05` HTTP+SSE. Native sessions load runnable MCP configuration only
@@ -172,7 +172,7 @@ Completion, pagination, cache-aware discovery, subscriptions, progress,
 cancellation, and form or URL elicitation. Keep modern and legacy protocol
 behavior in their existing version-scoped modules.
 
-Tool schemas without `$schema` use JSON Schema 2020-12. fx also accepts the
+Tool schemas without `$schema` use JSON Schema 2020-12. omfx also accepts the
 canonical 2020-12 declaration and the canonical Draft 7 declaration used by
 legacy SDKs, evaluates each with dialect-specific semantics, and rejects other
 dialects or references that would require network fetching before publication.
@@ -216,8 +216,8 @@ under the `0700` profile directory. `FX_DISABLE_KEYCHAIN=1` selects that portabl
 backend explicitly for deterministic tests and local troubleshooting.
 
 Servers are optional by default. Required startup failures block the first TUI
-or `fx ask` model request; optional failures publish a reduced, degraded
-capability set. One-shot `fx ask` starts required servers before its first model
+or `omfx ask` model request; optional failures publish a reduced, degraded
+capability set. One-shot `omfx ask` starts required servers before its first model
 request and defers optional servers until the turn first performs an MCP
 operation or delegates MCP capability to a child. `/mcp list` renders a bounded,
 secret-free health snapshot.
@@ -299,13 +299,13 @@ test("my scenario", async () => {
 
 ### Tape-based test (replay a real capture)
 
-For bugs reported by a user, have them run fx with `FX_RECORD=<path>`. Drop the tape in `tests/e2e/tapes/<name>.fxtape` and assert against `fx replay --golden`:
+For bugs reported by a user, have them run omfx with `FX_RECORD=<path>`. Drop the tape in `tests/e2e/tapes/<name>.fxtape` and assert against `omfx replay --golden`:
 
 ```bash
-fx replay tests/e2e/tapes/my-bug.fxtape --golden tests/e2e/tapes/my-bug.txt
+omfx replay tests/e2e/tapes/my-bug.fxtape --golden tests/e2e/tapes/my-bug.txt
 ```
 
-Check in the golden file and wire a regression test that re-runs `fx replay` in CI and diffs.
+Check in the golden file and wire a regression test that re-runs `omfx replay` in CI and diffs.
 
 ## What Not To Do
 
@@ -319,7 +319,7 @@ Check in the golden file and wire a regression test that re-runs `fx replay` in 
 
 * Do not commit generated state from `.fx/`, `.zig-cache/`, or `zig-out/`
 
-* Do not add a general alternate-screen (`\x1b[?1049h/l`) render path. fx is inline by design except for the five exclusive owner classes represented by `AlternateScreenOwner`: interactive tool-approval review, the full-transcript screen, catalog menus, the ctrl+x subagent manager, and the hosted child-terminal takeover. The terminal-session owner is entered only from the manager after `TerminalHost` grants the human write lease, has no permanent fx chrome, and must release the lease on detach. Every owner must leave or explicitly hand off the alternate buffer and restore the main grid, composer, cursor, paste, mouse, focus, and keyboard modes before resolving, cancelling, or shutting down
+* Do not add a general alternate-screen (`\x1b[?1049h/l`) render path. omfx is inline by design except for the five exclusive owner classes represented by `AlternateScreenOwner`: interactive tool-approval review, the full-transcript screen, catalog menus, the ctrl+x subagent manager, and the hosted child-terminal takeover. The terminal-session owner is entered only from the manager after `TerminalHost` grants the human write lease, has no permanent omfx chrome, and must release the lease on detach. Every owner must leave or explicitly hand off the alternate buffer and restore the main grid, composer, cursor, paste, mouse, focus, and keyboard modes before resolving, cancelling, or shutting down
 
 ## Releases
 
@@ -329,9 +329,9 @@ Releases are triggered automatically when the version in `src/main.zig` changes 
 2. Merge to `main`
 3. The release workflow checks if `vX.Y.Z` tag exists; if not, it builds four platform binaries, creates the git tag, and publishes a GitHub Release with the binaries attached
 
-The install script and `fx upgrade` fetch binaries from `releases.fx.sh`, backed by the public Vercel Blob CDN. No authentication or external CLI tools are required. The release workflow also publishes binaries to the CDN and updates `latest.txt` automatically.
+The install script and `omfx upgrade` fetch binaries from `releases.fx.sh`, backed by the public Vercel Blob CDN. No authentication or external CLI tools are required. The release workflow also publishes binaries to the CDN and updates `latest.txt` automatically.
 
-After CI passes for a push to `main`, the dev release workflow publishes commit-addressed binaries and then updates `dev.json`. Dogfooders opt in with `fx upgrade --channel dev`; the choice is stored in their user settings and applies to manual upgrades, automatic upgrades, and the `ctrl+g` handoff. `fx upgrade --channel stable` returns to tagged releases. Dev publishing does not create tags or GitHub Releases.
+After CI passes for a push to `main`, the dev release workflow publishes commit-addressed binaries and then updates `dev.json`. Dogfooders opt in with `omfx upgrade --channel dev`; the choice is stored in their user settings and applies to manual upgrades, automatic upgrades, and the `ctrl+g` handoff. `omfx upgrade --channel stable` returns to tagged releases. Dev publishing does not create tags or GitHub Releases.
 
 Release notes are public product copy. Describe user-visible behavior, always spell the product `fx`, and omit contributor attribution, tracker references, repository or website work, delivery infrastructure, CI and test details, branch history, and implementation-only refactors. Use commits and pull requests as research evidence only. Changelog formatting and release-marker rules live in `AGENTS.md`.
 
@@ -345,12 +345,12 @@ The workflow builds a ReleaseSafe binary, then uses [hyperfine](https://github.c
 
 | Command                | Budget | What it measures                                   |
 | ---------------------- | ------ | -------------------------------------------------- |
-| `fx` (startup)         | 2ms    | Binary launch through CLI dispatch (no TTY needed) |
-| `fx help`              | 2ms    | Minimal startup, pure text output                  |
-| `fx status --json`     | 2ms    | Config read + JSON serialization                   |
-| `fx background --json` | 2ms    | Background record read                             |
-| `fx doctor --json`     | 2ms    | System checks, subprocess spawns                   |
-| `fx sessions --json`   | 2ms    | Session directory read                             |
+| `omfx` (startup)         | 2ms    | Binary launch through CLI dispatch (no TTY needed) |
+| `omfx help`              | 2ms    | Minimal startup, pure text output                  |
+| `omfx status --json`     | 2ms    | Config read + JSON serialization                   |
+| `omfx background --json` | 2ms    | Background record read                             |
+| `omfx doctor --json`     | 2ms    | System checks, subprocess spawns                   |
+| `omfx sessions --json`   | 2ms    | Session directory read                             |
 
 On PRs the check **fails** if any command exceeds its budget.
 

@@ -793,7 +793,7 @@ const review_data_marker = "{{REVIEW_DATA}}";
 const review_policy_template =
     \\<permission_review>
     \\  <role>
-    \\    You are fx's last-chance safety reviewer for one pending coding-agent action.
+    \\    You are omfx's last-chance safety reviewer for one pending coding-agent action.
     \\    Auto mode normally lets the agent work without interrupting the human.
     \\  </role>
     \\
@@ -889,7 +889,7 @@ const schema_properties = [_]gateway_schema.Property{
 
 const function_schema: gateway_schema.FunctionSchema = .{
     .name = tool_name,
-    .description = "Return a strict automatic permission assessment for one exact Fx action.",
+    .description = "Return a strict automatic permission assessment for one exact omfx action.",
     .input_schema = .{
         .properties = schema_properties[0..],
         .required = schema_required[0..],

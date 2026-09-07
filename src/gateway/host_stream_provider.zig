@@ -66,7 +66,7 @@ fn stream(raw: ?*anyopaque, alloc: Allocator, request: stream_provider.Request) 
         .{ .name = "content-type", .value = "application/json" },
         .{ .name = "authorization", .value = auth },
         .{ .name = "HTTP-Referer", .value = "https://github.com/vercel-labs/fx" },
-        .{ .name = "X-Title", .value = "fx" },
+        .{ .name = "X-Title", .value = "omfx" },
         .{ .name = "ai-gateway-protocol-version", .value = "0.0.1" },
         .{ .name = "ai-language-model-specification-version", .value = "4" },
         .{ .name = "ai-language-model-id", .value = request.model },

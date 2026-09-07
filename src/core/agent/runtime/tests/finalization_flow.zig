@@ -685,7 +685,7 @@ test "common Stop continues once with exact synthetic context and joined history
     try expectBodyContains(
         &gateway,
         1,
-        "Continue the turn. Fx hook context:\\nverify the answer",
+        "Continue the turn. omfx hook context:\\nverify the answer",
     );
     try std.testing.expectEqualStrings(
         "candidate\nfinal",
@@ -712,7 +712,7 @@ test "common Stop continues once with exact synthetic context and joined history
     try expectBodyNotContains(
         &follow_gateway,
         0,
-        "Continue the turn. Fx hook context",
+        "Continue the turn. omfx hook context",
     );
 }
 

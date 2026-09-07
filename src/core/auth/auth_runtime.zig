@@ -1786,13 +1786,13 @@ test "auth failure snapshot keeps refresh failures distinct from HTTP rejection"
 
     const message = try snapshot.renderText(std.testing.allocator);
     defer std.testing.allocator.free(message);
-    try std.testing.expectEqualStrings("fx login credential refresh failed", message);
+    try std.testing.expectEqualStrings("omfx login credential refresh failed", message);
 
     const json = try snapshot.renderJson(std.testing.allocator);
     defer std.testing.allocator.free(json);
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json, .{});
     defer parsed.deinit();
-    try std.testing.expectEqualStrings("fx login", parsed.value.object.get("source").?.string);
+    try std.testing.expectEqualStrings("omfx login", parsed.value.object.get("source").?.string);
     try std.testing.expectEqualStrings("credential_refresh_failed", parsed.value.object.get("reason").?.string);
     try std.testing.expect(parsed.value.object.get("http_status") == null);
 
@@ -2007,7 +2007,7 @@ test "auth status snapshot reports an expired session without claiming it is unr
     const fresh_detail = try fresh.formatDoctorDetail(alloc);
     defer alloc.free(fresh_detail);
     try std.testing.expectEqualStrings(
-        "fx login is configured; refreshable=true; team=vercel-labs",
+        "omfx login is configured; refreshable=true; team=vercel-labs",
         fresh_detail,
     );
 
@@ -2015,7 +2015,7 @@ test "auth status snapshot reports an expired session without claiming it is unr
     const stale_detail = try stale.formatDoctorDetail(alloc);
     defer alloc.free(stale_detail);
     try std.testing.expectEqualStrings(
-        "fx login is configured; session expired; refreshable=true; team=vercel-labs",
+        "omfx login is configured; session expired; refreshable=true; team=vercel-labs",
         stale_detail,
     );
 

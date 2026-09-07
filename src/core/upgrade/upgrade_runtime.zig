@@ -364,7 +364,7 @@ fn formatProgressStatusLine(buf: []u8, snapshot: ProgressSnapshot, current: []co
         .found => blk: {
             const latest = latest_label orelse return null;
             var out: std.Io.Writer = .fixed(buf);
-            out.print("fx {s} -> {s}", .{ current, versionLabel(latest) }) catch return out.buffered();
+            out.print("omfx {s} -> {s}", .{ current, versionLabel(latest) }) catch return out.buffered();
             break :blk out.buffered();
         },
         .downloading_known => if (snapshot.total > 0)
@@ -542,7 +542,7 @@ test "formatProgressStatusLine renders found update before download starts" {
     var buf: [128]u8 = undefined;
 
     try std.testing.expectEqualStrings(
-        "fx 0.3.39 -> 0.3.40",
+        "omfx 0.3.39 -> 0.3.40",
         formatProgressStatusLine(&buf, .{
             .phase = .found,
             .downloaded = 0,

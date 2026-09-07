@@ -835,7 +835,7 @@ const AskContext = struct {
                 "event=ask_session_store_unavailable error={s}",
                 .{@errorName(err)},
             );
-            try self.writeStderr("fx ask: warning: session persistence unavailable; error=");
+            try self.writeStderr("omfx ask: warning: session persistence unavailable; error=");
             try self.writeStderr(@errorName(err));
             try self.writeStderr("; continuing without saving\n");
             return;
@@ -1205,7 +1205,7 @@ fn runWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Config, deps: 
                 try deps.write_stdout(deps.stdout_ctx, json);
                 return 1;
             }
-            try deps.write_stderr(deps.stderr_ctx, "fx ask: missing prompt\n");
+            try deps.write_stderr(deps.stderr_ctx, "omfx ask: missing prompt\n");
             try writeAskUsage(deps, cfg.command_usage);
             return 1;
         },
@@ -1216,7 +1216,7 @@ fn runWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Config, deps: 
                 try deps.write_stdout(deps.stdout_ctx, json);
                 return 1;
             }
-            try deps.write_stderr(deps.stderr_ctx, "fx ask: --no-save cannot be used with --resume or --resume-id\n");
+            try deps.write_stderr(deps.stderr_ctx, "omfx ask: --no-save cannot be used with --resume or --resume-id\n");
             try writeAskUsage(deps, cfg.command_usage);
             return 1;
         },
@@ -1227,7 +1227,7 @@ fn runWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Config, deps: 
                 try deps.write_stdout(deps.stdout_ctx, json);
                 return 1;
             }
-            try deps.write_stderr(deps.stderr_ctx, "fx ask: prompt exceeds the local input safety limit\n");
+            try deps.write_stderr(deps.stderr_ctx, "omfx ask: prompt exceeds the local input safety limit\n");
             return 1;
         },
         error.PromptInputReadFailed => {
@@ -1237,7 +1237,7 @@ fn runWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Config, deps: 
                 try deps.write_stdout(deps.stdout_ctx, json);
                 return 1;
             }
-            try deps.write_stderr(deps.stderr_ctx, "fx ask: failed to read prompt from stdin\n");
+            try deps.write_stderr(deps.stderr_ctx, "omfx ask: failed to read prompt from stdin\n");
             return 1;
         },
         error.InvalidAskArgs => {
@@ -1257,7 +1257,7 @@ fn runWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Config, deps: 
                 try deps.write_stdout(deps.stdout_ctx, json);
                 return 1;
             }
-            try deps.write_stderr(deps.stderr_ctx, "fx ask: prompt must be valid UTF-8 and contain no NUL bytes\n");
+            try deps.write_stderr(deps.stderr_ctx, "omfx ask: prompt must be valid UTF-8 and contain no NUL bytes\n");
             return 1;
         },
         else => return err,
@@ -1299,7 +1299,7 @@ fn runWithDeps(alloc: Allocator, args: []const [:0]const u8, cfg: Config, deps: 
         if (err == error.OneOffSessionNotResumable and !options.json_output) {
             try deps.write_stderr(
                 deps.stderr_ctx,
-                "fx ask: one-off child sessions cannot accept additional prompts; create a persistent child to continue the conversation\n",
+                "omfx ask: one-off child sessions cannot accept additional prompts; create a persistent child to continue the conversation\n",
             );
             return 1;
         }
@@ -1356,7 +1356,7 @@ fn preflightAskImages(
             } else {
                 var message: std.Io.Writer.Allocating = .init(alloc);
                 defer message.deinit();
-                try message.writer.print("fx ask: failed to attach image \"{s}\": {s}\n", .{ image_path, reason });
+                try message.writer.print("omfx ask: failed to attach image \"{s}\": {s}\n", .{ image_path, reason });
                 try deps.write_stderr(deps.stderr_ctx, message.written());
             }
             return false;
@@ -1404,7 +1404,7 @@ fn missingCredentialResult(
         credentials.missing_chatgpt_credential_message
     else
         credentials.missing_credential_message;
-    try options.deps.write_stderr(options.deps.stderr_ctx, "fx ask: ");
+    try options.deps.write_stderr(options.deps.stderr_ctx, "omfx ask: ");
     try options.deps.write_stderr(options.deps.stderr_ctx, message);
     try options.deps.write_stderr(options.deps.stderr_ctx, "\n");
     return .{
@@ -1441,7 +1441,7 @@ fn runPromptInternal(alloc: Allocator, prompt: []const u8, permission_override: 
         var notice_writer: std.Io.Writer.Allocating = .init(alloc);
         defer notice_writer.deinit();
         try notice_writer.writer.print(
-            "fx ask: config {s}: {s}",
+            "omfx ask: config {s}: {s}",
             .{ @tagName(diagnostic.layer), @tagName(diagnostic.cause) },
         );
         try config_runtime.writeDiagnosticMetadata(&notice_writer.writer, diagnostic);
@@ -1637,7 +1637,7 @@ fn runPromptInternal(alloc: Allocator, prompt: []const u8, permission_override: 
             @intCast(@max(io_mod.milliTimestamp(), 0)),
         )) |failure| {
             defer alloc.free(failure);
-            try ctx.writeStderr("fx ask: ");
+            try ctx.writeStderr("omfx ask: ");
             try ctx.writeStderr(failure);
             try ctx.writeStderr("\n");
             return error.McpRequiredServerUnavailable;
@@ -2251,20 +2251,20 @@ fn finishCliPermissionOutcome(
     switch (outcome.requirement orelse .approval_required) {
         .configured_rule => try writeBlockedActionGuidance(
             ctx,
-            "fx ask: permission required by configured rule",
+            "omfx ask: permission required by configured rule",
             label,
             "noninteractive_permission_prompt_unavailable",
-            "fx ask: rerun in the interactive shell to approve this action, or add a narrow matching permission rule before retrying\n",
+            "omfx ask: rerun in the interactive shell to approve this action, or add a narrow matching permission rule before retrying\n",
         ),
         .approval_required, .sandbox_widening => try writeBlockedActionGuidance(
             ctx,
-            "fx ask: permission required for tool execution in noninteractive mode",
+            "omfx ask: permission required for tool execution in noninteractive mode",
             label,
             "noninteractive_permission_prompt_unavailable",
             if (permission_mode == .auto)
-                "fx ask: human approval is required for this action; use the interactive shell to approve it, or add a narrow matching permission rule\n"
+                "omfx ask: human approval is required for this action; use the interactive shell to approve it, or add a narrow matching permission rule\n"
             else
-                "fx ask: rerun with --auto to review this exact action automatically, or use the interactive shell to approve it\n",
+                "omfx ask: rerun with --auto to review this exact action automatically, or use the interactive shell to approve it\n",
         ),
     }
     try recordToolCallRejected(
@@ -2307,9 +2307,9 @@ fn writeBlockedActionGuidance(
     hint: []const u8,
 ) !void {
     try ctx.writeLine(headline);
-    try ctx.writeStderr("fx ask: blocked action: ");
+    try ctx.writeStderr("omfx ask: blocked action: ");
     try ctx.writeStderr(label);
-    try ctx.writeStderr("\nfx ask: reason=");
+    try ctx.writeStderr("\nomfx ask: reason=");
     try ctx.writeStderr(reason);
     try ctx.writeStderr("\n");
     try ctx.writeStderr(hint);
@@ -2357,7 +2357,7 @@ fn emitAskNotificationBell(raw: *anyopaque) void {
     ctx.writeStderr("\x07") catch |err| {
         debug_trace.logf(
             "notifications",
-            "fx ask terminal bell write failed err={s}",
+            "omfx ask terminal bell write failed err={s}",
             .{@errorName(err)},
         );
     };
@@ -3001,7 +3001,7 @@ fn pushHttpError(raw_ctx: *anyopaque, status: std.http.Status, detail: []const u
     else
         try gateway_error_format.formatHttpErrorMessage(ctx.alloc, status, detail);
     defer ctx.alloc.free(message);
-    try ctx.writeStderr("fx ask: ");
+    try ctx.writeStderr("omfx ask: ");
     try ctx.writeStderr(message);
     try ctx.writeStderr("\n");
     if (ctx.output_mode.capturesJson()) {
@@ -3434,7 +3434,7 @@ fn emitHeadlessYoloWarning(alloc: Allocator, options: RunOptions) !void {
             var message: std.Io.Writer.Allocating = .init(alloc);
             defer message.deinit();
             try message.writer.print(
-                "fx ask: failed to save YOLO acknowledgment: {s}\n",
+                "omfx ask: failed to save YOLO acknowledgment: {s}\n",
                 .{@errorName(failure.err)},
             );
             try options.deps.write_stderr(options.deps.stderr_ctx, message.written());
@@ -3701,7 +3701,7 @@ fn promptRealPermissionApproval(
     const stdin_tty = std.Io.File.stdin().isTty(zio) catch false;
     if (!stdin_tty) return .unavailable;
 
-    try write_stderr(stderr_ctx, "fx wants to run:\n  ");
+    try write_stderr(stderr_ctx, "omfx wants to run:\n  ");
     try write_stderr(stderr_ctx, label);
     try write_stderr(stderr_ctx, "\n\nApprove? [y/N] ");
     notify_attention(attention_ctx);
@@ -3764,7 +3764,7 @@ const TestPermissionPrompt = struct {
         self.calls += 1;
         self.label = label;
         if (self.result != .unavailable) {
-            try write_stderr(stderr_ctx, "fx wants to run:\n  ");
+            try write_stderr(stderr_ctx, "omfx wants to run:\n  ");
             try write_stderr(stderr_ctx, label);
             try write_stderr(stderr_ctx, "\n\nApprove? [y/N] ");
             notify_attention(attention_ctx);
@@ -4914,7 +4914,7 @@ test "headless yolo warning precedes startup configuration diagnostics" {
         u8,
         stderr_capture.bytes.items,
         permissions.yolo_warning_text ++ "\n" ++
-            "fx ask: config user: malformed_settings\n",
+            "omfx ask: config user: malformed_settings\n",
     ));
 }
 
@@ -5249,7 +5249,7 @@ test "stdin read failure has distinct text and JSON output contracts" {
     );
     try std.testing.expectEqualStrings("", stdout_capture.bytes.items);
     try std.testing.expectEqualStrings(
-        "fx ask: failed to read prompt from stdin\n",
+        "omfx ask: failed to read prompt from stdin\n",
         stderr_capture.bytes.items,
     );
 
@@ -6509,10 +6509,10 @@ test "fx ask preserves CLI headless blocker diagnostics" {
     ));
     const expected_configured_stderr = try std.fmt.allocPrint(
         arena,
-        "fx ask: permission required by configured rule\n" ++
-            "fx ask: blocked action: {s}\n" ++
-            "fx ask: reason=noninteractive_permission_prompt_unavailable\n" ++
-            "fx ask: rerun in the interactive shell to approve this action, or add a narrow matching permission rule before retrying\n",
+        "omfx ask: permission required by configured rule\n" ++
+            "omfx ask: blocked action: {s}\n" ++
+            "omfx ask: reason=noninteractive_permission_prompt_unavailable\n" ++
+            "omfx ask: rerun in the interactive shell to approve this action, or add a narrow matching permission rule before retrying\n",
         .{configured_label},
     );
     try std.testing.expectEqualStrings("", stdout_capture.bytes.items);
@@ -6566,10 +6566,10 @@ test "fx ask preserves CLI headless blocker diagnostics" {
     ));
     const expected_approval_stderr = try std.fmt.allocPrint(
         arena,
-        "fx ask: permission required for tool execution in noninteractive mode\n" ++
-            "fx ask: blocked action: {s}\n" ++
-            "fx ask: reason=noninteractive_permission_prompt_unavailable\n" ++
-            "fx ask: rerun with --auto to review this exact action automatically, or use the interactive shell to approve it\n",
+        "omfx ask: permission required for tool execution in noninteractive mode\n" ++
+            "omfx ask: blocked action: {s}\n" ++
+            "omfx ask: reason=noninteractive_permission_prompt_unavailable\n" ++
+            "omfx ask: rerun with --auto to review this exact action automatically, or use the interactive shell to approve it\n",
         .{approval_label},
     );
     try std.testing.expectEqualStrings("", stdout_capture.bytes.items);
@@ -7092,7 +7092,7 @@ test "fx ask renders one-off resume denial in text and JSON modes" {
         } else {
             try std.testing.expectEqualStrings("", stdout_capture.bytes.items);
             try std.testing.expectEqualStrings(
-                "fx ask: one-off child sessions cannot accept additional prompts; create a persistent child to continue the conversation\n",
+                "omfx ask: one-off child sessions cannot accept additional prompts; create a persistent child to continue the conversation\n",
                 stderr_capture.bytes.items,
             );
         }
@@ -7322,7 +7322,7 @@ test "saved ask classifies unsafe store failure by request mode" {
     try fresh_ctx.initializeSessionStores();
 
     try std.testing.expectEqualStrings(
-        "fx ask: warning: session persistence unavailable; error=SessionPathUnsafe; continuing without saving\n",
+        "omfx ask: warning: session persistence unavailable; error=SessionPathUnsafe; continuing without saving\n",
         stderr_capture.bytes.items,
     );
     try expectAskSessionStoresUnavailable(&fresh_ctx);
@@ -8113,7 +8113,7 @@ test "fx ask JSON captures HTTP 413 prompt-too-long blocker" {
     );
 
     try std.testing.expectEqual(@as(u8, 1), exit_code);
-    try std.testing.expect(std.mem.find(u8, stderr_capture.bytes.items, "fx ask: HTTP 413: provider payload rejected") != null);
+    try std.testing.expect(std.mem.find(u8, stderr_capture.bytes.items, "omfx ask: HTTP 413: provider payload rejected") != null);
 
     var parsed = try std.json.parseFromSlice(std.json.Value, alloc, stdout_capture.bytes.items, .{});
     defer parsed.deinit();
@@ -8139,7 +8139,7 @@ test "fx ask formats restricted-provider HTTP errors without raw JSON" {
     );
 
     try std.testing.expectEqual(@as(u8, 1), exit_code);
-    try std.testing.expect(std.mem.find(u8, stderr_capture.bytes.items, "fx ask: API access denied · HTTP 403 · Provider: wafer") != null);
+    try std.testing.expect(std.mem.find(u8, stderr_capture.bytes.items, "omfx ask: API access denied · HTTP 403 · Provider: wafer") != null);
     try std.testing.expect(std.mem.find(u8, stderr_capture.bytes.items, "{\"error\"") == null);
 
     var parsed = try std.json.parseFromSlice(std.json.Value, alloc, stdout_capture.bytes.items, .{});
@@ -8166,7 +8166,7 @@ test "fx ask text and JSON share the selected auth failure facts" {
 
     try std.testing.expectEqual(@as(u8, 1), exit_code);
     try std.testing.expectEqualStrings(
-        "fx ask: AI_GATEWAY_API_KEY authentication failed · HTTP 401\n",
+        "omfx ask: AI_GATEWAY_API_KEY authentication failed · HTTP 401\n",
         stderr_capture.bytes.items,
     );
     var parsed = try std.json.parseFromSlice(std.json.Value, alloc, stdout_capture.bytes.items, .{});
@@ -8427,7 +8427,7 @@ test "indeterminate saved auth cleanup keeps the primary result and session id" 
     try std.testing.expectEqual(@as(usize, 1), probe.calls);
     try std.testing.expect(probe.borrowers_detached);
     try std.testing.expectEqualStrings(
-        "fx ask: AI_GATEWAY_API_KEY authentication failed · HTTP 401\n",
+        "omfx ask: AI_GATEWAY_API_KEY authentication failed · HTTP 401\n",
         stderr_capture.bytes.items,
     );
     var parsed = try std.json.parseFromSlice(
@@ -8807,7 +8807,7 @@ test "json run with missing API key prints diagnostic then final object" {
     const exit_code = try runWithDeps(alloc, &.{ "--json", "hello" }, testConfig(), testPromptRunDeps(&stdout_capture, &stderr_capture, testMissingKeyStartup));
 
     try std.testing.expectEqual(@as(u8, 1), exit_code);
-    try std.testing.expectEqualStrings("fx ask: " ++ credentials.missing_credential_message ++ "\n", stderr_capture.bytes.items);
+    try std.testing.expectEqualStrings("omfx ask: " ++ credentials.missing_credential_message ++ "\n", stderr_capture.bytes.items);
     try std.testing.expectEqualStrings(
         "{\"output\":\"\",\"exit_code\":1,\"model\":\"\",\"session_id\":\"\",\"steps\":0,\"tool_calls\":[],\"error\":\"MissingCredentials\"}\n",
         stdout_capture.bytes.items,

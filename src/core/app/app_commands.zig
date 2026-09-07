@@ -1826,7 +1826,7 @@ fn buildTraceReport(app: anytype) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(app.alloc);
     defer out.deinit();
 
-    try out.writer.writeAll("# fx trace\n\n");
+    try out.writer.writeAll("# omfx trace\n\n");
     try out.writer.writeAll("Private diagnostic report. It may include prompts, file paths, command output, and file snippets.\n\n");
 
     try out.writer.writeAll("## Summary\n");
@@ -3066,7 +3066,7 @@ fn handleMaxxingCommand(app: anytype, rest: []const u8) !void {
             "current: {s}\n" ++
                 "available: minimal, legacy\n" ++
                 "  minimal bare composer and grouped tool activity\n" ++
-                "  legacy  original Fx presentation\n" ++
+                "  legacy  original omfx presentation\n" ++
                 "examples: /maxxing minimal, /maxxing legacy",
             .{app.shell.maxxing_mode.label()},
         );
@@ -4192,7 +4192,7 @@ test "trace auth summary preserves missing and loaded status text" {
     defer loaded.deinit();
     try writeAuthStateSummary(&loaded.writer, &app);
     try std.testing.expectEqualStrings(
-        "auth: source=fx login refreshable=true gateway_team=unset\n",
+        "auth: source=omfx login refreshable=true gateway_team=unset\n",
         loaded.written(),
     );
 }

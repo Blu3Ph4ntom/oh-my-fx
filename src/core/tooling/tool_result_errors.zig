@@ -316,9 +316,9 @@ pub fn filesystemAccessDeniedJson(
 
 fn filesystemAccessDeniedSuggestion() []const u8 {
     if (comptime builtin.os.tag == .macos) {
-        return "Do not retry this path unchanged or propose a symlink. Fx permissions and /sandbox none cannot override the operating system. If the path is in a protected folder such as Desktop, Documents, or Downloads, ask the user to grant the terminal app Files and Folders or Full Disk Access. Otherwise, ask the user to correct OS filesystem permissions or move/copy the project to an accessible location.";
+        return "Do not retry this path unchanged or propose a symlink. Omfx permissions and /sandbox none cannot override the operating system. If the path is in a protected folder such as Desktop, Documents, or Downloads, ask the user to grant the terminal app Files and Folders or Full Disk Access. Otherwise, ask the user to correct OS filesystem permissions or move/copy the project to an accessible location.";
     }
-    return "Do not retry this path unchanged or propose a symlink. Fx permissions and /sandbox none cannot override the operating system. Ask the user to correct OS filesystem permissions or move/copy the project to an accessible location.";
+    return "Do not retry this path unchanged or propose a symlink. Omfx permissions and /sandbox none cannot override the operating system. Ask the user to correct OS filesystem permissions or move/copy the project to an accessible location.";
 }
 
 pub fn malformedToolArgumentsJson(alloc: Allocator, tool_name: []const u8) Allocator.Error![]u8 {

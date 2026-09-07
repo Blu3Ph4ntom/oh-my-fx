@@ -174,7 +174,7 @@ test "resume screen places composer catalog and controls without transcript chro
     try std.testing.expect(std.mem.find(
         u8,
         row.items,
-        "This session is open in another Fx. Close it there, then press Enter to retry.",
+        "This session is open in another omfx. Close it there, then press Enter to retry.",
     ) != null);
     row.clearRetainingCapacity();
     try grid.rowTextTrimmed(5, &row);

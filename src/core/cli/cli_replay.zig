@@ -740,7 +740,7 @@ test "json replay recovers an incomplete final frame through stderr" {
     var parsed = try std.json.parseFromSlice(std.json.Value, alloc, std.mem.trim(u8, capture.stdout.written(), " \t\r\n"), .{});
     defer parsed.deinit();
     try testing.expectEqual(@as(i64, 1), parsed.value.object.get("frame_count").?.integer);
-    try testing.expectEqualStrings("fx replay: ignored incomplete final tape frame\n", capture.stderr.written());
+    try testing.expectEqualStrings("omfx replay: ignored incomplete final tape frame\n", capture.stderr.written());
 }
 
 test "frames mode prints unknown frame snapshots without trapping" {
@@ -861,7 +861,7 @@ test "run missing tape path returns current stderr" {
 
     const exit_code = try runCaptured(alloc, &.{}, &capture);
     try testing.expectEqual(@as(u8, 1), exit_code);
-    try testing.expect(std.mem.startsWith(u8, capture.stderr.written(), "fx replay: missing tape path\n"));
+    try testing.expect(std.mem.startsWith(u8, capture.stderr.written(), "omfx replay: missing tape path\n"));
 }
 
 test "json failures use stdout for missing arguments files and malformed tapes" {
@@ -933,5 +933,5 @@ test "run malformed tape returns bad tape stderr" {
 
     const exit_code = try runCaptured(alloc, &.{tape_arg}, &capture);
     try testing.expectEqual(@as(u8, 1), exit_code);
-    try testing.expect(std.mem.startsWith(u8, capture.stderr.written(), "fx replay: bad tape"));
+    try testing.expect(std.mem.startsWith(u8, capture.stderr.written(), "omfx replay: bad tape"));
 }

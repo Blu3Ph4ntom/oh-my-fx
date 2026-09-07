@@ -643,8 +643,8 @@ const OAuthHttpOperation = struct {
 };
 
 test "oauth transport user agent uses the product version" {
-    try std.testing.expect(std.mem.startsWith(u8, gateway_client.user_agent, "fx/"));
-    try std.testing.expect(gateway_client.user_agent.len > "fx/".len);
+    try std.testing.expect(std.mem.startsWith(u8, gateway_client.user_agent, "omfx/"));
+    try std.testing.expect(gateway_client.user_agent.len > "omfx/".len);
     try std.testing.expect(std.mem.find(u8, gateway_client.user_agent, "zig") == null);
     try std.testing.expect(std.mem.find(u8, gateway_client.user_agent, "std.http") == null);
 }
@@ -2292,7 +2292,7 @@ test "model catalog GET omits team header for null and empty team" {
     try expectModelCatalogTeamHeaderOmitted("");
 }
 
-test "model catalog GET sends fx user agent without attribution headers" {
+test "model catalog GET sends omfx user agent without attribution headers" {
     var fixture = try gateway_client.TestModelCatalogFixture.init();
     defer fixture.deinit();
     try fixture.start();

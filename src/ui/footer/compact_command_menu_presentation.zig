@@ -399,7 +399,7 @@ fn composeUsageStatusRow(
     else if (snapshot.completeness != .complete)
         completenessMessage(snapshot)
     else
-        "Local Fx activity";
+        "Local omfx activity";
     return composeStyledRow(alloc, status, width, ui_render.dim_style);
 }
 
