@@ -313,6 +313,14 @@ pub fn setRawEnviron(raw: RawEnviron) void {
 }
 
 pub fn getenv(key: []const u8) ?[]const u8 {
+    if (getenvDirect(key)) |value| return value;
+    if (comptime builtin.os.tag == .windows) {
+        if (std.mem.eql(u8, key, "HOME")) return getenvDirect("USERPROFILE");
+    }
+    return null;
+}
+
+fn getenvDirect(key: []const u8) ?[]const u8 {
     if (global_environ) |m| return m.get(key);
     if (global_environ_block) |block| return getenvFromBlock(block, key);
     if (global_raw_environ) |raw| return getenvFromLibc(key) orelse getenvFromRaw(raw, key);
@@ -1218,6 +1226,26 @@ test "getenv returns set value after setEnvironMap" {
     setEnvironMap(&environ);
     try std.testing.expectEqualStrings("present", getenv("FX_IO_TEST").?);
     global_environ = null;
+}
+
+test "getenv falls back to USERPROFILE for HOME on Windows" {
+    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
+
+    const previous_environ = global_environ;
+    const previous_block = global_environ_block;
+    const previous_raw = global_raw_environ;
+    defer {
+        global_environ = previous_environ;
+        global_environ_block = previous_block;
+        global_raw_environ = previous_raw;
+    }
+
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("USERPROFILE", "C:\\Users\\tester");
+
+    setEnvironMap(&environ);
+    try std.testing.expectEqualStrings("C:\\Users\\tester", getenv("HOME").?);
 }
 
 test "getenvProduct prefers the omfx name and preserves the legacy name" {
