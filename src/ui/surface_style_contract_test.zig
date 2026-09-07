@@ -1,5 +1,6 @@
 const std = @import("std");
 const product_theme = @import("../core/shared/product_theme.zig");
+const ui_render = @import("render.zig");
 const surface_style = @import("surface_style.zig");
 
 test "omfx surface states keep focus visible without color" {
@@ -51,4 +52,21 @@ test "omfx surface state styles support every palette variant" {
             if (state != .normal) try std.testing.expect(row.status_label.len > 0);
         }
     }
+}
+
+test "omfx render wires semantic status roles" {
+    ui_render.setColorEnabled(true);
+    ui_render.setTruecolorSupport(false);
+    defer {
+        ui_render.setTruecolorSupport(true);
+        ui_render.initTheme(false, null);
+    }
+
+    ui_render.initTheme(false, null);
+    const palette = product_theme.paletteFor(.{ .truecolor = false, .variant = .dark });
+    try std.testing.expectEqualStrings(palette.warning, ui_render.warning_style);
+    try std.testing.expectEqualStrings(palette.success, ui_render.green_style);
+    try std.testing.expectEqualStrings(palette.danger, ui_render.red_style);
+    try std.testing.expectEqualStrings(palette.success, ui_render.diff_added_style);
+    try std.testing.expectEqualStrings(palette.danger, ui_render.diff_removed_style);
 }

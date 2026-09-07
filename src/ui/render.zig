@@ -77,6 +77,11 @@ fn applyProductPalette(variant: product_theme.Variant) void {
     success_style = palette.success;
     danger_style = palette.danger;
     border_style = palette.border;
+    warning_style = palette.warning;
+    green_style = palette.success;
+    red_style = palette.danger;
+    diff_added_style = palette.success;
+    diff_removed_style = palette.danger;
     if (!color_enabled) clearColorStyles();
 }
 
@@ -101,11 +106,6 @@ pub fn initTheme(light: bool, terminal_bg: ?TerminalRgb) void {
         system_notice_label_style = "\x1b[1;38;5;238m";
         system_notice_text_style = "\x1b[38;5;241m";
         dim_style = "\x1b[38;5;247m";
-        warning_style = "\x1b[38;5;238m";
-        green_style = "\x1b[38;5;238m";
-        red_style = "\x1b[38;5;238m";
-        diff_added_style = "\x1b[38;5;238m";
-        diff_removed_style = "\x1b[38;5;238m";
         approval_button_active_style = "\x1b[48;5;236m\x1b[38;5;255m\x1b[1m";
         approval_button_inactive_style = "\x1b[48;5;251m\x1b[38;5;237m";
         selected_completion_style = "\x1b[1;38;5;235m";
@@ -120,11 +120,6 @@ pub fn initTheme(light: bool, terminal_bg: ?TerminalRgb) void {
         system_notice_label_style = "\x1b[1;38;5;252m";
         system_notice_text_style = "\x1b[38;5;250m";
         dim_style = "\x1b[38;5;245m";
-        warning_style = "\x1b[38;5;252m";
-        green_style = "\x1b[38;5;252m";
-        red_style = "\x1b[38;5;252m";
-        diff_added_style = "\x1b[38;5;252m";
-        diff_removed_style = "\x1b[38;5;252m";
         approval_button_active_style = "\x1b[48;5;255m\x1b[38;5;235m\x1b[1m";
         approval_button_inactive_style = "\x1b[48;5;239m\x1b[38;5;255m";
         selected_completion_style = "\x1b[1;38;5;255m";
