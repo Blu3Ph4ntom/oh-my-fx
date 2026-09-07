@@ -16,6 +16,8 @@ test {
     _ = @import("core/app/app_input_runtime.zig");
     _ = @import("ui/event_loop.zig");
     _ = @import("ui/input/runtime.zig");
+    _ = @import("ui/input/interaction_contract.zig");
     _ = @import("ui/input/terminal_action_decoder.zig");
     _ = @import("ui/terminal/terminal.zig");
+    _ = @import("ui/footer/row_text.zig");
 }

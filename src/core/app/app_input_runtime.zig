@@ -979,6 +979,18 @@ pub fn Runtime(comptime App: type) type {
                 else => {},
             }
 
+            if (pickerMoveDeltaForAction(resolved)) |delta| {
+                if (composerPickerSurfaceVisible(app) and
+                    !app.auth.signInEntryActive() and
+                    !app.auth.apiKeyEntryActive() and
+                    routeVisiblePickerMove(app, delta))
+                {
+                    app.input_runtime.vertical_navigation.reset();
+                    app.shell.render_requests.request(.footer);
+                    return .done;
+                }
+            }
+
             if (comptime runtime_profile.allows(App, .subagents)) {
                 if (app.subagents.isViewActive()) {
                     if (approvalOwnsCurrentSurface(app)) {
@@ -1132,6 +1144,18 @@ pub fn Runtime(comptime App: type) type {
             app.input_runtime.vertical_navigation.reset();
             app.shell.render_requests.request(.footer);
             return true;
+        }
+
+        fn pickerMoveDeltaForAction(action: input_action.Action) ?i32 {
+            const classified = test_ui_input.surfaceCommand(
+                .provider_picker,
+                .{ .action = .{ .action = action } },
+            ) orelse return null;
+            return switch (classified) {
+                .move_previous => -1,
+                .move_next => 1,
+                else => null,
+            };
         }
 
         fn pickerControlDelta(byte: u8) ?i32 {

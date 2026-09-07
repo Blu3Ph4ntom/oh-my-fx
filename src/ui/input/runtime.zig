@@ -24,6 +24,7 @@ const visual_layout = @import("visual_layout.zig");
 const escape_parser = @import("escape_parser.zig");
 const shortcuts = @import("shortcuts.zig");
 const terminal_action_decoder = @import("terminal_action_decoder.zig");
+const interaction_contract = @import("interaction_contract.zig");
 
 const ImageBlocks = kill_ring.ImageBlocks;
 const InputRuntime = core_input_runtime.Runtime;
@@ -62,6 +63,8 @@ const MouseInput = escape_parser.MouseInput;
 pub const shortcutFromControlByte = shortcuts.fromControlByte;
 pub const shortcutFromFocusedEditorControlByte = shortcuts.fromFocusedEditorControlByte;
 pub const shortcutFromEscapeAction = shortcuts.fromEscapeAction;
+pub const surfaceCommand = interaction_contract.route;
+pub const surfaceHint = interaction_contract.hint;
 
 pub fn approvalActionFromByte(byte: u8) ?approval_decision.Action {
     return switch (byte) {
