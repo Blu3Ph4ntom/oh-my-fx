@@ -112,7 +112,7 @@ fn kittyUnicodeKeyAction(keycode: u16, modifiers: u16, meta_prefixed: bool) Inpu
         keycode == kitty_right_key or
         keycode == kitty_left_key)
     {
-        const arrow = switch (keycode) {
+        const arrow: u8 = switch (keycode) {
             kitty_up_key => 'A',
             kitty_down_key => 'B',
             kitty_right_key => 'C',

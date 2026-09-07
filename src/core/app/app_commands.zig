@@ -3492,6 +3492,7 @@ fn persistUserPreferencesSilently(
 }
 
 pub fn applySettingsCatalogChange(app: anytype, change: settings_catalog.Change) !void {
+    const App = @TypeOf(app.*);
     switch (change.setting) {
         .model => unreachable,
         .ui_theme => {
