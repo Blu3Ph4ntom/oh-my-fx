@@ -49,6 +49,59 @@ jobs:
           & ./zig-out/bin/omfx.exe help
           if ($LASTEXITCODE -ne 0) { throw "omfx help (bench) failed" }
 
+      - name: Bounded omfx surface smoke
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "./zig-out/bin/omfx.exe").Path
+
+          function Invoke-BoundedOmfx([string]$name, [string[]]$arguments) {
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = $exe
+            $startInfo.WorkingDirectory = (Get-Location).Path
+            $startInfo.UseShellExecute = $false
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+            $startInfo.Environment["FX_BENCH"] = "1"
+            foreach ($argument in $arguments) { [void]$startInfo.ArgumentList.Add($argument) }
+
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $startInfo
+            [void]$process.Start()
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(30_000)) {
+              try { $process.Kill($true) } catch { $process.Kill() }
+              $process.WaitForExit()
+              $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+              if ($stderr.Length -gt 4096) { $stderr = $stderr.Substring(0, 4096) }
+              throw "$name timed out after 30 seconds (stderr=$stderr)"
+            }
+
+            $stdout = $stdoutTask.GetAwaiter().GetResult()
+            $stderr = $stderrTask.GetAwaiter().GetResult()
+            if ($process.ExitCode -ne 0) {
+              $diagnostic = ($stderr + $stdout).Trim()
+              if ($diagnostic.Length -gt 4096) { $diagnostic = $diagnostic.Substring(0, 4096) }
+              throw "$name exited with code $($process.ExitCode) (diagnostic=$diagnostic)"
+            }
+            if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+              throw "$name wrote to stderr: $stderr"
+            }
+            return $stdout
+          }
+
+          $version = Invoke-BoundedOmfx "omfx version" @("--version")
+          $help = Invoke-BoundedOmfx "omfx help" @("help")
+          if ([string]::IsNullOrWhiteSpace($version) -or $version -notmatch "omfx v") {
+            throw "omfx version output did not identify the omfx product"
+          }
+          if ([string]::IsNullOrWhiteSpace($help) -or $help -notmatch "Usage:" -or $help -notmatch "omfx") {
+            throw "omfx help output was incomplete"
+          }
+          if ($version -match "�|≡¥Æ|Ã") { throw "omfx version output contains mojibake" }
+          if ($help -match "�|≡¥Æ") { throw "omfx help output contains mojibake" }
+          Write-Output "Bounded omfx version/help surface smoke passed"
+
       - name: Smoke test OpenCode Go with omfx.exe
         shell: pwsh
         timeout-minutes: 10
@@ -213,9 +266,13 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "Windows raw input mode"
           zig test -lc src/test_root.zig --test-filter "terminal decoder key matrix"
           zig test -lc src/test_root.zig --test-filter "terminal decoder preserves CR and LF"
+          zig test -lc src/test_root.zig --test-filter "terminal decoder coalesces CRLF"
           zig test -lc src/test_root.zig --test-filter "bare Escape emits once"
           zig test -lc src/test_root.zig --test-filter "Windows modifier and Kitty key forms"
+          zig test -lc src/test_root.zig --test-filter "protocol aliases normalize once"
           zig test -lc src/test_root.zig --test-filter "event loop commits once"
+          zig test -lc src/test_root.zig --test-filter "event loop coalesces resize and activity"
+          zig test -lc src/test_root.zig --test-filter "event loop settles a facts-only"
           zig test -lc src/test_root.zig --test-filter "interaction contract maps common navigation keys"
           zig test -lc src/test_root.zig --test-filter "interaction contract keeps surface-specific cancel behavior"
           zig test -lc src/test_root.zig --test-filter "settings menu Enter commits selected option"
@@ -233,6 +290,14 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "Codex onboarding sign-in enters the provider activation flow"
           zig test -lc src/test_root.zig --test-filter "app_input_runtime provider picker routes terminal actions"
           zig test -lc src/test_root.zig --test-filter "app_input_runtime provider picker Escape"
+          zig test -lc src/test_root.zig --test-filter "app_input_runtime provider Enter forms close once"
+          zig test -lc src/test_root.zig --test-filter "app_input_runtime full transcript owns Enter"
+          zig test -lc src/test_root.zig --test-filter "app_input_runtime auth Escape restores"
+          zig test -lc src/test_root.zig --test-filter "app_input_runtime question Enter owns"
+          zig test -lc src/test_root.zig --test-filter "app_input_runtime standalone LF after submit"
+          zig test -lc src/test_root.zig --test-filter "app_input_runtime resize then input"
+          zig test -lc src/test_root.zig --test-filter "every alternate screen owner restores"
+          zig test -lc src/test_root.zig --test-filter "failed terminal takeover leave"
           zig test -lc src/test_root.zig --test-filter "ChatGPT browser authorization URL"
           zig test -lc src/test_root.zig --test-filter "Codex request originator"
           zig test -lc src/test_root.zig --test-filter "login failure notices identify their provider"
