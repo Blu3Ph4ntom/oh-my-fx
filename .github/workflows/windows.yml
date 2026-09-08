@@ -102,6 +102,21 @@ jobs:
           if ($help -match "�|≡¥Æ") { throw "omfx help output contains mojibake" }
           Write-Output "Bounded omfx version/help surface smoke passed"
 
+      - name: Bounded omfx ConPTY smoke
+        shell: pwsh
+        timeout-minutes: 2
+        env:
+          FX_SKIP_ONBOARDING: "1"
+          FX_DISABLE_KEYCHAIN: "1"
+          FX_AUTO_UPGRADE: "0"
+          FX_NO_OPEN_BROWSER: "1"
+          NO_COLOR: "1"
+        run: |
+          & pwsh -NoProfile -File ./scripts/windows/omfx-conpty-smoke.ps1 `
+            -Executable ./zig-out/bin/omfx.exe `
+            -TimeoutSeconds 15
+          if ($LASTEXITCODE -ne 0) { throw "omfx ConPTY smoke failed" }
+
       - name: Smoke test OpenCode Go with omfx.exe
         shell: pwsh
         timeout-minutes: 10
@@ -211,6 +226,20 @@ jobs:
           if ([string]::IsNullOrWhiteSpace([string]$ask.output)) { throw "OpenCode Go chat smoke returned empty output" }
           if ([string]$ask.model -ne $selectedModel) { throw "OpenCode Go chat used an unexpected model" }
           Write-Output "OpenCode Go catalog and chat smoke passed with model $selectedModel"
+
+      - name: Verify Windows artifact payloads
+        shell: pwsh
+        run: |
+          $fx = Get-Item -LiteralPath "./zig-out/bin/fx.exe"
+          $omfx = Get-Item -LiteralPath "./zig-out/bin/omfx.exe"
+          if ($fx.Length -le 0 -or $omfx.Length -le 0) { throw "Windows artifact is empty" }
+          $fxHash = (Get-FileHash -LiteralPath $fx.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $omfxHash = (Get-FileHash -LiteralPath $omfx.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Output "fx.exe size=$($fx.Length) sha256=$fxHash"
+          Write-Output "omfx.exe size=$($omfx.Length) sha256=$omfxHash"
+          if ($fx.Length -ne $omfx.Length -or $fxHash -ne $omfxHash) {
+            throw "fx.exe and omfx.exe payloads differ"
+          }
 
       - name: Upload fx.exe
         uses: actions/upload-artifact@v4
