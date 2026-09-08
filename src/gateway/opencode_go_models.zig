@@ -76,8 +76,9 @@ fn fetchCatalogForProvider(
 }
 
 /// Parses the OpenAI model list shape `{"data": [{"id": "..."}]}`.
-/// Go's list includes models for several wire protocols; this provider keeps
-/// only entries documented for its Chat Completions transport.
+/// The endpoint is the source of truth: Go advertises models backed by
+/// Chat Completions, Responses, and Anthropic Messages, so listing must not
+/// discard models merely because the transport route is different.
 fn parseCatalog(
     alloc: Allocator,
     json_text: []const u8,
@@ -99,7 +100,6 @@ fn parseCatalog(
             return error.InvalidOpenCodeGoModelCatalog;
         if (id_value != .string) return error.InvalidOpenCodeGoModelCatalog;
         try validateModelId(id_value.string);
-        if (!opencode_go.supportsChatCompletionsModel(id_value.string)) continue;
         const id = try alloc.dupe(u8, id_value.string);
         errdefer alloc.free(id);
         const model_type = try alloc.dupe(u8, "language");
@@ -140,7 +140,7 @@ test "Go catalog parser keeps OpenAI list ids with safe defaults" {
     try std.testing.expectEqual(@as(u32, 0), catalog.items[0].context_window);
 }
 
-test "Go catalog parser filters models without a Chat Completions route" {
+test "Go catalog parser keeps models from every advertised route" {
     const alloc = std.testing.allocator;
     const json =
         \\{"data":[
@@ -153,9 +153,11 @@ test "Go catalog parser filters models without a Chat Completions route" {
     var catalog = try parseCatalog(alloc, json);
     defer model_catalog.freeModelCatalog(alloc, &catalog);
 
-    try std.testing.expectEqual(@as(usize, 2), catalog.items.len);
+    try std.testing.expectEqual(@as(usize, 4), catalog.items.len);
     try std.testing.expectEqualStrings("glm-5.2", catalog.items[0].id);
-    try std.testing.expectEqualStrings("omen-alpha", catalog.items[1].id);
+    try std.testing.expectEqualStrings("minimax-m3", catalog.items[1].id);
+    try std.testing.expectEqualStrings("qwen3.7-max", catalog.items[2].id);
+    try std.testing.expectEqualStrings("omen-alpha", catalog.items[3].id);
 }
 
 test "Go catalog parser keeps every model advertised by the live catalog" {
