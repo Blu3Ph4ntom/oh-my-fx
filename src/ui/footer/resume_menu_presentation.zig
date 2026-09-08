@@ -490,9 +490,9 @@ fn composeCompactFailureTitleRow(
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
     try row_text.appendClipped(alloc, &row, status_prefix.items, width);
-    const title_budget = width -| @intCast(display_width.visibleWidthIgnoringAnsi(row.items));
+    const title_budget: u16 = width -| @intCast(display_width.visibleWidthIgnoringAnsi(row.items));
     try row_text.appendClipped(alloc, &row, title.items, title_budget);
-    const retry_budget = width -| @intCast(display_width.visibleWidthIgnoringAnsi(row.items));
+    const retry_budget: u16 = width -| @intCast(display_width.visibleWidthIgnoringAnsi(row.items));
     try row.appendSlice(alloc, surface_style.statusStyle(input_presentation.surfacePalette(), failure_state, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, retry_text, retry_budget);
     try row.appendSlice(alloc, ui_render.reset_style);
