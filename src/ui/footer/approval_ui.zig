@@ -1566,8 +1566,11 @@ fn composeApprovalAmendmentPanelRow(
     var raw: std.Io.Writer.Allocating = .init(alloc);
     defer raw.deinit();
 
-    try raw.writer.writeAll("  > ");
-    try raw.writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled));
+    const amendment_state: surface_style.SurfaceState = .focus;
+    const amendment_marker = surface_style.marker(amendment_state);
+    try raw.writer.writeAll("  ");
+    try raw.writer.writeAll(amendment_marker);
+    try raw.writer.writeAll(surface_style.rowStyle(input_presentation.surfacePalette(), amendment_state, ui_render.color_enabled));
     const draft = approval.draftForChoice(choice);
     const choice_prefix = approvalChoicePrefix(choice);
     try raw.writer.writeAll(choice_prefix);
@@ -1579,7 +1582,8 @@ fn composeApprovalAmendmentPanelRow(
             draft,
             approval.draftCursorForChoice(choice),
             @as(usize, width) -|
-                (display_width.visibleWidth("  > ") +
+                (display_width.visibleWidth("  ") +
+                    display_width.visibleWidth(amendment_marker) +
                     display_width.visibleWidth(choice_prefix)),
         );
     }
@@ -2635,6 +2639,12 @@ test "approval panel renders typed amendment in the selected choice row" {
         interaction_state.approval_panel_rows_spacious,
     );
     defer row.deinit(std.testing.allocator);
+    try std.testing.expect(std.mem.startsWith(u8, row.items, "  > "));
+    try std.testing.expect(std.mem.find(
+        u8,
+        row.items,
+        surface_style.rowStyle(input_presentation.surfacePalette(), .focus, ui_render.color_enabled),
+    ) != null);
     try std.testing.expect(std.mem.find(u8, row.items, "1. Yes, summarize it") != null);
     try std.testing.expect(display_width.visibleWidthIgnoringAnsi(row.items) <= 120);
 }

@@ -427,7 +427,7 @@ fn questionDescriptionColumn(row_budget: usize) usize {
 
 /// Terminal block rendered after an entire question batch resolves.
 /// All answered → one anchored question row plus its muted answer row per
-/// entry. Cancelled → single `■ Cancelled\n`.
+/// entry. Cancelled → single `! Cancelled\n` danger row.
 pub fn composeQuestionResolutions(
     alloc: Allocator,
     prompt: *const question_prompt.QuestionPrompt,
@@ -490,7 +490,14 @@ fn writeQuestionAnswerResolution(
         break :blk indent_buf[0..width];
     };
     try writeResolutionField(writer, question_prefix, indent, question, cols, null);
-    try writeResolutionField(writer, indent, indent, answer, cols, ui_render.statusline_style);
+    try writeResolutionField(
+        writer,
+        indent,
+        indent,
+        answer,
+        cols,
+        surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
+    );
 }
 
 fn writeResolutionField(
@@ -525,10 +532,11 @@ fn writeResolutionField(
 }
 
 fn writeCancelledResolution(writer: *std.Io.Writer) !void {
-    try writer.writeAll(ui_render.red_style);
-    try writer.writeAll("■");
+    const cancelled_state: surface_style.SurfaceState = .danger;
+    try writer.writeAll(surface_style.statusStyle(input_presentation.surfacePalette(), cancelled_state, ui_render.color_enabled));
+    try writer.writeAll(surface_style.marker(cancelled_state));
     try writer.writeAll(ui_render.reset_style);
-    try writer.writeAll(" Cancelled");
+    try writer.writeAll("Cancelled");
     try writer.writeByte('\n');
 }
 
@@ -741,8 +749,11 @@ test "compose question resolutions emits answered summary block" {
     defer std.testing.allocator.free(cancelled_text);
     const expected_cancelled = try std.fmt.allocPrint(
         std.testing.allocator,
-        "{s}■{s} Cancelled\n",
-        .{ ui_render.red_style, ui_render.reset_style },
+        "{s}! {s}Cancelled\n",
+        .{
+            surface_style.statusStyle(input_presentation.surfacePalette(), .danger, ui_render.color_enabled),
+            ui_render.reset_style,
+        },
     );
     defer std.testing.allocator.free(expected_cancelled);
     try std.testing.expectEqualStrings(expected_cancelled, cancelled_text);
@@ -793,9 +804,9 @@ test "resolved multiline question fields keep every row inside the transcript ra
             "{s}     line-two{s}\n" ++
             "{s}     line-three{s}\n",
         .{
-            ui_render.statusline_style, ui_render.reset_style,
-            ui_render.statusline_style, ui_render.reset_style,
-            ui_render.statusline_style, ui_render.reset_style,
+            surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled), ui_render.reset_style,
+            surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled), ui_render.reset_style,
+            surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled), ui_render.reset_style,
         },
     );
     defer std.testing.allocator.free(expected);

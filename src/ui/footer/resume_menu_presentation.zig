@@ -464,20 +464,37 @@ fn composeCompactFailureTitleRow(
     columns: MetadataColumns,
     width: u16,
 ) !std.ArrayList(u8) {
+    const failure_state: surface_style.SurfaceState = .danger;
     const retry_text = " · retry";
+    var status_prefix: std.ArrayList(u8) = .empty;
+    defer status_prefix.deinit(alloc);
+    try status_prefix.appendSlice(alloc, surface_style.statusStyle(input_presentation.surfacePalette(), failure_state, ui_render.color_enabled));
+    try status_prefix.appendSlice(alloc, surface_style.marker(failure_state));
+    try status_prefix.appendSlice(alloc, surface_style.statusLabel(failure_state));
+    try status_prefix.appendSlice(alloc, ": ");
+    try status_prefix.appendSlice(alloc, ui_render.reset_style);
+
+    const prefix_width: u16 = @intCast(display_width.visibleWidthIgnoringAnsi(status_prefix.items));
     const retry_width: u16 = @intCast(display_width.visibleWidth(retry_text));
-    const suffix_width = @min(width, retry_width);
-    var row = try composeTitleRow(
+    const title_width = width -| @min(width, prefix_width) -| @min(width -| @min(width, prefix_width), retry_width);
+    var title = try composeTitleRow(
         alloc,
         summary,
         selected,
         now_ms,
         columns,
-        width -| suffix_width,
+        title_width,
     );
+    defer title.deinit(alloc);
+
+    var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(alloc);
-    try row.appendSlice(alloc, ui_render.red_style);
-    try row_text.appendClipped(alloc, &row, retry_text, suffix_width);
+    try row_text.appendClipped(alloc, &row, status_prefix.items, width);
+    const title_budget = width -| @intCast(display_width.visibleWidthIgnoringAnsi(row.items));
+    try row_text.appendClipped(alloc, &row, title.items, title_budget);
+    const retry_budget = width -| @intCast(display_width.visibleWidthIgnoringAnsi(row.items));
+    try row.appendSlice(alloc, surface_style.statusStyle(input_presentation.surfacePalette(), failure_state, ui_render.color_enabled));
+    try row_text.appendClipped(alloc, &row, retry_text, retry_budget);
     try row.appendSlice(alloc, ui_render.reset_style);
     return row;
 }
@@ -696,6 +713,43 @@ test "resume menu keeps selected title and retry feedback in compact layouts" {
         );
         defer load_more.deinit(alloc);
         try std.testing.expect(std.mem.find(u8, load_more.items, "Load more") != null);
+    }
+}
+
+test "resume compact retry title composes a danger status in every color mode" {
+    const alloc = std.testing.allocator;
+    const saved_color = ui_render.color_enabled;
+    defer ui_render.color_enabled = saved_color;
+    const summaries = [_]session_store.SessionSummary{.{
+        .id = @constCast("one"),
+        .workspace_root = @constCast("/workspace"),
+        .title = @constCast("Selected session"),
+        .created_at_ms = 1,
+        .updated_at_ms = 1,
+        .conversation_language = .literal("en"),
+        .history_len = 1,
+    }};
+    const projection: SessionMenuProjection = .{
+        .active = true,
+        .load_state = .ready,
+        .summaries = &summaries,
+        .selection_failure = .being_updated,
+    };
+
+    for ([_]bool{ true, false }) |color| {
+        ui_render.color_enabled = color;
+        var row = try composeSessionMenuRow(alloc, projection, 1, 100, 2);
+        defer row.deinit(alloc);
+        try std.testing.expect(std.mem.find(u8, row.items, "! error: ") != null);
+        try std.testing.expect(std.mem.find(u8, row.items, "retry") != null);
+        try std.testing.expect(display_width.visibleWidthIgnoringAnsi(row.items) <= 100);
+        if (color) {
+            try std.testing.expect(std.mem.find(
+                u8,
+                row.items,
+                surface_style.statusStyle(input_presentation.surfacePalette(), .danger, true),
+            ) != null);
+        }
     }
 }
 

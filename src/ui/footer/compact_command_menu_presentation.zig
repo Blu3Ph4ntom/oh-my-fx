@@ -269,7 +269,7 @@ fn composeUsageRow(
             alloc,
             "  By model",
             width,
-            ui_render.system_notice_label_style,
+            surface_style.rowStyle(input_presentation.surfacePalette(), .active, ui_render.color_enabled),
         );
     }
     if (snapshot.models.len == 0) {
@@ -314,7 +314,7 @@ fn composeSessionActivityRow(
             alloc,
             "  Session activity",
             width,
-            ui_render.system_notice_label_style,
+            surface_style.rowStyle(input_presentation.surfacePalette(), .active, ui_render.color_enabled),
         );
     }
     var value_buf: [160]u8 = undefined;
@@ -710,7 +710,7 @@ fn composeLabelValueRow(
     const total_width: usize = width;
     if (total_width == 0) return row;
 
-    try row.appendSlice(alloc, ui_render.system_notice_label_style);
+    try row.appendSlice(alloc, surface_style.rowStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled));
     try row_text.appendClipped(alloc, &row, "  ", width);
     const prefix_used = display_width.visibleWidthIgnoringAnsi(row.items);
     const target = @min(@max(value_column, prefix_used + 2), total_width);
@@ -923,6 +923,16 @@ test "usage menu renders token-first totals and selectable model rows" {
     defer spend.deinit(std.testing.allocator);
     try std.testing.expect(std.mem.find(u8, spend.items, "Spend") != null);
     try std.testing.expect(std.mem.find(u8, spend.items, "$0.0123") != null);
+    try std.testing.expect(std.mem.find(
+        u8,
+        total.items,
+        surface_style.rowStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
+    ) != null);
+    try std.testing.expect(std.mem.find(
+        u8,
+        total.items,
+        surface_style.hintStyle(input_presentation.surfacePalette(), .normal, ui_render.color_enabled),
+    ) != null);
 }
 
 test "usage menu renders expanded details for the last visible session model" {
