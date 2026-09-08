@@ -158,6 +158,26 @@ test "Go catalog parser filters models without a Chat Completions route" {
     try std.testing.expectEqualStrings("omen-alpha", catalog.items[1].id);
 }
 
+test "Go catalog parser keeps every model advertised by the live catalog" {
+    const alloc = std.testing.allocator;
+    const json =
+        \\{"data":[
+        \\  {"id":"minimax-m3"},
+        \\  {"id":"qwen3.8-max"},
+        \\  {"id":"gpt-5.6-luna"},
+        \\  {"id":"glm-5.3"}
+        \\]}
+    ;
+    var catalog = try parseCatalog(alloc, json);
+    defer model_catalog.freeModelCatalog(alloc, &catalog);
+
+    try std.testing.expectEqual(@as(usize, 4), catalog.items.len);
+    try std.testing.expectEqualStrings("minimax-m3", catalog.items[0].id);
+    try std.testing.expectEqualStrings("qwen3.8-max", catalog.items[1].id);
+    try std.testing.expectEqualStrings("gpt-5.6-luna", catalog.items[2].id);
+    try std.testing.expectEqualStrings("glm-5.3", catalog.items[3].id);
+}
+
 test "Go catalog parser rejects malformed lists" {
     const alloc = std.testing.allocator;
     try std.testing.expectError(
