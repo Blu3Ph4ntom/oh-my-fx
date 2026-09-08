@@ -69,7 +69,7 @@ jobs:
             [void]$process.Start()
             $stdoutTask = $process.StandardOutput.ReadToEndAsync()
             $stderrTask = $process.StandardError.ReadToEndAsync()
-            if (-not $process.WaitForExit(30_000)) {
+            if (-not $process.WaitForExit(30 * 1000)) {
               try { $process.Kill($true) } catch { $process.Kill() }
               $process.WaitForExit()
               $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
