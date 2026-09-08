@@ -29,6 +29,7 @@ public static class OmfxConPty
     private const uint ExtendedStartupInfoPresent = 0x00080000;
     private const uint HandleFlagInherit = 0x00000001;
     private const uint PseudoConsoleAttribute = 0x00020016;
+    private const int StartfUseStdHandles = 0x00000100;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Coord
@@ -158,7 +159,6 @@ public static class OmfxConPty
         IntPtr outputWrite = IntPtr.Zero;
         IntPtr pseudoConsole = IntPtr.Zero;
         IntPtr attributeList = IntPtr.Zero;
-        IntPtr pseudoConsoleValue = IntPtr.Zero;
         ProcessInformation processInformation = new ProcessInformation();
         StringBuilder output = new StringBuilder();
         AutoResetEvent outputChanged = new AutoResetEvent(false);
@@ -189,19 +189,18 @@ public static class OmfxConPty
             InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attributeSize);
             attributeList = Marshal.AllocHGlobal(attributeSize);
             Ensure(InitializeProcThreadAttributeList(attributeList, 1, 0, ref attributeSize), "InitializeProcThreadAttributeList");
-            pseudoConsoleValue = Marshal.AllocHGlobal(IntPtr.Size);
-            Marshal.WriteIntPtr(pseudoConsoleValue, pseudoConsole);
             Ensure(UpdateProcThreadAttribute(
                 attributeList,
                 0,
                 new IntPtr(PseudoConsoleAttribute),
-                pseudoConsoleValue,
+                pseudoConsole,
                 new IntPtr(IntPtr.Size),
                 IntPtr.Zero,
                 IntPtr.Zero), "UpdateProcThreadAttribute");
 
             StartupInfoEx startupInfo = new StartupInfoEx();
             startupInfo.StartupInfo.Cb = Marshal.SizeOf<StartupInfoEx>();
+            startupInfo.StartupInfo.Flags = StartfUseStdHandles;
             startupInfo.AttributeList = attributeList;
             string quotedExecutable = "\"" + executable.Replace("\"", "\\\"") + "\"";
             Ensure(CreateProcess(
@@ -209,7 +208,7 @@ public static class OmfxConPty
                 new StringBuilder(quotedExecutable),
                 IntPtr.Zero,
                 IntPtr.Zero,
-                true,
+                false,
                 ExtendedStartupInfoPresent | CreateUnicodeEnvironment,
                 IntPtr.Zero,
                 workingDirectory,
@@ -229,8 +228,10 @@ public static class OmfxConPty
                 inputWrite = IntPtr.Zero;
                 outputRead = IntPtr.Zero;
                 reader = Task.Run(() => ReadOutput(terminalOutput, output, outputChanged));
+                WaitForMarker(output, outputChanged, "\u001b[?100", timeoutSeconds, processInformation.Process);
+                Thread.Sleep(500);
                 Send(input, "/help\r");
-                WaitForMarker(output, outputChanged, "Commands", timeoutSeconds);
+                WaitForMarker(output, outputChanged, "Commands", timeoutSeconds, processInformation.Process);
                 int helpOutputLength;
                 lock (output) helpOutputLength = output.Length;
                 Send(input, "\u001b");
@@ -242,7 +243,8 @@ public static class OmfxConPty
                     WaitForProcess(processInformation.Process, 5);
                     throw new TimeoutException("omfx ConPTY interaction timed out after " + timeoutSeconds + " seconds");
                 }
-                reader.Wait(5000);
+                terminalOutput.Dispose();
+                WaitForReader(reader);
             }
 
             return new OmfxConPtyResult
@@ -253,7 +255,6 @@ public static class OmfxConPty
         }
         finally
         {
-            if (reader != null) reader.Wait(5000);
             if (processInformation.Process != IntPtr.Zero)
             {
                 if (WaitForSingleObject(processInformation.Process, 0) == 0x00000102)
@@ -268,27 +269,50 @@ public static class OmfxConPty
             if (inputWrite != IntPtr.Zero) CloseHandle(inputWrite);
             if (outputRead != IntPtr.Zero) CloseHandle(outputRead);
             if (outputWrite != IntPtr.Zero) CloseHandle(outputWrite);
-            if (pseudoConsoleValue != IntPtr.Zero) Marshal.FreeHGlobal(pseudoConsoleValue);
             if (attributeList != IntPtr.Zero)
             {
                 DeleteProcThreadAttributeList(attributeList);
                 Marshal.FreeHGlobal(attributeList);
             }
             if (pseudoConsole != IntPtr.Zero) ClosePseudoConsole(pseudoConsole);
+            if (reader != null) WaitForReader(reader);
             outputChanged.Dispose();
         }
     }
 
     private static void ReadOutput(FileStream stream, StringBuilder output, AutoResetEvent changed)
     {
-        byte[] buffer = new byte[8192];
-        int count;
-        while ((count = stream.Read(buffer, 0, buffer.Length)) > 0)
+        try
         {
-            lock (output) output.Append(Encoding.UTF8.GetString(buffer, 0, count));
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                lock (output) output.Append(Encoding.UTF8.GetString(buffer, 0, count));
+                changed.Set();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        finally
+        {
             changed.Set();
         }
-        changed.Set();
+    }
+
+    private static void WaitForReader(Task reader)
+    {
+        try
+        {
+            reader.Wait(5000);
+        }
+        catch (AggregateException)
+        {
+        }
     }
 
     private static void Send(FileStream input, string value)
@@ -298,9 +322,14 @@ public static class OmfxConPty
         input.Flush();
     }
 
-    private static void WaitForMarker(StringBuilder output, AutoResetEvent changed, string marker, int timeoutSeconds)
+    private static void WaitForMarker(
+        StringBuilder output,
+        AutoResetEvent changed,
+        string marker,
+        int timeoutSeconds,
+        IntPtr process)
     {
-        WaitForMarkerAfter(output, changed, marker, 0, timeoutSeconds);
+        WaitForMarkerAfter(output, changed, marker, 0, timeoutSeconds, process);
     }
 
     private static void WaitForMarkerAfter(
@@ -308,7 +337,8 @@ public static class OmfxConPty
         AutoResetEvent changed,
         string marker,
         int start,
-        int timeoutSeconds)
+        int timeoutSeconds,
+        IntPtr process = default)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (stopwatch.Elapsed < TimeSpan.FromSeconds(timeoutSeconds))
@@ -319,7 +349,20 @@ public static class OmfxConPty
             }
             changed.WaitOne(100);
         }
-        throw new TimeoutException("omfx ConPTY output did not contain " + marker);
+        string processState = process == IntPtr.Zero
+            ? "unknown"
+            : WaitForSingleObject(process, 0) == 0x00000102 ? "running" : "exited=" + GetExitCode(process);
+        throw new TimeoutException(
+            "omfx ConPTY output did not contain " + marker + "; process=" + processState + "; output tail=" + Tail(output, 4096));
+    }
+
+    private static string Tail(StringBuilder output, int maxChars)
+    {
+        lock (output)
+        {
+            int start = Math.Max(0, output.Length - maxChars);
+            return output.ToString(start, output.Length - start).Replace("\r", "\\r").Replace("\n", "\\n");
+        }
     }
 
     private static bool WaitForProcess(IntPtr process, int timeoutSeconds)
@@ -353,7 +396,9 @@ public static class OmfxConPty
 $exe = (Resolve-Path -LiteralPath $Executable).Path
 $result = [OmfxConPty]::Run($exe, (Get-Location).Path, $TimeoutSeconds)
 if ($result.ExitCode -ne 0) {
-  throw "omfx ConPTY smoke exited with code $($result.ExitCode)"
+  $tailStart = [Math]::Max(0, $result.Output.Length - 4096)
+  $tail = $result.Output.Substring($tailStart).Replace("`r", '\\r').Replace("`n", '\\n')
+  throw "omfx ConPTY smoke exited with code $($result.ExitCode); output tail=$tail"
 }
 if ($result.Output -notmatch "omfx" -or $result.Output -notmatch "Commands") {
   throw "omfx ConPTY smoke did not render the expected product/help surface"
