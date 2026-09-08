@@ -1,11 +1,13 @@
 const std = @import("std");
 
 pub const Id = enum {
+    opencode_go,
     vercel,
     codex,
 
     pub fn slug(self: Id) []const u8 {
         return switch (self) {
+            .opencode_go => "opencode_go",
             .vercel => "vercel",
             .codex => "codex",
         };
@@ -21,6 +23,12 @@ pub const Entry = struct {
 
 pub const entries = [_]Entry{
     .{
+        .id = .opencode_go,
+        .name = "OpenCode Go",
+        .description = "API key via OPENCODE_GO_API_KEY",
+        .subscription = true,
+    },
+    .{
         .id = .vercel,
         .name = "Vercel AI Gateway",
         .description = "Vercel account or AI Gateway billing",
@@ -35,6 +43,8 @@ pub const entries = [_]Entry{
 };
 
 pub fn parse(value: []const u8) ?Id {
+    if (std.ascii.eqlIgnoreCase(value, "opencode_go") or
+        std.ascii.eqlIgnoreCase(value, "opencode-go")) return .opencode_go;
     if (std.ascii.eqlIgnoreCase(value, "vercel") or
         std.ascii.eqlIgnoreCase(value, "ai-gateway")) return .vercel;
     if (std.ascii.eqlIgnoreCase(value, "codex")) return .codex;

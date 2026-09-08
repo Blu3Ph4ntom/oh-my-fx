@@ -89,8 +89,8 @@ pub const top_level_specs = [_]TopLevelSpec{
     .{
         .kind = .login,
         .token = "login",
-        .usage = "login [vercel|codex]",
-        .summary = "Sign in to Vercel or a selected provider",
+        .usage = "login [opencode_go|vercel|codex]",
+        .summary = "Sign in to OpenCode Go, Vercel, or Codex",
     },
     .{
         .kind = .logout,
@@ -292,7 +292,7 @@ pub const top_level_help_groups = [_]TopLevelHelpGroup{
         .{ .kind = .replay, .usage = "replay <tape>" },
     } },
     .{ .entries = &.{
-        .{ .kind = .login, .usage = "login [vercel|codex]" },
+        .{ .kind = .login, .usage = "login [opencode_go|vercel|codex]" },
         .{ .kind = .logout, .usage = "logout [vercel|codex]" },
         .{ .kind = .provider, .usage = "provider <gateway|codex|opencode_go>" },
         .{ .kind = .setup, .usage = "setup" },
@@ -419,7 +419,7 @@ pub const slash_specs = [_]SlashSpec{
     .{ .kind = .resume_session, .command = "/resume", .help_entry = "/resume", .completion_description = "resume a saved session", .presentation_category = .session },
     .{ .kind = .continue_recovery, .command = "/continue", .help_entry = "/continue", .completion_description = "continue a paused model response", .presentation_category = .session, .requires_prompt_credential = true },
     .{ .kind = .rename_session, .command = "/rename", .help_entry = "/rename <title>", .completion_description = "rename the current session", .presentation_category = .session, .has_args = true, .accepts_payload = true },
-    .{ .kind = .login, .command = "/login", .help_entry = "/login", .completion_description = "choose Vercel or Codex sign-in", .presentation_category = .account },
+    .{ .kind = .login, .command = "/login", .help_entry = "/login", .completion_description = "choose OpenCode Go, Vercel, or Codex sign-in", .presentation_category = .account },
     .{ .kind = .logout, .command = "/logout", .help_entry = "/logout [vercel|codex]", .completion_description = "sign out of a provider session", .presentation_category = .account, .has_args = true, .accepts_payload = true },
     .{ .kind = .setup, .command = "/setup", .help_entry = "/setup", .completion_description = "manage accounts and AI Gateway access", .presentation_category = .account },
     .{ .kind = .stats, .command = "/stats", .help_entry = "/stats", .completion_description = "show token and turn statistics", .presentation_category = .account },

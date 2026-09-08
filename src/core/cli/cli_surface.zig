@@ -762,12 +762,18 @@ fn runNonInteractiveWithDeps(
         .issue => |rest| return runGithubWorkflow(alloc, rest, cfg, global_args.modifiers, deps, .issue),
         .login => |rest| {
             const maybe_login_provider = parseLoginProvider(rest) catch {
-                try writeStderr(deps, "usage: omfx login [vercel|codex]\n");
+                try writeStderr(deps, "usage: omfx login [opencode_go|vercel|codex]\n");
                 return .handled_failure;
             };
             // Preserve the original `fx login` behavior for scripts and users.
             const login_provider = maybe_login_provider orelse .vercel;
             switch (login_provider) {
+                .opencode_go => {
+                    if (io_mod.getenvProduct("OPENCODE_GO_API_KEY", "OPENCODE_GO_API_KEY") == null) {
+                        try writeStderr(deps, "omfx login: set OPENCODE_GO_API_KEY first\n");
+                        return .handled_failure;
+                    }
+                },
                 .vercel => login_flow.runLogin(
                     alloc,
                     cfg.gateway_provider.oauth_transport,
@@ -795,6 +801,14 @@ fn runNonInteractiveWithDeps(
                     try writeStderr(deps, message);
                     return .handled_failure;
                 },
+            }
+            if (login_provider == .opencode_go) {
+                return try runIfRequestedWithDeps(
+                    alloc,
+                    &.{ @constCast("provider"), @constCast("opencode_go") },
+                    cfg,
+                    deps,
+                );
             }
             if (login_provider == .codex) {
                 // A successful OAuth exchange must also select Codex. Otherwise

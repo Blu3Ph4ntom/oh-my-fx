@@ -262,6 +262,7 @@ pub fn Runtime(comptime App: type) type {
                 .provider => |provider| try switchProvider(app, provider, true),
                 .source => |source| try applySourceChoice(app, source),
                 .action => |action| switch (action) {
+                    .opencode_go_login => try switchProvider(app, .opencode_go, false),
                     .login => try beginSignIn(app, true),
                     .chatgpt_login => try beginChatGptSignIn(app),
                     .setup => {
