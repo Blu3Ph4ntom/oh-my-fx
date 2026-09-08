@@ -92,8 +92,8 @@ jobs:
 
           $version = Invoke-BoundedOmfx "omfx version" @("--version")
           $help = Invoke-BoundedOmfx "omfx help" @("help")
-          if ([string]::IsNullOrWhiteSpace($version) -or $version -notmatch "omfx v") {
-            throw "omfx version output did not identify the omfx product"
+          if ([string]::IsNullOrWhiteSpace($version) -or $version -notmatch "^\d+\.\d+\.\d+") {
+            throw "omfx version output was not a semantic version"
           }
           if ([string]::IsNullOrWhiteSpace($help) -or $help -notmatch "Usage:" -or $help -notmatch "omfx") {
             throw "omfx help output was incomplete"
