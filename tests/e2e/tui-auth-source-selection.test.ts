@@ -1851,7 +1851,7 @@ tmuxTest(
         pane.includes("Image 1"),
       TIMEOUT,
     );
-    expect(blocked).not.toContain("Welcome to fx");
+    expect(blocked).not.toContain("Welcome to omfx");
     expect(blocked).not.toContain("Switch credential");
     expect(gateway.requests).toHaveLength(0);
     expect(session.isAlive()).toBe(true);
@@ -2086,7 +2086,7 @@ tmuxTest(
     const picker = await session.waitForPane(
       (pane) =>
         pane.includes(prompt) &&
-        pane.includes("Welcome to fx") &&
+        pane.includes("Welcome to omfx") &&
         pane.includes("Sign in with Vercel") &&
         pane.includes("Add an API key") &&
         pane.includes("Esc to set up later"),

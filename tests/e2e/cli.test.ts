@@ -251,7 +251,7 @@ describe("cli: help", () => {
       expect(r.stdout).not.toContain("\x1b[");
       expect(r.stdout).not.toContain("\x1b]2;");
       expect(r.stdout).toStartWith(
-        `𝒇x v${sourceVersion()}\nFast, native coding agent for the terminal.\n`,
+        `omfx v${sourceVersion()}\nFast, native coding agent for the terminal.\n`,
       );
       expect(r.stdout).toContain("Commands:\n");
       expect(r.stdout).toContain("Run one noninteractive request");
@@ -271,7 +271,7 @@ describe("cli: help", () => {
       expect(r.stdout).not.toContain("Must appear before the command");
       expect(r.stdout).toContain("Examples:\n");
       expect(r.stdout).toContain("https://fx.sh/docs");
-      expect(r.stdout).toContain("run `/feedback` inside 𝒇x");
+      expect(r.stdout).toContain("run `/feedback` inside omfx");
       expect(r.stdout).not.toContain("  Work      ");
       expect(r.stdout).not.toContain("\n\n\nRun `fx <command> --help`");
     },
