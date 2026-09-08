@@ -66,6 +66,32 @@ pub const shortcutFromEscapeAction = shortcuts.fromEscapeAction;
 pub const surfaceCommand = interaction_contract.route;
 pub const surfaceHint = interaction_contract.hint;
 
+/// Resolve protocol byte aliases without feeding a second physical byte into
+/// the decoder. Preserve the same typed domain payloads as ordinary input.
+pub fn normalizeEvent(event: input_action.TerminalInputEvent, freeform_selected: bool) input_action.TerminalInputEvent {
+    if (event != .action or event.action.action != .remapped_byte) return event;
+    const byte = event.action.action.remapped_byte;
+    const normalized: input_action.TerminalInputEvent = if (escape_parser.controlByteFeatureAction(byte)) |action|
+        .{ .action = .{ .action = action, .composer_shortcut = shortcuts.fromEscapeAction(action) } }
+    else
+        .{ .raw = .{
+            .byte = byte,
+            .composer_shortcut = shortcuts.fromControlByte(byte),
+        } };
+    return withSubagentInput(withQuestionInput(withApprovalInput(.{ .event = normalized }), freeform_selected)).event.?;
+}
+
+test "protocol aliases normalize once with decision and global payloads" {
+    const enter = normalizeEvent(.{ .action = .{ .action = .{ .remapped_byte = '\r' } } }, false);
+    try std.testing.expectEqual(@as(u8, '\r'), enter.raw.byte);
+    try std.testing.expectEqual(approval_decision.Action.submit, enter.raw.approval_action.?);
+    try std.testing.expectEqual(question_prompt.Action.submit, enter.raw.question_action.?);
+    const cancel = normalizeEvent(.{ .action = .{ .action = .{ .remapped_byte = 3 } } }, false);
+    try std.testing.expectEqual(question_prompt.Action.cancel, cancel.raw.question_action.?);
+    const toggle = normalizeEvent(.{ .action = .{ .action = .{ .remapped_byte = 15 } } }, false);
+    try std.testing.expectEqual(input_action.Action.toggle_full_transcript, toggle.action.action);
+}
+
 pub fn approvalActionFromByte(byte: u8) ?approval_decision.Action {
     return switch (byte) {
         3 => .deny,
@@ -886,7 +912,6 @@ pub const Runtime = struct {
         byte: u8,
         context: input_action.TerminalDecodeContext,
     ) input_action.TerminalInputIngress {
-        if (context.paste_active) return terminal_action_decoder.pasteByteIngress(byte);
         return withSubagentInput(withQuestionInput(
             withApprovalInput(self.terminal_action_decoder.feed(byte, context)),
             context.question_freeform_selected,

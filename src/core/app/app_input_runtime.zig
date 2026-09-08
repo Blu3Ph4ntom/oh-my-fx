@@ -48,6 +48,7 @@ const test_ui_input = @import("../../ui/input/runtime.zig");
 const visual_layout = @import("../../ui/input/visual_layout.zig");
 const approval_ui = @import("../../ui/footer/approval_ui.zig");
 const interaction_state = @import("../../ui/footer/interaction_state.zig");
+const interaction_contract = @import("../../ui/input/interaction_contract.zig");
 const approval_prompt = @import("../permissions/approval_prompt.zig");
 const picker_presentation = @import("../../ui/footer/picker_presentation.zig");
 const paste_blocks = @import("../input/pasted_blocks.zig");
@@ -609,7 +610,8 @@ pub fn Runtime(comptime App: type) type {
             }
 
             var replay_byte = ingress.replay_byte_after_routing;
-            if (ingress.event) |event| {
+            if (ingress.event) |decoded_event| {
+                const event = test_ui_input.normalizeEvent(decoded_event, app.question_prompt.isFreeformSelected());
                 switch (event) {
                     .paste_byte => |byte| {
                         const routed = try routeActivePasteByte(app, byte);
@@ -726,6 +728,7 @@ pub fn Runtime(comptime App: type) type {
             app: *App,
             input_limits: paste_framing.InputLimits,
         ) !void {
+            app.terminal_input_runtime.terminal_action_decoder.endDeliveryEpoch();
             const paste_was_active = terminalPasteActive(app);
             if (!paste_was_active) return;
             defer if (!terminalPasteActive(app)) {
@@ -849,13 +852,49 @@ pub fn Runtime(comptime App: type) type {
             return false;
         }
 
+        // Physical takeover is admitted before Fx decoding. Inside Fx, resolve
+        // the visible owner before applying any composer/global fallback.
+        fn activeInputSurface(app: *App) interaction_contract.Surface {
+            if (comptime @hasField(App, "terminal")) {
+                if (app.terminal.terminalSessionScreenActive()) return .terminal_takeover;
+                if (app.terminal.fullTranscriptScreenActive()) return .full_transcript;
+            }
+            if (app.question_prompt.isActive()) return .question;
+            if (approvalOwnsCurrentSurface(app)) return .approval;
+            if (app.subagents.isViewActive()) return .subagent_manager;
+            if (comptime @hasField(App, "auth")) {
+                if (app.auth.pickerView().active) return .auth;
+            }
+            if (appearanceMenuActive(app)) return .appearance;
+            if (settingsMenuActive(app)) return .settings;
+            if (modelMenuActive(app)) return .model_picker;
+            if (sessionMenuActive(app)) return .@"resume";
+            if (skillsMenuActive(app)) return .skills;
+            if (helpMenuActive(app) or activeCompactCommandMenu(app) != null) return .command_picker;
+            // Inline completions remain part of composer editing: LF must keep
+            // its newline meaning even while a completion is visible.
+            return .composer;
+        }
+
         fn handleRawTerminalInputWithLimits(
             app: *App,
             raw: input_action.RawTerminalInput,
             input_limits: paste_framing.InputLimits,
             max_prompt_history: usize,
         ) !void {
-            const byte = raw.byte;
+            var owned_raw = raw;
+            const surface = activeInputSurface(app);
+            if (interaction_contract.route(surface, .{ .raw = raw })) |command| {
+                switch (command) {
+                    .submit => {
+                        owned_raw.byte = '\r';
+                        owned_raw.composer_shortcut = null;
+                    },
+                    .ignore => if (surface == .full_transcript) return,
+                    else => {},
+                }
+            }
+            const byte = owned_raw.byte;
             const max_input_len = input_limits.composer_bytes;
             // Fire the max-level cue only when the slash menu becomes visible.
             const slash_menu_was_visible = slashMenuVisibleForCue(app);
@@ -877,12 +916,31 @@ pub fn Runtime(comptime App: type) type {
                 return;
             }
 
+            if (try full_transcript_rt.routeByte(app, byte)) return;
+            if (surface == .question or surface == .approval or surface == .subagent_manager) {
+                if (try routeActiveModalInput(app, owned_raw, input_limits.decision_bytes)) return;
+            }
             if (comptime runtime_profile.allows(App, .native_auth)) {
                 if (try app_auth_runtime.Runtime(App).routeAuthPickerByte(app, byte)) return;
             }
-            if (try full_transcript_rt.routeByte(app, byte)) return;
+            if (surface == .auth) {
+                if (byte == '\r') {
+                    _ = try submitAuthPickerSelection(app);
+                    return;
+                }
+                if (byte == 3) {
+                    _ = popOrCloseAuthPicker(app);
+                    app.shell.render_requests.request(.footer);
+                    return;
+                }
+                if (byte == '\t') {
+                    _ = app.auth.movePicker(1);
+                    app.shell.render_requests.request(.footer);
+                    return;
+                }
+            }
 
-            if (try routeActiveModalInput(app, raw, input_limits.decision_bytes)) return;
+            if (try routeActiveModalInput(app, owned_raw, input_limits.decision_bytes)) return;
             if (byte >= 0x80) {
                 try handleTextByte(app, .composer, byte, max_input_len);
                 return;
@@ -907,7 +965,7 @@ pub fn Runtime(comptime App: type) type {
             try handleComposerByte(
                 app,
                 byte,
-                raw.composer_shortcut,
+                owned_raw.composer_shortcut,
                 max_input_len,
                 max_prompt_history,
             );
@@ -936,11 +994,16 @@ pub fn Runtime(comptime App: type) type {
                 return .done;
             }
 
-            if (app_auth_runtime.Runtime(App).routeAuthPickerEscapeAction(app, resolved)) {
+            const surface = activeInputSurface(app);
+            const command = interaction_contract.route(surface, .{ .action = .{
+                .action = resolved,
+                .composer_shortcut = composer_shortcut,
+            } });
+            if (try full_transcript_rt.routeAction(app, resolved)) return .done;
+
+            if (surface == .auth and app_auth_runtime.Runtime(App).routeAuthPickerEscapeAction(app, resolved)) {
                 return .done;
             }
-
-            if (try full_transcript_rt.routeAction(app, resolved)) return .done;
 
             if (resolved == .paste_start) {
                 if (comptime @hasDecl(@TypeOf(app.subagents), "beginManagerPaste")) {
@@ -979,8 +1042,19 @@ pub fn Runtime(comptime App: type) type {
                 else => {},
             }
 
-            if (pickerMoveDeltaForAction(resolved)) |delta| {
-                if (composerPickerSurfaceVisible(app) and
+            const picker_delta: ?i32 = if (command) |common| switch (common) {
+                .move_previous => -1,
+                .move_next => 1,
+                else => pickerMoveDeltaForAction(resolved),
+            } else pickerMoveDeltaForAction(resolved);
+            if (picker_delta) |delta| {
+                if (surface == .auth) {
+                    _ = app.auth.movePicker(delta);
+                    app.shell.render_requests.request(.footer);
+                    return .done;
+                }
+                if (surface != .question and surface != .approval and surface != .subagent_manager and
+                    composerPickerSurfaceVisible(app) and
                     !app.auth.signInEntryActive() and
                     !app.auth.apiKeyEntryActive() and
                     routeVisiblePickerMove(app, delta))
@@ -2458,6 +2532,11 @@ pub fn Runtime(comptime App: type) type {
 
         fn resolveEscape(app: *App, was_cancel_pending: bool, now: i64) !void {
             if (try full_transcript_rt.routeAction(app, .escape)) return;
+            if (activeInputSurface(app) == .auth and popOrCloseAuthPicker(app)) {
+                _ = disarmEscapeClear(app);
+                app.shell.render_requests.request(.footer);
+                return;
+            }
             if (comptime runtime_profile.allows(App, .subagents)) {
                 if (app.subagents.isViewActive()) {
                     _ = disarmEscapeClear(app);
@@ -3932,6 +4011,112 @@ test "app_input_runtime provider picker Escape closes without mutating the draft
     try std.testing.expect(!app.auth.pickerView().active);
     try std.testing.expectEqualStrings("keep this draft", app.input_runtime.edit_state.input.items);
     try std.testing.expect(!app.input_runtime.gestures.escapeClearArmed());
+    try std.testing.expect(app.shell.render_requests.hasReason(.footer));
+}
+
+test "app_input_runtime provider Enter forms close once without composer fallthrough" {
+    for ([_][]const u8{ "\r", "\n", "\r\n", "\x1b[13u" }) |bytes| {
+        var app = try RoutingFakeApp.init(std.testing.allocator);
+        defer app.deinit();
+        try app.input_runtime.textReplacementState().replace(app.alloc, "retained draft");
+        app.auth.openProviderPicker(app.alloc, .gateway);
+        try feedRoutingBytes(&app, bytes);
+        try std.testing.expect(!app.auth.pickerView().active);
+        try std.testing.expectEqualStrings("retained draft", app.input_runtime.edit_state.input.items);
+        try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+    }
+}
+
+test "app_input_runtime full transcript owns Enter before underlying auth" {
+    var app = try RoutingFakeApp.init(std.testing.allocator);
+    defer app.deinit();
+    app.auth.openProviderPicker(app.alloc, .gateway);
+    activateFullTranscriptForRoutingTest(&app);
+    try feedRoutingBytes(&app, "\x1b[B\x1b[13u");
+    try std.testing.expect(app.auth.pickerView().active);
+    try std.testing.expect((auth_runtime.Choice{ .provider = .gateway }).eql(app.auth.pickerView().selected_choice.?));
+    try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+}
+
+test "app_input_runtime auth Escape restores an underlying menu before composer" {
+    var app = try RoutingFakeApp.init(std.testing.allocator);
+    defer app.deinit();
+    app.input_runtime.help_menu.open();
+    app.auth.openProviderPicker(app.alloc, .gateway);
+    try feedRoutingBytes(&app, "\x1b[B\x1b[27u");
+    try std.testing.expect(!app.auth.pickerView().active);
+    try std.testing.expect(app.input_runtime.help_menu.active);
+    try std.testing.expect(!app.input_runtime.gestures.escapeClearArmed());
+    try feedRoutingBytes(&app, "\x1b[27u");
+    try std.testing.expect(!app.input_runtime.help_menu.active);
+    try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+}
+
+test "app_input_runtime question Enter owns input before auth and preserves composer" {
+    for ([_][]const u8{ "\r\n", "\x1b[13u" }) |bytes| {
+        var app = try RoutingFakeApp.init(std.testing.allocator);
+        defer app.deinit();
+        try app.input_runtime.textReplacementState().replace(app.alloc, "draft");
+        app.auth.openProviderPicker(app.alloc, .gateway);
+        const options = [_]types.QuestionOption{
+            .{ .label = "First", .description = null },
+            .{ .label = "Second", .description = null },
+        };
+        const entries = [_]types.QuestionBatchEntry{.{ .question = "Choose", .options = &options }};
+        try app.question_prompt.syncFrom(app.alloc, &entries);
+        try feedRoutingBytes(&app, bytes);
+        try std.testing.expect(!app.question_prompt.isActive());
+        try std.testing.expect(app.auth.pickerView().active);
+        try std.testing.expectEqual(@as(usize, 1), app.worker.submitted_question_count);
+        try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+        try std.testing.expectEqualStrings("draft", app.input_runtime.edit_state.input.items);
+    }
+}
+
+test "app_input_runtime standalone LF after submit epoch remains a composer newline" {
+    var app = try RoutingFakeApp.init(std.testing.allocator);
+    defer app.deinit();
+    app.auth.openProviderPicker(app.alloc, .gateway);
+    try feedRoutingBytes(&app, "\r");
+    try feedRoutingBytes(&app, "\n");
+    try std.testing.expectEqualStrings("\n", app.input_runtime.edit_state.input.items);
+    try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+}
+
+test "app_input_runtime approval Enter precedes auth without submitting composer" {
+    var app = try RoutingFakeApp.init(std.testing.allocator);
+    defer app.deinit();
+    try installReadyRoutingFileApproval(&app);
+    app.auth.openProviderPicker(app.alloc, .gateway);
+    try app.input_runtime.textReplacementState().replace(app.alloc, "draft");
+    try feedRoutingBytes(&app, "\x1b[13u");
+    try std.testing.expect(app.worker.submitted_permission != null);
+    try std.testing.expect(!app.approval_prompt.isActive());
+    try std.testing.expect(app.auth.pickerView().active);
+    try std.testing.expectEqualStrings("draft", app.input_runtime.edit_state.input.items);
+    try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
+}
+
+test "app_input_runtime resize then input preserves draft cursor and new footer geometry" {
+    var app = try RoutingFakeApp.init(std.testing.allocator);
+    defer app.deinit();
+    try app.input_runtime.textReplacementState().replace(app.alloc, "draft");
+    app.input_runtime.edit_state.cursor = 2;
+    var layout = app.shell.layout;
+    layout.cols = 40;
+    layout.rows = 20;
+    layout.hint_row = 20;
+    layout.divider_bottom_row = 19;
+    layout.input_row = 18;
+    layout.divider_top_row = 17;
+    layout.content_bottom = 16;
+    try shell_runtime.applyResizeWithLayout(&app.shell, &app.metrics, layout, true);
+    try std.testing.expectEqual(@as(usize, 2), app.input_runtime.edit_state.cursor);
+    try feedRoutingBytes(&app, "X");
+    try std.testing.expectEqualStrings("drXaft", app.input_runtime.edit_state.input.items);
+    try std.testing.expectEqual(@as(usize, 3), app.input_runtime.edit_state.cursor);
+    try std.testing.expectEqual(@as(u16, 40), app.shell.layout.cols);
+    try std.testing.expectEqual(@as(u16, 20), app.shell.layout.hint_row);
     try std.testing.expect(app.shell.render_requests.hasReason(.footer));
 }
 

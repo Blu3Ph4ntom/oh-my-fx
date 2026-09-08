@@ -587,6 +587,23 @@ test "frame admission block defers attempts without dropping pending work" {
     attempt.restore();
 }
 
+test "surface close and activity invalidations coalesce behind resize geometry" {
+    var state = RenderRequestState{};
+    state.request(.modal);
+    state.observeResizeSignal(100, 80);
+    state.request(.transcript);
+    state.request(.footer);
+    state.request(.footer);
+    try std.testing.expect((try state.beginAttempt()) == null);
+    state.completeResizeGeometry(false);
+    var attempt = (try state.beginAttempt()).?;
+    defer attempt.deinit();
+    try std.testing.expectEqual(@as(usize, 4), attempt.snapshot.reasons.count());
+    attempt.commit(180, animation_interval_ms, false);
+    try std.testing.expect(!state.hasPending());
+    try std.testing.expect((try state.beginAttempt()) == null);
+}
+
 test "submitted prompt transition coalesces pending work until presentation" {
     var state = RenderRequestState{};
     state.request(.transcript);

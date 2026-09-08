@@ -62,6 +62,9 @@ pub fn hint(surface: Surface, narrow: bool) []const u8 {
 }
 
 fn routeRaw(surface: Surface, raw: input_action.RawTerminalInput) ?Command {
+    // LF is a newline only in the composer. Decide ownership before considering
+    // its composer fallback, or a menu receives an editor shortcut for Enter.
+    if (raw.byte == '\n' and surface != .composer) return submitFor(surface);
     if (raw.composer_shortcut) |shortcut| {
         if (surfaceAcceptsEdit(surface)) return .{ .edit = shortcut };
         return .ignore;
@@ -263,4 +266,43 @@ test "interaction contract keeps hint rows compact" {
     try std.testing.expectEqualStrings("Enter Confirm    Esc Cancel", hint(.settings, true));
     try std.testing.expect(std.mem.find(u8, hint(.provider_picker, false), "Enter Select") != null);
     try std.testing.expect(std.mem.find(u8, hint(.question, false), "Tab Edit") != null);
+}
+
+test "interaction contract covers every surface without stealing domain controls" {
+    const Case = struct { surface: Surface, submit: Command, escape: Command };
+    const cases = [_]Case{
+        .{ .surface = .composer, .submit = .submit, .escape = .cancel },
+        .{ .surface = .command_picker, .submit = .submit, .escape = .back },
+        .{ .surface = .model_picker, .submit = .submit, .escape = .back },
+        .{ .surface = .provider_picker, .submit = .submit, .escape = .back },
+        .{ .surface = .settings, .submit = .submit, .escape = .back },
+        .{ .surface = .appearance, .submit = .submit, .escape = .back },
+        .{ .surface = .statusline, .submit = .submit, .escape = .back },
+        .{ .surface = .approval, .submit = .submit, .escape = .cancel },
+        .{ .surface = .question, .submit = .submit, .escape = .cancel },
+        .{ .surface = .full_transcript, .submit = .ignore, .escape = .cancel },
+        .{ .surface = .@"resume", .submit = .submit, .escape = .back },
+        .{ .surface = .skills, .submit = .submit, .escape = .back },
+        .{ .surface = .subagent_manager, .submit = .ignore, .escape = .cancel },
+        .{ .surface = .terminal_takeover, .submit = .ignore, .escape = .cancel },
+        .{ .surface = .auth, .submit = .submit, .escape = .back },
+    };
+    try std.testing.expectEqual(@typeInfo(Surface).@"enum".fields.len, cases.len);
+    for (cases) |case| {
+        try std.testing.expectEqual(case.submit, route(case.surface, .{ .raw = .{ .byte = '\r' } }).?);
+        try std.testing.expectEqual(case.escape, route(case.surface, .{ .action = .{ .action = .escape } }).?);
+        for ([_]u8{ 3, '\t', 0 }) |byte| {
+            try std.testing.expect(route(case.surface, .{ .raw = .{ .byte = byte } }) == null);
+        }
+        try std.testing.expect(route(case.surface, .{ .paste_byte = '\r' }) == null);
+        if (case.surface == .composer) {
+            try std.testing.expectEqual(Command{ .edit = .insert_newline }, route(case.surface, .{ .raw = .{ .byte = '\n', .composer_shortcut = .insert_newline } }).?);
+            continue;
+        }
+        try std.testing.expectEqual(case.submit, route(case.surface, .{ .raw = .{ .byte = '\n', .composer_shortcut = .insert_newline } }).?);
+        try std.testing.expectEqual(Command.move_previous, route(case.surface, .{ .action = .{ .action = .cursor_up } }).?);
+        try std.testing.expectEqual(Command.move_next, route(case.surface, .{ .action = .{ .action = .cursor_down } }).?);
+        try std.testing.expectEqual(Command.move_page_up, route(case.surface, .{ .action = .{ .action = .page_up } }).?);
+        try std.testing.expectEqual(Command.move_page_down, route(case.surface, .{ .action = .{ .action = .page_down } }).?);
+    }
 }

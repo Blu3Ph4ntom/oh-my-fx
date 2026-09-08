@@ -1413,6 +1413,56 @@ test "approval alternate screen lifecycle restores the shadow terminal once" {
     try std.testing.expectEqual(@as(u21, 'n'), shell.shadow_vt.?.cellAt(1, 1).?.codepoint);
 }
 
+test "every alternate screen owner restores the normal grid through shutdown dispatch" {
+    const alloc = std.testing.allocator;
+    for ([_]shell_runtime.AlternateScreenOwner{ .file_approval, .full_transcript, .catalog_menu, .subagent_manager, .terminal_session }) |owner| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        var shell = TranscriptRuntime{
+            .stdout_file = try tmp.dir.createFile(std.testing.io, "restore.out", .{}),
+            .layout = .{ .rows = 4, .cols = 16, .content_bottom = 1, .divider_top_row = 1, .input_row = 2, .divider_bottom_row = 3, .hint_row = 4 },
+        };
+        defer shell.stdout_file.close(std.testing.io);
+        defer shell.deinit(alloc);
+        try shell.enableShadowVt(alloc);
+        var metrics = Metrics{};
+        var terminal = TerminalState{};
+        try writeLifecycleTerminalBytes(&shell, &metrics, "draft");
+        try enterAlternateScreen(&terminal, &shell, &metrics, owner);
+        try setAlternateScreenMouseTracking(&terminal, &shell, &metrics, owner, true);
+        try writeLifecycleTerminalBytes(&shell, &metrics, "surface");
+        leaveAlternateScreens(&terminal, &shell, &metrics);
+        const restored_bytes = metrics.ansi_bytes;
+        leaveAlternateScreens(&terminal, &shell, &metrics);
+        try std.testing.expectEqual(restored_bytes, metrics.ansi_bytes);
+        try std.testing.expectEqual(shell_runtime.AlternateScreenOwner.none, terminal.alternate_screen_owner);
+        try std.testing.expect(!terminal.alternate_mouse_tracking_active);
+        try std.testing.expectEqual(@as(u21, 'd'), shell.shadow_vt.?.cellAt(1, 1).?.codepoint);
+    }
+}
+
+test "every alternate owner retains restoration responsibility after an output error" {
+    const alloc = std.testing.allocator;
+    for ([_]shell_runtime.AlternateScreenOwner{ .file_approval, .full_transcript, .catalog_menu, .subagent_manager, .terminal_session }) |owner| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const output = try tmp.dir.createFile(std.testing.io, "failed.out", .{});
+        var shell = TranscriptRuntime{ .stdout_file = output };
+        defer shell.deinit(alloc);
+        output.close(std.testing.io);
+        var terminal = TerminalState{};
+        var metrics = Metrics{};
+        try std.testing.expectError(error.NotOpenForWriting, enterAlternateScreen(&terminal, &shell, &metrics, owner));
+        try std.testing.expectEqual(owner, terminal.alternate_screen_owner);
+        leaveAlternateScreens(&terminal, &shell, &metrics);
+        try std.testing.expectEqual(owner, terminal.alternate_screen_owner);
+        shell.stdout_file = try tmp.dir.createFile(std.testing.io, "recovered.out", .{});
+        defer shell.stdout_file.close(std.testing.io);
+        leaveAlternateScreens(&terminal, &shell, &metrics);
+        try std.testing.expectEqual(shell_runtime.AlternateScreenOwner.none, terminal.alternate_screen_owner);
+    }
+}
+
 test "approval inline restore keeps ownership armed until frame commit" {
     var terminal = TerminalState{
         .alternate_screen_owner = .file_approval,

@@ -288,6 +288,62 @@ test "event loop batches already readable input before committing a frame" {
     try std.testing.expectEqualStrings("tabdesc", trace.bytes[0..trace.len]);
 }
 
+test "event loop coalesces resize and activity with a closing surface input burst" {
+    const render_request = @import("render_request.zig");
+    const Trace = struct {
+        requests: render_request.RenderRequestState = .{},
+        auth: @import("../core/auth/auth_runtime.zig").Runtime = .{},
+        should_exit: *bool,
+        handled: usize = 0,
+        committed: usize = 0,
+
+        fn collect(ctx: *anyopaque) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.requests.observeResizeSignal(1, 0);
+            self.requests.request(.transcript);
+            self.requests.request(.modal);
+            self.auth.openProviderPicker(std.testing.allocator, .gateway);
+        }
+        fn handle(ctx: *anyopaque, byte: u8) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.handled += 1;
+            if (byte == 'e') self.auth.closePicker(std.testing.allocator);
+            self.requests.request(.footer);
+        }
+        fn settle(ctx: *anyopaque) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.requests.completeResizeGeometry(false);
+        }
+        fn commit(ctx: *anyopaque) !void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            // An earlier commit would paint the state from before the close.
+            try std.testing.expectEqual(@as(usize, 4), self.handled);
+            try std.testing.expect(!self.auth.pickerView().active);
+            var attempt = (try self.requests.beginAttempt()).?;
+            defer attempt.deinit();
+            try std.testing.expectEqual(@as(usize, 4), attempt.snapshot.reasons.count());
+            attempt.commit(2, render_request.animation_interval_ms, false);
+            self.committed += 1;
+            self.should_exit.* = true;
+        }
+    };
+    var should_exit = false;
+    var polls: usize = 0;
+    var reads: usize = 0;
+    var trace = Trace{ .should_exit = &should_exit };
+    defer trace.auth.deinit(std.testing.allocator);
+    _ = try run(EventLoopTestTerminal{ .polls = &polls, .burst_reads = &reads }, &should_exit, 8, .{
+        .ctx = &trace,
+        .collect_facts = Trace.collect,
+        .next_collected_byte = noCollectedEventLoopByte,
+        .handle_byte = Trace.handle,
+        .settle_delivery_epoch = Trace.settle,
+        .commit_frame = Trace.commit,
+    });
+    try std.testing.expectEqual(@as(usize, 1), trace.committed);
+    try std.testing.expect(!trace.requests.hasPending());
+}
+
 test "event loop commits once per readable input epoch" {
     const BurstTerminal = struct {
         read_index: *usize,

@@ -17,6 +17,11 @@ pub const Decoder = struct {
     param2: u16 = 0,
     started_ms: i64 = 0,
     cancel_pending: bool = false,
+    carriage_return_pending: bool = false,
+
+    pub fn endDeliveryEpoch(self: *Decoder) void {
+        self.carriage_return_pending = false;
+    }
 
     pub fn reset(self: *Decoder) void {
         self.* = .{};
@@ -36,8 +41,13 @@ pub const Decoder = struct {
         };
 
         if (context.paste_active) {
+            self.carriage_return_pending = false;
             return pasteByteIngress(byte);
         }
+
+        const follows_cr = self.carriage_return_pending;
+        self.carriage_return_pending = self.stage == 0 and byte == '\r';
+        if (follows_cr and byte == '\n') return ingress;
 
         if (byte == 0x1b and self.stage == 0) {
             self.beginEscape(context.now_ms, context.cancel_pending);
@@ -379,6 +389,18 @@ test "terminal decoder preserves CR and LF as surface input" {
         try std.testing.expect(ingress.replay_byte_after_routing == null);
         try std.testing.expect(!decoder.hasPending());
     }
+}
+
+test "terminal decoder coalesces CRLF only within its delivery epoch" {
+    var decoder = Decoder{};
+    try std.testing.expectEqual(@as(u8, '\r'), decoder.feed('\r', decoderMatrixContext(1, false)).event.?.raw.byte);
+    try std.testing.expect(decoder.feed('\n', decoderMatrixContext(2, false)).event == null);
+    try std.testing.expectEqual(@as(u8, '\n'), decoder.feed('\n', decoderMatrixContext(3, false)).event.?.raw.byte);
+    _ = decoder.feed('\r', decoderMatrixContext(4, false));
+    decoder.endDeliveryEpoch();
+    try std.testing.expectEqual(@as(u8, '\n'), decoder.feed('\n', decoderMatrixContext(5, false)).event.?.raw.byte);
+    _ = decoder.feed('\r', decoderMatrixContext(6, false));
+    try std.testing.expectEqual(@as(u8, '\n'), decoder.feed('\n', decoderMatrixContext(7, true)).event.?.paste_byte);
 }
 
 test "bare Escape emits once after quiet timeout" {
