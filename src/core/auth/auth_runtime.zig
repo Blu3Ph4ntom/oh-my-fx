@@ -144,6 +144,7 @@ pub fn refreshCredentialTokenForAccount(
 pub const AcquisitionAction = enum {
     login,
     chatgpt_login,
+    opencode_go_login,
     setup,
     change_team,
     switch_credential,
@@ -2263,8 +2264,24 @@ test "auth picker root starts on sign in and keeps sources in the switch stage" 
     const picker = runtime.pickerView();
     try std.testing.expect(picker.active);
     try std.testing.expect((Choice{ .action = .login }).eql(picker.selected_choice.?));
-    try std.testing.expectEqual(@as(usize, 5), picker.choiceCount());
+    try std.testing.expectEqual(@as(usize, 6), picker.choiceCount());
     try std.testing.expect(picker.choiceAt(5) == null);
+}
+
+test "auth picker puts OpenCode Go API-key login first" {
+    const alloc = std.testing.allocator;
+    var runtime: Runtime = .{};
+    defer runtime.deinit(alloc);
+
+    runtime.openPicker(alloc);
+
+    const picker = runtime.pickerView();
+    try std.testing.expectEqual(@as(usize, 6), picker.choiceCount());
+    try std.testing.expect((Choice{ .action = .opencode_go_login }).eql(picker.choiceAt(0).?));
+    try std.testing.expectEqualStrings(
+        "Sign in with OpenCode Go",
+        picker.choiceLabel(picker.choiceAt(0).?),
+    );
 }
 
 test "provider picker exposes OpenCode Go alongside built-in providers" {
@@ -2336,7 +2353,7 @@ test "auth picker without credentials exposes acquisition actions" {
     try std.testing.expect(picker.active_source == null);
     try std.testing.expect((Choice{ .action = .login }).eql(picker.selected_choice.?));
     try std.testing.expectEqual(@as(usize, 0), picker.available_sources.count());
-    try std.testing.expectEqual(@as(usize, 5), picker.choiceCount());
+    try std.testing.expectEqual(@as(usize, 6), picker.choiceCount());
     try std.testing.expect(!picker.choiceEnabled(.{ .action = .change_team }));
     try std.testing.expectEqualStrings("missing", picker.activeSourceLabel());
 }
