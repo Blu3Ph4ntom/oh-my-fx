@@ -231,7 +231,10 @@ public static class OmfxConPty
                 reader = Task.Run(() => ReadOutput(terminalOutput, output, outputChanged));
                 Send(input, "/help\r");
                 WaitForMarker(output, outputChanged, "Commands", timeoutSeconds);
+                int helpOutputLength;
+                lock (output) helpOutputLength = output.Length;
                 Send(input, "\u001b");
+                WaitForMarkerAfter(output, outputChanged, "\u001b[?1049l", helpOutputLength, timeoutSeconds);
                 Send(input, "/quit\r");
                 if (!WaitForProcess(processInformation.Process, timeoutSeconds))
                 {
@@ -297,12 +300,22 @@ public static class OmfxConPty
 
     private static void WaitForMarker(StringBuilder output, AutoResetEvent changed, string marker, int timeoutSeconds)
     {
+        WaitForMarkerAfter(output, changed, marker, 0, timeoutSeconds);
+    }
+
+    private static void WaitForMarkerAfter(
+        StringBuilder output,
+        AutoResetEvent changed,
+        string marker,
+        int start,
+        int timeoutSeconds)
+    {
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (stopwatch.Elapsed < TimeSpan.FromSeconds(timeoutSeconds))
         {
             lock (output)
             {
-                if (output.ToString().Contains(marker, StringComparison.Ordinal)) return;
+                if (output.Length > start && output.ToString(start, output.Length - start).Contains(marker, StringComparison.Ordinal)) return;
             }
             changed.WaitOne(100);
         }

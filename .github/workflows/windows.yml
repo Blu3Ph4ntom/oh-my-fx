@@ -257,6 +257,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Download uploaded fx.exe for verification
+        uses: actions/download-artifact@v4
+        with:
+          name: fx-windows-x86_64
+          path: ${{ runner.temp }}/omfx-artifact-check/fx
+
+      - name: Download uploaded omfx.exe for verification
+        uses: actions/download-artifact@v4
+        with:
+          name: omfx-windows-x86_64
+          path: ${{ runner.temp }}/omfx-artifact-check/omfx
+
+      - name: Verify downloaded Windows artifacts
+        shell: pwsh
+        run: |
+          $fx = Get-Item -LiteralPath "./zig-out/bin/fx.exe"
+          $omfx = Get-Item -LiteralPath "./zig-out/bin/omfx.exe"
+          $downloadedFx = Get-Item -LiteralPath (Join-Path $env:RUNNER_TEMP "omfx-artifact-check\fx\fx.exe")
+          $downloadedOmfx = Get-Item -LiteralPath (Join-Path $env:RUNNER_TEMP "omfx-artifact-check\omfx\omfx.exe")
+          $expectedFxHash = (Get-FileHash -LiteralPath $fx.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedOmfxHash = (Get-FileHash -LiteralPath $omfx.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $actualFxHash = (Get-FileHash -LiteralPath $downloadedFx.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $actualOmfxHash = (Get-FileHash -LiteralPath $downloadedOmfx.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Output "downloaded fx.exe size=$($downloadedFx.Length) sha256=$actualFxHash"
+          Write-Output "downloaded omfx.exe size=$($downloadedOmfx.Length) sha256=$actualOmfxHash"
+          if ($downloadedFx.Length -ne $fx.Length -or $actualFxHash -ne $expectedFxHash) {
+            throw "downloaded fx.exe differs from the build payload"
+          }
+          if ($downloadedOmfx.Length -ne $omfx.Length -or $actualOmfxHash -ne $expectedOmfxHash) {
+            throw "downloaded omfx.exe differs from the build payload"
+          }
+
   test:
     name: Windows unit tests
     runs-on: windows-latest
