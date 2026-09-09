@@ -479,6 +479,17 @@ fn runSupported(alloc: Allocator, config: Config) !void {
         if (state.stopping.load(.acquire)) break;
         var stream = server.accept(io_mod.getIo()) catch |err| switch (err) {
             error.SocketNotListening => break,
+            error.Unexpected => {
+                // AFD can report a connection that is being torn down between
+                // the readiness probe and WAIT_FOR_LISTEN. Keep the host alive
+                // so the client can reconnect instead of losing the singleton.
+                debug_trace.logf(
+                    "terminal_host",
+                    "accept raced with connection teardown err={s}",
+                    .{@errorName(err)},
+                );
+                continue;
+            },
             else => return err,
         };
         if (state.stopping.load(.acquire)) {

@@ -33,6 +33,7 @@ $startInfo.Environment["FX_AUTO_UPGRADE"] = "0"
 $startInfo.Environment["FX_TRACE_LOG"] = $trace
 $startInfo.Environment["FX_TRACE_SCOPES"] = "terminal_client,terminal_host,native_session"
 $startInfo.Environment["FX_TERMINAL_HOST_DIAGNOSTIC"] = "1"
+$startInfo.Environment["FX_TERMINAL_SOCKET_POLL_DIAGNOSTIC"] = "1"
 
 $directInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $directInfo.FileName = $startInfo.FileName
@@ -82,6 +83,7 @@ if ($process.ExitCode -ne 0) {
   throw "terminal host smoke exited with code $($process.ExitCode) (stdout=$stdout stderr=$stderr trace=$traceTail)"
 }
 if ($stdout -notmatch '"kind":"completed"') {
+  Write-Output "terminal host smoke stderr: $stderr"
   if (Test-Path -LiteralPath $trace) {
     Write-Output "terminal host smoke trace:"
     Get-Content -LiteralPath $trace
