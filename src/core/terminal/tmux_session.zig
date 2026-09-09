@@ -2197,7 +2197,7 @@ fn acceptBeforeDeadline(
             }
             const remaining_ms = try deadline.remaining();
             const wait_ms: i32 = @intCast(@min(remaining_ms, deadline_poll_ms));
-            if (io_mod.socketWaitReadable(@intFromPtr(server.socket.handle), wait_ms)) {
+            if (io_mod.socketWaitAccept(@intFromPtr(server.socket.handle), wait_ms)) {
                 return server.accept(io_mod.getIo()) catch |err| switch (err) {
                     error.ConnectionAborted, error.WouldBlock => continue,
                     else => return err,

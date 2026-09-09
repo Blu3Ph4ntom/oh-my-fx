@@ -725,11 +725,31 @@ const afd_poll_abort: std.os.windows.ULONG = 0x0010;
 const afd_poll_local_close: std.os.windows.ULONG = 0x0020;
 const afd_poll_accept: std.os.windows.ULONG = 0x0080;
 
-/// Waits up to `timeout_ms` for a socket to become readable. Returns false
-/// on timeout or error. Windows AF_UNIX endpoints are native AFD handles, so
-/// Winsock `WSAPoll` cannot reliably wake on them. Use the same AFD poll
-/// operation as the Windows socket backend instead.
+/// Waits up to `timeout_ms` for a connected socket to have input or close.
+/// Returns false on timeout or error. Windows AF_UNIX endpoints are native AFD
+/// handles, so Winsock `WSAPoll` cannot reliably wake on them. Use the same
+/// AFD poll operation as the Windows socket backend instead.
 pub fn socketWaitReadable(sock: usize, timeout_ms: i32) bool {
+    return socketWaitForEvents(
+        sock,
+        timeout_ms,
+        afd_poll_receive |
+            afd_poll_disconnect |
+            afd_poll_abort |
+            afd_poll_local_close,
+    );
+}
+
+/// Waits up to `timeout_ms` for a listening socket to have a queued client.
+pub fn socketWaitAccept(sock: usize, timeout_ms: i32) bool {
+    return socketWaitForEvents(sock, timeout_ms, afd_poll_accept);
+}
+
+fn socketWaitForEvents(
+    sock: usize,
+    timeout_ms: i32,
+    events: std.os.windows.ULONG,
+) bool {
     if (comptime !is_windows) return false;
 
     var afd_handle: std.os.windows.HANDLE = undefined;
@@ -764,11 +784,7 @@ pub fn socketWaitReadable(sock: usize, timeout_ms: i32) bool {
         .Unique = .FALSE,
         .Handles = .{.{
             .Handle = @ptrFromInt(sock),
-            .Events = afd_poll_receive |
-                afd_poll_disconnect |
-                afd_poll_abort |
-                afd_poll_local_close |
-                afd_poll_accept,
+            .Events = events,
             .Status = .SUCCESS,
         }},
     };
@@ -779,6 +795,7 @@ pub fn socketWaitReadable(sock: usize, timeout_ms: i32) bool {
         .out = std.mem.asBytes(&poll_info),
     } }) catch return false;
     if (result.device_io_control.u.Status != .SUCCESS) return false;
+    if (poll_info.Handles[0].Status != .SUCCESS) return false;
     return poll_info.Handles[0].Events != 0;
 }
 
