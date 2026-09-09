@@ -13,7 +13,7 @@ const background_process_provider = @import(
 const ui_projection = @import("ui_projection.zig");
 
 const Allocator = std.mem.Allocator;
-const connect_deadline_ms: i64 = 2_000;
+const connect_deadline_ms: i64 = if (builtin.os.tag == .windows) 15_000 else 2_000;
 const handshake_deadline_ms: i64 = 5_000;
 const max_active_requests: usize = 32;
 pub const AdmissionError =
