@@ -16,7 +16,7 @@ $process.StartInfo = $startInfo
 [void]$process.Start()
 
 $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-$ready = $process.StandardError.ReadByte()
+$ready = $process.StandardError.BaseStream.ReadByte()
 if ($ready -ne [int][char]'R') {
   try { $process.Kill($true) } catch { $process.Kill() }
   throw "background wrapper did not send ready byte (actual=$ready)"
