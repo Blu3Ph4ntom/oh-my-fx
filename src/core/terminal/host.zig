@@ -453,7 +453,7 @@ fn runSupported(alloc: Allocator, config: Config) !void {
     debug_trace.logf(
         "terminal_host",
         "host listening pid={d} protocol={d}-{d}",
-        .{ std.c.getpid(), config.hello.range.minimum, config.hello.range.current },
+        .{ io_mod.currentProcessId(), config.hello.range.minimum, config.hello.range.current },
     );
 
     while (!state.stopping.load(.acquire)) {
@@ -610,6 +610,7 @@ fn idleOwner(state: *HostState) void {
 }
 
 fn listenerReady(handle: std.Io.net.Socket.Handle) !bool {
+    if (comptime builtin.os.tag == .windows) return true;
     var poll_fds = [_]std.posix.pollfd{.{
         .fd = handle,
         .events = std.posix.POLL.IN,

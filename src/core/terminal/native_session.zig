@@ -6094,6 +6094,7 @@ fn readOutputChunk(
     buffer: []u8,
     timeout_ms: i32,
 ) !bool {
+    if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
     var total: usize = 0;
     var poll_timeout = timeout_ms;
     while (total < buffer.len) {
