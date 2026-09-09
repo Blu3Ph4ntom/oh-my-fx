@@ -989,7 +989,10 @@ fn endpointExists(host_dir: *io_mod.VerifiedDir) bool {
         host.endpoint_name,
         .{ .follow_symlinks = false },
     ) catch return false;
-    return stat.kind == .unix_domain_socket;
+    return if (comptime builtin.os.tag == .windows)
+        stat.kind == .file
+    else
+        stat.kind == .unix_domain_socket;
 }
 
 fn readHandshakeFrame(

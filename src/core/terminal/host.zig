@@ -1401,7 +1401,16 @@ fn cleanupEndpoint(host_dir: *io_mod.VerifiedDir) void {
         endpoint_name,
         .{ .follow_symlinks = false },
     ) catch return;
-    if (stat.kind != .unix_domain_socket) return;
+    // Zig's Windows file stat backend reports an AF_UNIX endpoint as a
+    // regular file because the socket path is represented by an NT object,
+    // not a POSIX directory entry. The path is still inside the verified,
+    // private host directory and is only removed after the identity check
+    // proves that no live owner remains.
+    const is_endpoint = if (comptime builtin.os.tag == .windows)
+        stat.kind == .file
+    else
+        stat.kind == .unix_domain_socket;
+    if (!is_endpoint) return;
     host_dir.dir.deleteFile(io_mod.getIo(), endpoint_name) catch {};
 }
 
@@ -1421,8 +1430,14 @@ fn verifyEndpointPermissions(host_dir: *io_mod.VerifiedDir) !void {
         endpoint_name,
         .{ .follow_symlinks = false },
     );
+    if (comptime builtin.os.tag == .windows) {
+        // Windows' AF_UNIX endpoint is exposed as File.Kind.file by
+        // fileStatWindows. The successful AFD bind above is the socket-type
+        // proof; keep this check to reject directories and reparse entries.
+        if (stat.kind != .file) return error.PrivateEndpointPermissionsUnsupported;
+        return;
+    }
     if (stat.kind != .unix_domain_socket) return error.PrivateEndpointPermissionsUnsupported;
-    if (comptime builtin.os.tag == .windows) return;
     if (!io_mod.permissionsIsPrivateFile(stat.permissions)) {
         return error.PrivateEndpointPermissionsUnsupported;
     }
