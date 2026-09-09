@@ -662,7 +662,6 @@ pub fn waitForStdinEnter(timeout_ms: u64) bool {
 }
 
 extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: ?*const anyopaque, optlen: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
 
 /// Best-effort SO_RCVTIMEO/SO_SNDTIMEO in milliseconds. Failures are ignored
 /// by design; callers already treat timeout setup as advisory.
@@ -707,15 +706,80 @@ pub fn setSocketLingerReset(sock: usize) void {
     _ = setsockopt(sock, 0xffff, 0x0080, @ptrCast(&linger), @sizeOf(Linger));
 }
 
+const AfdPollHandleInfo = extern struct {
+    Handle: std.os.windows.HANDLE,
+    Events: std.os.windows.ULONG,
+    Status: std.os.windows.NTSTATUS,
+};
+
+const AfdPollInfo = extern struct {
+    Timeout: std.os.windows.LARGE_INTEGER,
+    NumberOfHandles: std.os.windows.ULONG,
+    Unique: std.os.windows.BOOLEAN,
+    Handles: [1]AfdPollHandleInfo,
+};
+
+const afd_poll_receive: std.os.windows.ULONG = 0x0001;
+const afd_poll_disconnect: std.os.windows.ULONG = 0x0008;
+const afd_poll_abort: std.os.windows.ULONG = 0x0010;
+const afd_poll_local_close: std.os.windows.ULONG = 0x0020;
+const afd_poll_accept: std.os.windows.ULONG = 0x0080;
+
 /// Waits up to `timeout_ms` for a socket to become readable. Returns false
-/// on timeout or error. Windows-only helper for code that historically used
-/// `std.posix.poll`, which has no ws2_32 binding in Zig 0.16.
+/// on timeout or error. Windows AF_UNIX endpoints are native AFD handles, so
+/// Winsock `WSAPoll` cannot reliably wake on them. Use the same AFD poll
+/// operation as the Windows socket backend instead.
 pub fn socketWaitReadable(sock: usize, timeout_ms: i32) bool {
     if (comptime !is_windows) return false;
-    var pfd = .{ .fd = sock, .events = @as(i16, 0x0100), .revents = @as(i16, 0) };
-    const rc = WSAPoll(&pfd, 1, timeout_ms);
-    if (rc <= 0) return false;
-    return pfd.revents & @as(i16, 0x0100) != 0;
+
+    var afd_handle: std.os.windows.HANDLE = undefined;
+    var create_status: std.os.windows.IO_STATUS_BLOCK = undefined;
+    switch (std.os.windows.ntdll.NtCreateFile(
+        &afd_handle,
+        .{ .STANDARD = .{ .SYNCHRONIZE = true } },
+        &.{ .ObjectName = @constCast(&std.os.windows.UNICODE_STRING.init(
+            std.os.windows.AFD.DEVICE_NAME,
+        )) },
+        &create_status,
+        null,
+        .{},
+        .{ .READ = true, .WRITE = true },
+        .OPEN,
+        .{ .IO = .ASYNCHRONOUS },
+        null,
+        0,
+    )) {
+        .SUCCESS => {},
+        else => return false,
+    }
+    defer _ = CloseHandle(afd_handle);
+
+    const timeout: std.os.windows.LARGE_INTEGER = if (timeout_ms <= 0)
+        0
+    else
+        -@as(std.os.windows.LARGE_INTEGER, @intCast(timeout_ms)) * 10_000;
+    var poll_info: AfdPollInfo = .{
+        .Timeout = timeout,
+        .NumberOfHandles = 1,
+        .Unique = .FALSE,
+        .Handles = .{.{
+            .Handle = @ptrFromInt(sock),
+            .Events = afd_poll_receive |
+                afd_poll_disconnect |
+                afd_poll_abort |
+                afd_poll_local_close |
+                afd_poll_accept,
+            .Status = .SUCCESS,
+        }},
+    };
+    const result = getIo().operate(.{ .device_io_control = .{
+        .file = .{ .handle = afd_handle, .flags = .{ .nonblocking = true } },
+        .code = std.os.windows.IOCTL.AFD.POLL,
+        .in = std.mem.asBytes(&poll_info),
+        .out = std.mem.asBytes(&poll_info),
+    } }) catch return false;
+    if (result.device_io_control.u.Status != .SUCCESS) return false;
+    return poll_info.Handles[0].Events != 0;
 }
 
 pub fn milliTimestamp() i64 {
