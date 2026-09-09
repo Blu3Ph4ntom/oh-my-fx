@@ -36,7 +36,15 @@ pub fn main(
     argv: [*][*:0]c_char,
     environ: [*:null]?[*:0]c_char,
 ) callconv(.c) c_int {
-    mainInner(argc, argv, environ) catch return 1;
+    mainInner(argc, argv, environ) catch |err| {
+        if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
+            std.debug.print(
+                "terminal client fixture failed: {s}\n",
+                .{@errorName(err)},
+            );
+        }
+        return 1;
+    };
     return 0;
 }
 

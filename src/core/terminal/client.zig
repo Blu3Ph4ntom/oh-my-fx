@@ -950,7 +950,10 @@ fn launchHost(alloc: Allocator) !void {
         .argv = &argv,
         .stdin = .ignore,
         .stdout = .ignore,
-        .stderr = .ignore,
+        .stderr = if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null)
+            .inherit
+        else
+            .ignore,
         .pgid = if (comptime builtin.os.tag == .macos or builtin.os.tag == .linux)
             0
         else
