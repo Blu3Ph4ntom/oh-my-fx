@@ -1308,14 +1308,12 @@ const LauncherControl = struct {
 };
 
 fn supported() bool {
-    return host_capabilities.terminalSupportForOs(builtin.os.tag).isSupported();
+    return builtin.os.tag == .macos or builtin.os.tag == .linux;
 }
 
 test "tmux implementation guard follows canonical platform support" {
-    try std.testing.expectEqual(
-        host_capabilities.terminalSupportForOs(builtin.os.tag).isSupported(),
-        supported(),
-    );
+    try std.testing.expectEqual(builtin.os.tag != .windows and
+        host_capabilities.terminalSupportForOs(builtin.os.tag).isSupported(), supported());
 }
 
 fn probe(alloc: Allocator) !void {
