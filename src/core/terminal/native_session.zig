@@ -6249,7 +6249,9 @@ fn windowsControlMain(session: *Session) void {
         session.output_thread = null;
     }
     maybeDelayForTest("FX_TERMINAL_TEST_BACKEND_CLEANUP_DELAY_MS");
-    session.setTerm(.{ .exited = @intCast(exit_code) });
+    // Windows exposes a 32-bit exit status, while Zig's process term uses
+    // the same byte-sized exit code as the POSIX-facing contract.
+    session.setTerm(.{ .exited = @truncate(exit_code) });
     const zio = io_mod.getIo();
     session.mutex.lockUncancelable(zio);
     if (session.windows_backend != null) session.windows_backend = null;

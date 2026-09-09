@@ -104,7 +104,6 @@ pub const Pty = struct {
 
         var startup = std.mem.zeroes(win.STARTUPINFOEXW);
         startup.StartupInfo.cb = @sizeOf(win.STARTUPINFOEXW);
-        startup.StartupInfo.dwFlags = win.STARTF_USESTDHANDLES;
         startup.lpAttributeList = attribute_list.ptr;
         var process_info = std.mem.zeroes(win.PROCESS_INFORMATION);
         if (win.CreateProcessW(
@@ -203,13 +202,13 @@ pub const Pty = struct {
     /// The process handle is the authoritative Windows lifecycle signal.
     /// Closing the pseudoconsole after it exits manufactures EOF for the
     /// reader and also tears down console-attached descendants.
-    pub fn waitBlocking(self: Pty) i32 {
-        if (comptime !is_windows) return -1;
+    pub fn waitBlocking(self: Pty) u32 {
+        if (comptime !is_windows) return 1;
         _ = win.WaitForSingleObject(self.state.process, win.INFINITE);
         var code: win.DWORD = 1;
         if (win.GetExitCodeProcess(self.state.process, &code) == 0) code = 1;
         self.closeConsole();
-        return @bitCast(code);
+        return code;
     }
 
     pub fn close(self: Pty) void {
