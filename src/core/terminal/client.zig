@@ -731,7 +731,15 @@ fn receiveCancellable(
         if (worker.cancelled.load(.acquire)) {
             return error.Cancelled;
         }
-        const incoming = socket.receiveTimeout(
+        const incoming = if (comptime builtin.os.tag == .windows) blk: {
+            // Zig 0.16's Windows Io backend does not implement concurrent
+            // network receives. Poll the Winsock handle, then use the
+            // ordinary blocking receive after readiness is established.
+            if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 50)) {
+                continue;
+            }
+            break :blk socket.receive(io_mod.getIo(), destination[offset..]);
+        } else socket.receiveTimeout(
             io_mod.getIo(),
             destination[offset..],
             .{ .duration = .{
@@ -1037,7 +1045,14 @@ fn receiveBeforeDeadline(
         const remaining_ms = deadline_ms - io_mod.milliTimestamp();
         if (remaining_ms <= 0) return error.HostHandshakeTimeout;
         const poll_ms = @min(remaining_ms, 50);
-        const incoming = socket.receiveTimeout(
+        const incoming = if (comptime builtin.os.tag == .windows) blk: {
+            // Timed net_receive is not available in Zig 0.16 on Windows;
+            // WSAPoll provides the same bounded handshake wait.
+            if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), @intCast(poll_ms))) {
+                continue;
+            }
+            break :blk socket.receive(io_mod.getIo(), destination[offset..]);
+        } else socket.receiveTimeout(
             io_mod.getIo(),
             destination[offset..],
             .{ .duration = .{
