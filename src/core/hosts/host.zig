@@ -236,7 +236,7 @@ fn capabilitiesForTarget(
 }
 
 pub fn terminalSupportForOs(os_tag: std.Target.Os.Tag) TerminalSupport {
-    return if (os_tag == .macos or os_tag == .linux)
+    return if (os_tag == .macos or os_tag == .linux or os_tag == .windows)
         .supported
     else
         .unsupported;
@@ -326,10 +326,10 @@ test "native host capabilities expose sandbox and background process support" {
     try std.testing.expectEqual(TerminalSupport.supported, linux.terminal);
 
     const windows = nativeForOs(.windows);
-    try std.testing.expect(!windows.background_processes);
+    try std.testing.expect(windows.background_processes);
     try std.testing.expect(windows.url_open);
     try std.testing.expect(windows.native_url_open);
-    try std.testing.expectEqual(TerminalSupport.unsupported, windows.terminal);
+    try std.testing.expectEqual(TerminalSupport.supported, windows.terminal);
 
     const wasi = nativeForOs(.wasi);
     try std.testing.expect(!wasi.background_processes);
