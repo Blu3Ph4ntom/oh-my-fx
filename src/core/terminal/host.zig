@@ -317,6 +317,14 @@ fn verifyPrivateRuntimeDir(dir: std.Io.Dir, uid: std.c.uid_t) !void {
 }
 
 fn directoryOwner(dir: std.Io.Dir) !std.c.uid_t {
+    if (comptime builtin.os.tag == .windows) {
+        // Windows has no POSIX uid. The directory is already rooted below the
+        // current user's profile and access is enforced by the OS ACL, so the
+        // portable uid placeholder from io_mod.currentUid() is the complete
+        // ownership proof available to this backend.
+        _ = dir;
+        return io_mod.currentUid();
+    }
     return switch (builtin.os.tag) {
         .linux => blk: {
             const linux = std.os.linux;
