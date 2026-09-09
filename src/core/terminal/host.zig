@@ -615,7 +615,7 @@ fn idleOwner(state: *HostState) void {
 
 fn listenerReady(handle: std.Io.net.Socket.Handle) !bool {
     if (comptime builtin.os.tag == .windows) {
-        return io_mod.socketWaitReadable(handle, listener_poll_ms);
+        return io_mod.socketWaitReadable(@intFromPtr(handle), listener_poll_ms);
     }
     var poll_fds = [_]std.posix.pollfd{.{
         .fd = handle,

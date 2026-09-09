@@ -297,7 +297,6 @@ fn captureWindowsToken(
     pid: u32,
 ) !process_supervisor.ProcessInstanceToken {
     if (comptime builtin.os.tag != .windows) {
-        _ = pid;
         return error.ProcessIdentityUnsupported;
     }
     const process = OpenProcess(0x1000, .FALSE, pid) orelse
