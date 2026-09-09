@@ -34,6 +34,31 @@ $startInfo.Environment["FX_TRACE_LOG"] = $trace
 $startInfo.Environment["FX_TRACE_SCOPES"] = "terminal_client,terminal_host,native_session"
 $startInfo.Environment["FX_TERMINAL_HOST_DIAGNOSTIC"] = "1"
 
+$directInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$directInfo.FileName = $startInfo.FileName
+$directInfo.Arguments = "--fx-internal-terminal-host"
+$directInfo.WorkingDirectory = $startInfo.WorkingDirectory
+$directInfo.UseShellExecute = $false
+$directInfo.RedirectStandardOutput = $true
+$directInfo.RedirectStandardError = $true
+foreach ($entry in $startInfo.Environment.GetEnumerator()) {
+  $directInfo.Environment[$entry.Key] = $entry.Value
+}
+$directHost = [System.Diagnostics.Process]::new()
+$directHost.StartInfo = $directInfo
+[void]$directHost.Start()
+$directStdoutTask = $directHost.StandardOutput.ReadToEndAsync()
+$directStderrTask = $directHost.StandardError.ReadToEndAsync()
+Start-Sleep -Seconds 2
+$directWasRunning = -not $directHost.HasExited
+if ($directWasRunning) {
+  try { $directHost.Kill($true) } catch { $directHost.Kill() }
+  $directHost.WaitForExit()
+}
+$directStdout = $directStdoutTask.GetAwaiter().GetResult()
+$directStderr = $directStderrTask.GetAwaiter().GetResult()
+Write-Output "direct terminal host probe (running=$directWasRunning stdout=$directStdout stderr=$directStderr)"
+
 $process = [System.Diagnostics.Process]::new()
 $process.StartInfo = $startInfo
 [void]$process.Start()
