@@ -755,7 +755,8 @@ pub fn socketReadStream(
 ) !usize {
     if (comptime !is_windows) return error.Unsupported;
     const io = getIo();
-    return io.vtable.netRead(io.userdata, socket, &.{destination});
+    var buffers: [1][]u8 = .{destination};
+    return io.vtable.netRead(io.userdata, socket, buffers[0..]);
 }
 
 fn socketWaitForEvents(
