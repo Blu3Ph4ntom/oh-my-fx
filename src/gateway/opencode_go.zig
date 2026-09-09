@@ -163,6 +163,45 @@ fn writeJsonString(w: *std.Io.Writer, value: []const u8) !void {
     try std.json.Stringify.value(value, .{}, w);
 }
 
+fn writeNativeTools(w: *std.Io.Writer, alloc: Allocator, raw: []const u8, route: GoRoute) !void {
+    if (raw.len == 0) return;
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, raw, .{}) catch return;
+    defer parsed.deinit();
+    if (parsed.value != .array) return;
+    var wrote = false;
+    for (parsed.value.array.items) |tool| {
+        if (tool != .object) continue;
+        const name = tool.object.get("name") orelse continue;
+        if (name != .string or name.string.len == 0) continue;
+        const schema = tool.object.get("inputSchema") orelse tool.object.get("parameters") orelse continue;
+        if (schema != .object) continue;
+        if (!wrote) {
+            try w.writeAll(",\"tools\":[");
+            wrote = true;
+        } else try w.writeByte(',');
+        if (route == .responses) {
+            try w.writeAll("{\"type\":\"function\",\"name\":");
+            try writeJsonString(w, name.string);
+            if (tool.object.get("description")) |description| if (description == .string) {
+                try w.writeAll(",\"description\":");
+                try writeJsonString(w, description.string);
+            };
+            try w.writeAll(",\"parameters\":");
+        } else {
+            try w.writeAll("{\"name\":");
+            try writeJsonString(w, name.string);
+            if (tool.object.get("description")) |description| if (description == .string) {
+                try w.writeAll(",\"description\":");
+                try writeJsonString(w, description.string);
+            };
+            try w.writeAll(",\"input_schema\":");
+        }
+        try std.json.Stringify.value(schema, .{}, w);
+        try w.writeByte('}');
+    }
+    if (wrote) try w.writeByte(']');
+}
+
 fn buildResponsesBody(alloc: Allocator, request: stream_provider.BuildRequest) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(alloc);
     defer out.deinit();
@@ -202,6 +241,7 @@ fn buildResponsesBody(alloc: Allocator, request: stream_provider.BuildRequest) !
             }
         }
     }
+    try writeNativeTools(w, alloc, request.serialized_tools, .responses);
     try w.writeByte('}');
     return out.toOwnedSlice();
 }
@@ -233,6 +273,7 @@ fn buildMessagesBody(alloc: Allocator, request: stream_provider.BuildRequest) ![
             break;
         };
     }
+    try writeNativeTools(w, alloc, request.serialized_tools, .messages);
     try w.writeByte('}');
     return out.toOwnedSlice();
 }
@@ -330,6 +371,23 @@ pub fn streamCompletion(
     var content_parts: std.ArrayList(u8) = .empty;
     defer content_parts.deinit(alloc);
 
+    const NativeTool = struct {
+        id: []u8,
+        name: []u8,
+        arguments: std.ArrayList(u8) = .empty,
+    };
+    var native_tools: std.ArrayList(NativeTool) = .empty;
+    defer {
+        for (native_tools.items) |*tool| {
+            alloc.free(tool.id);
+            alloc.free(tool.name);
+            tool.arguments.deinit(alloc);
+        }
+        native_tools.deinit(alloc);
+    }
+    var final_calls: std.ArrayList(types.ToolCall) = .empty;
+    defer final_calls.deinit(alloc);
+
     var finish_reason: ?types.ProviderFinishReason = null;
 
     var sse_buffer: [32 * 1024]u8 = undefined;
@@ -354,7 +412,47 @@ pub fn streamCompletion(
             const event_type = object.get("type") orelse continue;
             if (event_type != .string) continue;
             if (route == .responses) {
-                if (std.mem.eql(u8, event_type.string, "response.output_text.delta")) {
+                if (std.mem.eql(u8, event_type.string, "response.output_item.added")) {
+                    if (object.get("item")) |item| if (item == .object) {
+                        if (item.object.get("type")) |kind| if (kind == .string and std.mem.eql(u8, kind.string, "function_call")) {
+                            const id_value = item.object.get("id") orelse item.object.get("call_id") orelse continue;
+                            const name_value = item.object.get("name") orelse continue;
+                            if (id_value == .string and name_value == .string) {
+                                try native_tools.append(alloc, .{
+                                    .id = try alloc.dupe(u8, id_value.string),
+                                    .name = try alloc.dupe(u8, name_value.string),
+                                });
+                            }
+                        };
+                    };
+                } else if (std.mem.eql(u8, event_type.string, "response.function_call_arguments.delta")) {
+                    const item_id = object.get("item_id") orelse continue;
+                    if (item_id == .string) for (native_tools.items) |*tool| {
+                        if (std.mem.eql(u8, tool.id, item_id.string)) {
+                            if (object.get("delta")) |delta| if (delta == .string) try tool.arguments.appendSlice(alloc, delta.string);
+                            break;
+                        }
+                    };
+                } else if (std.mem.eql(u8, event_type.string, "response.output_item.done")) {
+                    if (object.get("item")) |item| if (item == .object) {
+                        if (item.object.get("type")) |kind| if (kind == .string and std.mem.eql(u8, kind.string, "function_call")) {
+                            const id_value = item.object.get("id") orelse item.object.get("call_id") orelse continue;
+                            if (id_value == .string) for (native_tools.items, 0..) |*tool, index| {
+                                if (std.mem.eql(u8, tool.id, id_value.string)) {
+                                    if (tool.arguments.items.len == 0) if (item.object.get("arguments")) |args| if (args == .string) try tool.arguments.appendSlice(alloc, args.string);
+                                    if (request.on_tool_start) |callback| callback(request.callback_ctx, tool.id, tool.name, null);
+                                    try final_calls.append(alloc, .{
+                                        .id = try alloc.dupe(u8, tool.id),
+                                        .name = try alloc.dupe(u8, tool.name),
+                                        .arguments_json = try alloc.dupe(u8, tool.arguments.items),
+                                    });
+                                    _ = index;
+                                    break;
+                                }
+                            };
+                        };
+                    };
+                } else if (std.mem.eql(u8, event_type.string, "response.output_text.delta")) {
                     if (object.get("delta")) |delta| if (delta == .string) {
                         const text = try alloc.dupe(u8, delta.string);
                         defer alloc.free(text);
@@ -370,9 +468,25 @@ pub fn streamCompletion(
                 } else if (std.mem.eql(u8, event_type.string, "response.incomplete")) {
                     finish_reason = .length;
                 }
+            } else if (std.mem.eql(u8, event_type.string, "content_block_start")) {
+                if (object.get("content_block")) |block| if (block == .object) {
+                    if (block.object.get("type")) |kind| if (kind == .string and std.mem.eql(u8, kind.string, "tool_use")) {
+                        const id = block.object.get("id") orelse continue;
+                        const name = block.object.get("name") orelse continue;
+                        if (id == .string and name == .string) try native_tools.append(alloc, .{
+                            .id = try alloc.dupe(u8, id.string),
+                            .name = try alloc.dupe(u8, name.string),
+                        });
+                    };
+                };
             } else if (std.mem.eql(u8, event_type.string, "content_block_delta")) {
                 if (object.get("delta")) |delta| if (delta == .object) {
-                    if (delta.object.get("type")) |kind| if (kind == .string and std.mem.eql(u8, kind.string, "text_delta")) {
+                    if (delta.object.get("type")) |kind| if (kind == .string and std.mem.eql(u8, kind.string, "input_json_delta")) {
+                        const index = object.get("index") orelse continue;
+                        if (index == .integer) if (index.integer >= 0) if (delta.object.get("partial_json")) |args| if (args == .string) {
+                            if (index.integer < native_tools.items.len) try native_tools.items[@intCast(index.integer)].arguments.appendSlice(alloc, args.string);
+                        };
+                    } else if (kind == .string and std.mem.eql(u8, kind.string, "text_delta")) {
                         if (delta.object.get("text")) |text| if (text == .string) {
                             const copied = try alloc.dupe(u8, text.string);
                             defer alloc.free(copied);
@@ -380,6 +494,17 @@ pub fn streamCompletion(
                             try content_parts.appendSlice(alloc, copied);
                         };
                     };
+                };
+            } else if (std.mem.eql(u8, event_type.string, "content_block_stop")) {
+                const index = object.get("index") orelse continue;
+                if (index == .integer) if (index.integer >= 0 and index.integer < native_tools.items.len) {
+                    const tool = native_tools.items[@intCast(index.integer)];
+                    if (request.on_tool_start) |callback| callback(request.callback_ctx, tool.id, tool.name, null);
+                    try final_calls.append(alloc, .{
+                        .id = try alloc.dupe(u8, tool.id),
+                        .name = try alloc.dupe(u8, tool.name),
+                        .arguments_json = try alloc.dupe(u8, tool.arguments.items),
+                    });
                 };
             } else if (std.mem.eql(u8, event_type.string, "message_delta")) {
                 if (object.get("delta")) |delta| if (delta == .object) {
@@ -421,8 +546,6 @@ pub fn streamCompletion(
             },
         }
     }
-    var final_calls: std.ArrayList(types.ToolCall) = .empty;
-    defer final_calls.deinit(alloc);
     var it = parser.tool_arg_buffers.iterator();
     while (it.next()) |entry| {
         const idx = entry.key_ptr.*;
