@@ -1,5 +1,11 @@
 # fx
 
+## 0.0.5
+
+### Improvements
+
+- **OpenCode Go model parity:** Route each live Go model through its documented API and preserve native streaming tool calls for agent workflows.
+
 ## 0.0.4
 
 <!-- release:start -->
