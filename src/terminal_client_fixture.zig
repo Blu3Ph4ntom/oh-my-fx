@@ -76,6 +76,13 @@ fn mainInner(
     )[0..@intCast(argc)];
     const raw_environ: io_mod.RawEnviron = @ptrCast(environ);
     io_mod.setRawEnviron(raw_environ);
+    if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
+        std.debug.print("fixture argc={d}", .{argc});
+        for (args) |arg| {
+            std.debug.print(" arg={s}", .{std.mem.sliceTo(arg, 0)});
+        }
+        std.debug.print("\n", .{});
+    }
     var threaded = std.Io.Threaded.init(process_allocator, .{
         .argv0 = .init(argsFromRaw(args)),
         .environ = .{ .block = environBlockFromRaw(raw_environ) },
@@ -91,6 +98,9 @@ fn mainInner(
         return native_session.runLauncher(process_allocator);
     }
     if (host.isInternalModeRaw(args)) {
+        if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
+            std.debug.print("fixture entering terminal host\n", .{});
+        }
         var failure_provider = CaptureFailureProvider{
             .delegate = background_process.provider,
         };
