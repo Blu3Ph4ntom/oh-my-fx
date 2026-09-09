@@ -1123,6 +1123,7 @@ pub fn runLauncher(
 }
 
 pub fn runCapture(raw_args: []const [*:0]const u8) !void {
+    if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
     if (comptime !supported()) return error.TerminalHostUnsupported;
     if (!isCaptureModeRaw(raw_args)) return error.InvalidTmuxCapture;
     const socket_path = std.mem.sliceTo(raw_args[2], 0);
@@ -1170,6 +1171,7 @@ pub fn runCapture(raw_args: []const [*:0]const u8) !void {
 }
 
 fn waitForCaptureStop() !void {
+    if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
     var buffer: [256]u8 = undefined;
     while (true) {
         const count = try std.posix.read(std.posix.STDIN_FILENO, &buffer);
