@@ -738,7 +738,7 @@ fn receiveCancellable(
             if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 50)) {
                 continue;
             }
-            break :blk socket.receive(io_mod.getIo(), destination[offset..]);
+            break :blk try socket.receive(io_mod.getIo(), destination[offset..]);
         } else socket.receiveTimeout(
             io_mod.getIo(),
             destination[offset..],
@@ -1051,7 +1051,7 @@ fn receiveBeforeDeadline(
             if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), @intCast(poll_ms))) {
                 continue;
             }
-            break :blk socket.receive(io_mod.getIo(), destination[offset..]);
+            break :blk try socket.receive(io_mod.getIo(), destination[offset..]);
         } else socket.receiveTimeout(
             io_mod.getIo(),
             destination[offset..],
