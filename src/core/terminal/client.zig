@@ -954,7 +954,10 @@ fn waitForHost(endpoint_path: []const u8) !std.Io.net.Stream {
 }
 
 fn launchHost(alloc: Allocator) !void {
-    const executable = try std.process.executablePathAlloc(io_mod.getIo(), alloc);
+    const executable = if (io_mod.getenv("FX_TERMINAL_HOST_EXECUTABLE")) |path|
+        try alloc.dupe(u8, path)
+    else
+        try std.process.executablePathAlloc(io_mod.getIo(), alloc);
     defer alloc.free(executable);
     const argv = [_][]const u8{ executable, host.internal_mode };
     const child = std.process.spawn(io_mod.getIo(), .{
