@@ -1298,7 +1298,15 @@ fn receiveSocketExact(
 ) !void {
     var offset: usize = 0;
     while (offset < destination.len) {
-        const incoming = try socket.receiveTimeout(
+        const incoming = if (comptime builtin.os.tag == .windows) blk: {
+            // Zig 0.16's Windows Io backend does not implement concurrent
+            // timed network receives. Poll the Winsock handle first, then
+            // use the ordinary receive once data is ready.
+            if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 5_000)) {
+                return error.Timeout;
+            }
+            break :blk try socket.receive(io_mod.getIo(), destination[offset..]);
+        } else try socket.receiveTimeout(
             io_mod.getIo(),
             destination[offset..],
             .{ .duration = .{
