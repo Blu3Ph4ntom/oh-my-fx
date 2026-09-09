@@ -407,6 +407,7 @@ fn writePrivateLauncherFile(path: []const u8, bytes: []const u8) !void {
 }
 
 pub fn runLauncher(alloc: Allocator) !void {
+    if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
     if (comptime !isSupported()) return error.TerminalHostUnsupported;
 
     var length_bytes: [4]u8 = undefined;
