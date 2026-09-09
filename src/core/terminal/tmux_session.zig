@@ -617,6 +617,7 @@ pub const Backend = struct {
     }
 
     pub fn shellIdentity(self: *Backend) !ShellIdentity {
+        if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
         return loadShellIdentity(self.alloc, self.paths.shell_identity) catch |err| switch (err) {
             error.FileNotFound => error.TmuxRecoveryShellIdentityMissing,
             else => err,
