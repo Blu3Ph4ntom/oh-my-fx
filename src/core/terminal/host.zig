@@ -1157,7 +1157,7 @@ fn testCorrelationFromEnvironment(name: []const u8) ?u64 {
 }
 
 fn applySocketTimeout(stream: std.Io.net.Stream) void {
-    if (comptime !isSupported()) return;
+    if (comptime builtin.os.tag == .windows or !isSupported()) return;
     const timeout = std.posix.timeval{ .sec = 5, .usec = 0 };
     std.posix.setsockopt(
         stream.socket.handle,

@@ -123,10 +123,7 @@ pub const Tracker = struct {
     }
 
     pub fn refresh(self: *Tracker, root_pid: Pid) !void {
-        const root_snapshot: ?ProcessSnapshot = captureSnapshot(self.alloc, root_pid) catch |err| switch (err) {
-            error.ProcessNotFound => null,
-            else => return err,
-        };
+        const root_snapshot: ?ProcessSnapshot = captureSnapshot(self.alloc, root_pid) catch null;
         var traverse_root = false;
         if (root_snapshot) |snapshot| {
             if (self.root) |root| {

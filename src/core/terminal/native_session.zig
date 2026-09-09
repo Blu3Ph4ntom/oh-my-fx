@@ -5763,6 +5763,7 @@ test "PTY output drains use a nonblocking master" {
 }
 
 fn resizeFd(fd: std.posix.fd_t, dimensions: contracts.Dimensions) !void {
+    if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
     var size = std.posix.winsize{
         .row = dimensions.rows,
         .col = dimensions.columns,
