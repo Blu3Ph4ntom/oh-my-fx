@@ -94,7 +94,7 @@ pub fn runWrapper(alloc: Allocator) !u8 {
     invocation.setCommand(command.items);
     var child = try std.process.spawn(zio, .{
         .argv = invocation.argv(),
-        .stdin = .ignore,
+        .stdin = .close,
         .stdout = .{ .file = stdout },
         .stderr = .{ .file = stdout },
         .create_no_window = true,
