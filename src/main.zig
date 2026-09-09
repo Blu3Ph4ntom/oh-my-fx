@@ -2849,7 +2849,17 @@ fn mainC(c_argc: c_int, c_argv: [*][*:0]c_char, c_envp: [*:null]?[*:0]c_char) !v
             io_mod.setIo(threaded.io());
             const exit_code = background_process.runWrapper(
                 processAllocator(),
-            ) catch {
+            ) catch |err| {
+                var diagnostic_buffer: [256]u8 = undefined;
+                const diagnostic = std.fmt.bufPrint(
+                    &diagnostic_buffer,
+                    "omfx background wrapper failed: {s}\n",
+                    .{@errorName(err)},
+                ) catch "omfx background wrapper failed\n";
+                _ = std.Io.File.stderr().writeStreamingAll(
+                    threaded.io(),
+                    diagnostic,
+                ) catch {};
                 std.process.exit(125);
             };
             std.process.exit(exit_code);
