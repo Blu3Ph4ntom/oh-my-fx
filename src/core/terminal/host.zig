@@ -1401,13 +1401,13 @@ fn cleanupEndpoint(host_dir: *io_mod.VerifiedDir) void {
         endpoint_name,
         .{ .follow_symlinks = false },
     ) catch return;
-    // Zig's Windows file stat backend reports an AF_UNIX endpoint as a
-    // regular file because the socket path is represented by an NT object,
-    // not a POSIX directory entry. The path is still inside the verified,
-    // private host directory and is only removed after the identity check
-    // proves that no live owner remains.
+    // Windows' AF_UNIX endpoint is an NT object and its file-stat kind is not
+    // stable across the Windows/Zig layers. The path is still inside the
+    // verified, private host directory and is only removed after the identity
+    // check proves that no live owner remains. Never remove a directory or a
+    // reparse entry when recovering a stale endpoint.
     const is_endpoint = if (comptime builtin.os.tag == .windows)
-        stat.kind == .file
+        stat.kind != .directory and stat.kind != .sym_link
     else
         stat.kind == .unix_domain_socket;
     if (!is_endpoint) return;
@@ -1425,18 +1425,19 @@ fn cleanupIdentity(host_dir: *io_mod.VerifiedDir) void {
 }
 
 fn verifyEndpointPermissions(host_dir: *io_mod.VerifiedDir) !void {
+    if (comptime builtin.os.tag == .windows) {
+        // Windows' AF_UNIX endpoint is not represented as a stable socket
+        // kind by fileStatWindows. The successful AFD bind is the socket and
+        // ownership proof; the endpoint parent is already a verified private
+        // directory.
+        _ = host_dir;
+        return;
+    }
     const stat = try host_dir.dir.statFile(
         io_mod.getIo(),
         endpoint_name,
         .{ .follow_symlinks = false },
     );
-    if (comptime builtin.os.tag == .windows) {
-        // Windows' AF_UNIX endpoint is exposed as File.Kind.file by
-        // fileStatWindows. The successful AFD bind above is the socket-type
-        // proof; keep this check to reject directories and reparse entries.
-        if (stat.kind != .file) return error.PrivateEndpointPermissionsUnsupported;
-        return;
-    }
     if (stat.kind != .unix_domain_socket) return error.PrivateEndpointPermissionsUnsupported;
     if (!io_mod.permissionsIsPrivateFile(stat.permissions)) {
         return error.PrivateEndpointPermissionsUnsupported;

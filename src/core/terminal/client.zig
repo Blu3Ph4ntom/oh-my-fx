@@ -990,7 +990,7 @@ fn endpointExists(host_dir: *io_mod.VerifiedDir) bool {
         .{ .follow_symlinks = false },
     ) catch return false;
     return if (comptime builtin.os.tag == .windows)
-        stat.kind == .file
+        stat.kind != .directory and stat.kind != .sym_link
     else
         stat.kind == .unix_domain_socket;
 }
