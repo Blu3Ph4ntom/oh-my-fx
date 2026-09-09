@@ -390,10 +390,7 @@ pub const Tracker = struct {
     }
 
     fn parentIdentityMatches(self: *Tracker, parent: TrackedProcess) !bool {
-        const snapshot = captureSnapshot(self.alloc, parent.pid) catch |err| switch (err) {
-            error.ProcessNotFound => return false,
-            else => return err,
-        };
+        const snapshot = captureSnapshot(self.alloc, parent.pid) catch return false;
         return parent.identity.eql(snapshot.identity);
     }
 
@@ -402,10 +399,7 @@ pub const Tracker = struct {
         pid: Pid,
         expected_parent_pid: Pid,
     ) !void {
-        const snapshot = captureSnapshot(self.alloc, pid) catch |err| switch (err) {
-            error.ProcessNotFound => return,
-            else => return err,
-        };
+        const snapshot = captureSnapshot(self.alloc, pid) catch return;
         if (!snapshotBelongsToParent(snapshot, expected_parent_pid)) return;
         if (self.root) |root| {
             if (root.pid == pid and root.identity.eql(snapshot.identity)) return;
