@@ -310,7 +310,7 @@ pub const Tracker = struct {
         switch (builtin.os.tag) {
             .linux => try self.appendLinuxChildren(parent),
             .macos => try self.appendMacOSChildren(parent),
-            .windows => try self.appendWindowsChildren(parent),
+            .windows => try appendWindowsChildren(self, parent),
             else => return error.ProcessTreeUnsupported,
         }
     }

@@ -3160,6 +3160,7 @@ fn httpReady(alloc: Allocator, url: []const u8) bool {
 }
 
 fn applyMonitorSocketTimeout(stream: std.Io.net.Stream, timeout_ms: i64) void {
+    if (comptime builtin.os.tag == .windows) return;
     const timeout = std.posix.timeval{
         .sec = @intCast(@divTrunc(timeout_ms, 1000)),
         .usec = @intCast(@mod(timeout_ms, 1000) * 1000),
@@ -5368,14 +5369,18 @@ fn resizeAction(
             );
             return err;
         };
-        if (!session.signalNative(std.c.SIG.WINCH)) {
-            rollbackDurableResize(
-                session,
-                fd.?,
-                previous_dimensions,
-                previous_payload,
-            );
-            return error.ProcessIdentityUnavailable;
+        if (comptime builtin.os.tag == .windows) {
+            return error.TerminalHostUnsupported;
+        } else {
+            if (!session.signalNative(std.c.SIG.WINCH)) {
+                rollbackDurableResize(
+                    session,
+                    fd.?,
+                    previous_dimensions,
+                    previous_payload,
+                );
+                return error.ProcessIdentityUnavailable;
+            }
         }
     }
     if (session.tmux_backend != null and tmuxResizeCheckpointFailure()) {
@@ -5446,6 +5451,7 @@ fn rollbackDurableResize(
     dimensions: contracts.Dimensions,
     checkpoint_payload: []const u8,
 ) void {
+    if (comptime builtin.os.tag == .windows) return;
     resizeFd(fd, dimensions) catch |err| {
         const zio = io_mod.getIo();
         session.mutex.lockUncancelable(zio);
