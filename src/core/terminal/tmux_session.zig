@@ -959,6 +959,7 @@ pub fn runLauncher(
     process_provider: background_process_provider.Provider,
     raw_args: []const [*:0]const u8,
 ) !void {
+    if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
     if (comptime !supported()) return error.TerminalHostUnsupported;
     if (!isLauncherModeRaw(raw_args)) return error.InvalidTmuxLauncher;
     defer debug_trace.shutdown();
