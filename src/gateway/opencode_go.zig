@@ -226,6 +226,15 @@ fn buildResponsesBody(alloc: Allocator, request: stream_provider.BuildRequest) !
             try w.writeAll(",\"content\":");
             try writeJsonString(w, msg.content orelse "");
             try w.writeByte('}');
+            if (msg.role == .assistant) for (msg.tool_calls) |call| {
+                try w.writeAll(",{\"type\":\"function_call\",\"call_id\":");
+                try writeJsonString(w, call.id);
+                try w.writeAll(",\"name\":");
+                try writeJsonString(w, call.name);
+                try w.writeAll(",\"arguments\":");
+                try writeJsonString(w, call.arguments_json);
+                try w.writeByte('}');
+            };
         }
     }
     try w.writeAll("] ,\"stream\":true,\"store\":false");
@@ -631,4 +640,19 @@ test "Go route request bodies use their native token fields" {
     defer std.testing.allocator.free(messages);
     try std.testing.expect(std.mem.indexOf(u8, messages, "\"messages\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, messages, "\"max_tokens\":123") != null);
+
+    var continuation = request;
+    continuation.messages = &[_]types.ChatMessage{.{
+        .role = .assistant,
+        .content = "",
+        .tool_calls = &[_]types.ToolCall{.{
+            .id = "fc_1",
+            .name = "list_dir",
+            .arguments_json = "{\"path\":\".\"}",
+        }},
+    }};
+    const continuation_body = try buildRequest(null, std.testing.allocator, continuation);
+    defer std.testing.allocator.free(continuation_body);
+    try std.testing.expect(std.mem.indexOf(u8, continuation_body, "\"type\":\"function_call\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, continuation_body, "\"call_id\":\"fc_1\"") != null);
 }
