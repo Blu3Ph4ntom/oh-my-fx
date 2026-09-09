@@ -1430,7 +1430,6 @@ fn verifyEndpointPermissions(host_dir: *io_mod.VerifiedDir) !void {
         // kind by fileStatWindows. The successful AFD bind is the socket and
         // ownership proof; the endpoint parent is already a verified private
         // directory.
-        _ = host_dir;
         return;
     }
     const stat = try host_dir.dir.statFile(
