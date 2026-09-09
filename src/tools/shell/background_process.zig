@@ -86,7 +86,11 @@ pub fn runWrapper(alloc: Allocator) !u8 {
     }
     if (command.items.len == 0) return error.InvalidCommand;
 
-    var invocation = try shell_resolver.resolve(null, .user_login);
+    const configured_shell: ?[]const u8 = if (comptime builtin.os.tag == .windows)
+        "C:\\Windows\\System32\\cmd.exe"
+    else
+        null;
+    var invocation = try shell_resolver.resolve(configured_shell, .user_login);
     invocation.setCommand(command.items);
     var child = try std.process.spawn(zio, .{
         .argv = invocation.argv(),
