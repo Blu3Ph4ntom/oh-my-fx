@@ -57,6 +57,10 @@ if ($process.ExitCode -ne 0) {
   throw "terminal host smoke exited with code $($process.ExitCode) (stdout=$stdout stderr=$stderr trace=$traceTail)"
 }
 if ($stdout -notmatch '"kind":"completed"') {
+  if (Test-Path -LiteralPath $trace) {
+    Write-Output "terminal host smoke trace:"
+    Get-Content -LiteralPath $trace
+  }
   throw "terminal host smoke did not complete a start request: $stdout (trace=$traceTail)"
 }
 if ($stdout -match "unsupported_host|TerminalHostUnsupported|panic") {

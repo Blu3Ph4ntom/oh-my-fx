@@ -38,7 +38,7 @@ pub fn main(
 ) callconv(.c) c_int {
     mainInner(argc, argv, environ) catch |err| {
         if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
-            std.debug.print(
+            writeDiagnostic(
                 "terminal client fixture failed: {s}\n",
                 .{@errorName(err)},
             );
@@ -76,13 +76,6 @@ fn mainInner(
     )[0..@intCast(argc)];
     const raw_environ: io_mod.RawEnviron = @ptrCast(environ);
     io_mod.setRawEnviron(raw_environ);
-    if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
-        std.debug.print("fixture argc={d}", .{argc});
-        for (args) |arg| {
-            std.debug.print(" arg={s}", .{std.mem.sliceTo(arg, 0)});
-        }
-        std.debug.print("\n", .{});
-    }
     var threaded = std.Io.Threaded.init(process_allocator, .{
         .argv0 = .init(argsFromRaw(args)),
         .environ = .{ .block = environBlockFromRaw(raw_environ) },
@@ -91,6 +84,19 @@ fn mainInner(
     io_mod.setIo(threaded.io());
     defer debug_trace.shutdown();
     debug_trace.configureFromEnv(process_allocator, ".");
+    if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
+        var output: std.Io.Writer.Allocating = .init(process_allocator);
+        defer output.deinit();
+        try output.writer.print("fixture argc={d}", .{argc});
+        for (args) |arg| {
+            try output.writer.print(" arg={s}", .{std.mem.sliceTo(arg, 0)});
+        }
+        try output.writer.writeByte('\n');
+        try std.Io.File.stderr().writeStreamingAll(
+            io_mod.getIo(),
+            output.written(),
+        );
+    }
     if (native_session.isControlModeRaw(args)) {
         return native_session.runControlMarker(args);
     }
@@ -99,7 +105,7 @@ fn mainInner(
     }
     if (host.isInternalModeRaw(args)) {
         if (io_mod.getenv("FX_TERMINAL_HOST_DIAGNOSTIC") != null) {
-            std.debug.print("fixture entering terminal host\n", .{});
+            writeDiagnostic("fixture entering terminal host\n", .{});
         }
         var failure_provider = CaptureFailureProvider{
             .delegate = background_process.provider,
@@ -125,6 +131,13 @@ fn mainInner(
         return sandbox.runForegroundSessionBootstrap(cli_args);
     }
     try runFixture(process_allocator, background_process.provider);
+}
+
+fn writeDiagnostic(comptime fmt: []const u8, args: anytype) void {
+    var output: std.Io.Writer.Allocating = .init(process_allocator);
+    defer output.deinit();
+    output.writer.print(fmt, args) catch return;
+    std.Io.File.stderr().writeStreamingAll(io_mod.getIo(), output.written()) catch {};
 }
 
 const CaptureFailureProvider = struct {
