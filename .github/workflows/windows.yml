@@ -117,6 +117,14 @@ jobs:
             -TimeoutSeconds 15
           if ($LASTEXITCODE -ne 0) { throw "omfx ConPTY smoke failed" }
 
+      - name: Smoke test native Windows background process
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          & pwsh -NoProfile -File ./scripts/windows/omfx-background-smoke.ps1 `
+            -Executable ./zig-out/bin/omfx.exe
+          if ($LASTEXITCODE -ne 0) { throw "omfx background smoke failed" }
+
       - name: Smoke test OpenCode Go with omfx.exe
         shell: pwsh
         timeout-minutes: 10

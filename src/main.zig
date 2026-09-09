@@ -2839,6 +2839,21 @@ fn mainC(c_argc: c_int, c_argv: [*][*:0]c_char, c_envp: [*:null]?[*:0]c_char) !v
     const raw_env: RawEnviron = @ptrCast(c_envp);
 
     if (comptime terminal_host.isSupported()) {
+        if (background_process.isWrapperModeRaw(raw_args)) {
+            io_mod.setRawEnviron(raw_env);
+            const process_args = argsFromRaw(raw_args);
+            var threaded = std.Io.Threaded.init(processAllocator(), .{
+                .argv0 = .init(process_args),
+                .environ = .{ .block = environBlockFromRaw(raw_env) },
+            });
+            io_mod.setIo(threaded.io());
+            const exit_code = background_process.runWrapper(
+                processAllocator(),
+            ) catch {
+                std.process.exit(125);
+            };
+            std.process.exit(exit_code);
+        }
         if (terminal_tmux_session.isCaptureModeRaw(raw_args)) {
             io_mod.setRawEnviron(raw_env);
             const process_args = argsFromRaw(raw_args);

@@ -7,6 +7,8 @@ const background_process_provider = @import(
 const background_launch_output = @import(
     "../../core/background/background_launch_output.zig",
 );
+const shell_resolver = @import("../../core/terminal/shell_resolver.zig");
+const terminal_contracts = @import("../../core/terminal/contracts.zig");
 const debug_trace = @import("../../core/shared/debug_trace.zig");
 const host = @import("../../core/hosts/host.zig");
 const process_supervisor = @import(
@@ -18,6 +20,7 @@ const Allocator = std.mem.Allocator;
 const background_exit_marker = background_process_provider.exit_marker;
 const background_release_byte: u8 = 0x06;
 const background_ready_byte: u8 = 'R';
+pub const wrapper_mode = "--fx-internal-background-wrapper";
 const blocked_background_wrapper_command = std.fmt.comptimePrint(
     "printf '{c}' >&2\n" ++
         "release=\n" ++
@@ -43,6 +46,86 @@ pub const provider = background_process_provider.Provider{
     .signal_process_fn = signalProcess,
 };
 
+pub fn isWrapperModeRaw(raw_args: []const [*:0]const u8) bool {
+    if (comptime builtin.os.tag != .windows) return false;
+    return raw_args.len == 2 and std.mem.eql(
+        u8,
+        std.mem.span(raw_args[1]),
+        wrapper_mode,
+    );
+}
+
+pub fn runWrapper(alloc: Allocator) !u8 {
+    if (comptime builtin.os.tag != .windows) return error.Unsupported;
+
+    const zio = io_mod.getIo();
+    const stdin = std.Io.File.stdin();
+    const stdout = std.Io.File.stdout();
+    const stderr = std.Io.File.stderr();
+    try stderr.writeStreamingAll(zio, &.{background_ready_byte});
+
+    var release: [2]u8 = undefined;
+    try readWrapperExact(stdin, &release);
+    if (!std.mem.eql(u8, &release, &.{ background_release_byte, '\n' })) {
+        return error.InvalidRelease;
+    }
+
+    var command: std.ArrayList(u8) = .empty;
+    defer command.deinit(alloc);
+    var buffer: [4096]u8 = undefined;
+    while (true) {
+        const count = stdin.readStreaming(zio, &.{&buffer}) catch |err| switch (err) {
+            error.EndOfStream => 0,
+            else => return err,
+        };
+        if (count == 0) break;
+        if (command.items.len > terminal_contracts.max_command_bytes - count) {
+            return error.CommandTooLong;
+        }
+        try command.appendSlice(alloc, buffer[0..count]);
+    }
+    if (command.items.len == 0) return error.InvalidCommand;
+
+    var invocation = try shell_resolver.resolve(null, .user_login);
+    invocation.setCommand(command.items);
+    var child = try std.process.spawn(zio, .{
+        .argv = invocation.argv(),
+        .stdin = .ignore,
+        .stdout = .{ .file = stdout },
+        .stderr = .{ .file = stdout },
+        .create_no_window = true,
+    });
+    const term = try child.wait(zio);
+    const exit_code: u8 = switch (term) {
+        .exited => |code| code,
+        .signal, .stopped, .unknown => 1,
+    };
+
+    var marker_buffer: [64]u8 = undefined;
+    const marker = try std.fmt.bufPrint(
+        &marker_buffer,
+        "\n{s}{d}\n",
+        .{ background_exit_marker, exit_code },
+    );
+    try stdout.writeStreamingAll(zio, marker);
+    return exit_code;
+}
+
+fn readWrapperExact(file: std.Io.File, buffer: []u8) !void {
+    var offset: usize = 0;
+    while (offset < buffer.len) {
+        const count = file.readStreaming(
+            io_mod.getIo(),
+            &.{buffer[offset..]},
+        ) catch |err| switch (err) {
+            error.EndOfStream => return error.EndOfStream,
+            else => return err,
+        };
+        if (count == 0) return error.EndOfStream;
+        offset += count;
+    }
+}
+
 const PreparedState = struct {
     alloc: Allocator,
     handshake: SpawnedBackgroundHandshake,
@@ -60,37 +143,7 @@ fn spawnPrepared(
 ) background_process_provider.ProviderError!background_process_provider.PreparedProcess {
     if (!host.current().background_processes) return error.Unsupported;
 
-    const direct_argv = [_][]const u8{
-        "sh",
-        "-lc",
-        blocked_background_wrapper_command,
-        "fx-background",
-    };
-    var sandbox_argv: [7][]const u8 = undefined;
-    const argv: []const []const u8 = switch (request.isolation) {
-        .none => &direct_argv,
-        .macos_profile => |profile_path| blk: {
-            if (comptime builtin.os.tag != .macos) return error.Unsupported;
-            sandbox_argv = .{
-                "/usr/bin/sandbox-exec",
-                "-f",
-                profile_path,
-                "sh",
-                "-lc",
-                blocked_background_wrapper_command,
-                "fx-background",
-            };
-            break :blk &sandbox_argv;
-        },
-    };
-    var child = try std.process.spawn(io_mod.getIo(), .{
-        .argv = argv,
-        .cwd = .{ .path = request.cwd },
-        .stdin = .pipe,
-        .stdout = .{ .file = background_launch_output.Output
-            .childStdioFileForProvider(request.output) },
-        .stderr = .pipe,
-    });
+    var child = try spawnBlockedChild(alloc, request);
     var child_owned = true;
     errdefer if (child_owned) {
         if (child.stdin) |stdin| stdin.close(io_mod.getIo());
@@ -154,6 +207,65 @@ fn spawnPrepared(
         .detach_reaper_fn = detachPreparedReaper,
         .release_fn = releasePrepared,
     };
+}
+
+fn spawnBlockedChild(
+    alloc: Allocator,
+    request: background_process_provider.SpawnRequest,
+) background_process_provider.ProviderError!std.process.Child {
+    const output_file = background_launch_output.Output
+        .childStdioFileForProvider(request.output);
+
+    if (comptime builtin.os.tag == .windows) {
+        switch (request.isolation) {
+            .none => {},
+            .macos_profile => return error.Unsupported,
+        }
+        var executable = std.process.executablePathAlloc(
+            io_mod.getIo(),
+            alloc,
+        ) catch return error.SpawnFailed;
+        defer alloc.free(executable);
+        const argv = [_][]const u8{ executable, wrapper_mode };
+        return std.process.spawn(io_mod.getIo(), .{
+            .argv = &argv,
+            .cwd = .{ .path = request.cwd },
+            .stdin = .pipe,
+            .stdout = .{ .file = output_file },
+            .stderr = .pipe,
+        });
+    }
+
+    const direct_argv = [_][]const u8{
+        "sh",
+        "-lc",
+        blocked_background_wrapper_command,
+        "fx-background",
+    };
+    var sandbox_argv: [7][]const u8 = undefined;
+    const argv: []const []const u8 = switch (request.isolation) {
+        .none => &direct_argv,
+        .macos_profile => |profile_path| blk: {
+            if (comptime builtin.os.tag != .macos) return error.Unsupported;
+            sandbox_argv = .{
+                "/usr/bin/sandbox-exec",
+                "-f",
+                profile_path,
+                "sh",
+                "-lc",
+                blocked_background_wrapper_command,
+                "fx-background",
+            };
+            break :blk &sandbox_argv;
+        },
+    };
+    return std.process.spawn(io_mod.getIo(), .{
+        .argv = argv,
+        .cwd = .{ .path = request.cwd },
+        .stdin = .pipe,
+        .stdout = .{ .file = output_file },
+        .stderr = .pipe,
+    });
 }
 
 fn cleanupFailedHandshake(
@@ -293,6 +405,9 @@ extern "kernel32" fn GetProcessTimes(
     kernel_time: *WindowsFileTime,
     user_time: *WindowsFileTime,
 ) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn GetProcessId(
+    process: std.os.windows.HANDLE,
+) callconv(.winapi) std.os.windows.DWORD;
 fn captureWindowsToken(
     pid: u32,
 ) !process_supervisor.ProcessInstanceToken {
@@ -527,7 +642,11 @@ fn captureMacOSToken(
 const Pid = if (builtin.os.tag == .windows) u32 else std.posix.pid_t;
 
 fn formatChildPid(alloc: Allocator, id: std.process.Child.Id) ![]u8 {
-    if (comptime builtin.os.tag == .windows) return std.fmt.allocPrint(alloc, "{d}", .{@intFromPtr(id)});
+    if (comptime builtin.os.tag == .windows) {
+        const pid = GetProcessId(id);
+        if (pid == 0) return error.ProcessIdentityUnavailable;
+        return std.fmt.allocPrint(alloc, "{d}", .{pid});
+    }
     return std.fmt.allocPrint(alloc, "{d}", .{id});
 }
 
