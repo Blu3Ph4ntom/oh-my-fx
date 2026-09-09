@@ -816,6 +816,7 @@ const SupportedRegistry = struct {
         self: *SupportedRegistry,
         durable: terminal_store.DurableSession,
     ) !void {
+        if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
         const session = try self.alloc.create(Session);
         var initialized = false;
         defer if (!initialized) self.alloc.destroy(session);
@@ -3535,6 +3536,7 @@ const Session = struct {
         durable_root: []const u8,
         transport_root: []const u8,
     ) !bool {
+        if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
         const executable = try std.process.executablePathAlloc(
             io_mod.getIo(),
             self.alloc,
