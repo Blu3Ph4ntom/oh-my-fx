@@ -249,6 +249,7 @@ fn runCapabilityStartFixture(
     process_provider: background_process_provider.Provider,
 ) !void {
     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+    try ensureFixtureOwnerDirectory(alloc, home);
     const preparation = fixturePreparation(home);
     var prepared = try operation.prepareStartPersistence(alloc, preparation);
     defer prepared.deinit();
@@ -315,6 +316,18 @@ fn fixturePreparation(home: []const u8) operation.AuthorityPreparation {
     };
 }
 
+fn ensureFixtureOwnerDirectory(alloc: Allocator, home: []const u8) !void {
+    const sessions_path = try profile_paths.sessionsDir(alloc, home);
+    defer alloc.free(sessions_path);
+    var sessions = try io_mod.openOrCreateVerifiedPrivateDirAbsolute(sessions_path);
+    defer sessions.close();
+    var owner = try io_mod.openOrCreateVerifiedPrivateDir(
+        &sessions,
+        fixture_owner_session_id,
+    );
+    owner.close();
+}
+
 fn fixturePrincipal(home: []const u8) contracts.Principal {
     const input = fixturePreparation(home);
     return .{
@@ -344,6 +357,7 @@ fn runAuthorityStartFixture(
     process_provider: background_process_provider.Provider,
 ) !void {
     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+    try ensureFixtureOwnerDirectory(alloc, home);
     const compatibility_fixture = if (io_mod.getenv(
         "FX_TERMINAL_AUTHORITY_FIXTURE_COMPAT",
     )) |value|
