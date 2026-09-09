@@ -249,10 +249,21 @@ fn runCapabilityStartFixture(
     process_provider: background_process_provider.Provider,
 ) !void {
     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+    const preparation = fixturePreparation(home);
+    var prepared = try operation.prepareStartPersistence(alloc, preparation);
+    defer prepared.deinit();
+    const shell: contracts.ShellSpec = if (comptime builtin.os.tag == .windows)
+        .{ .executable = .{ .path = "C:\\Windows\\System32\\cmd.exe" } }
+    else
+        .user_login;
     var runtime = client.Runtime.init(process_provider);
     defer runtime.deinit();
     const correlation_id = contracts.CorrelationId{ .value = 1 };
-    try runtime.admit(alloc, correlation_id, .{ .start = .{ .cwd = home } });
+    try runtime.admit(alloc, correlation_id, .{ .start = .{
+        .cwd = home,
+        .shell = shell,
+        .persistence = prepared.view(),
+    } });
     var completion = try awaitCompletionFor(&runtime, correlation_id);
     defer completion.deinit();
     try writeCompletionJson(alloc, completion);
