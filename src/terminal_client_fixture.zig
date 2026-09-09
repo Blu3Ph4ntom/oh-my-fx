@@ -40,6 +40,23 @@ pub fn main(
     return 0;
 }
 
+fn argsFromRaw(raw_args: []const [*:0]const u8) std.process.Args {
+    if (comptime builtin.os.tag == .windows) {
+        return .{ .vector = &[_]u16{} };
+    }
+    return .{ .vector = raw_args };
+}
+
+fn environBlockFromRaw(raw_environ: io_mod.RawEnviron) std.process.Environ.Block {
+    if (comptime builtin.os.tag == .windows) {
+        _ = &raw_environ;
+        return .global;
+    }
+    var count: usize = 0;
+    while (raw_environ[count] != null) : (count += 1) {}
+    return .{ .slice = raw_environ[0..count :null] };
+}
+
 fn mainInner(
     argc: c_int,
     argv: [*][*:0]c_char,
@@ -51,13 +68,9 @@ fn mainInner(
     )[0..@intCast(argc)];
     const raw_environ: io_mod.RawEnviron = @ptrCast(environ);
     io_mod.setRawEnviron(raw_environ);
-    var environment_count: usize = 0;
-    while (raw_environ[environment_count] != null) : (environment_count += 1) {}
     var threaded = std.Io.Threaded.init(process_allocator, .{
-        .argv0 = .init(.{ .vector = args }),
-        .environ = .{ .block = .{
-            .slice = raw_environ[0..environment_count :null],
-        } },
+        .argv0 = .init(argsFromRaw(args)),
+        .environ = .{ .block = environBlockFromRaw(raw_environ) },
     });
     defer threaded.deinit();
     io_mod.setIo(threaded.io());

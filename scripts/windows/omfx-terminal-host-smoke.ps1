@@ -5,11 +5,11 @@ param(
 
 $repoRoot = (Get-Location).Path
 $fixture = Join-Path $env:RUNNER_TEMP "omfx-terminal-client-fixture.exe"
-$home = Join-Path $env:RUNNER_TEMP "omfx-terminal-host-smoke-home"
+$smokeHome = Join-Path $env:RUNNER_TEMP "omfx-terminal-host-smoke-home"
 
 Remove-Item -LiteralPath $fixture -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $home -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $home | Out-Null
+Remove-Item -LiteralPath $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
 
 & zig build-exe -ODebug -lc "-femit-bin=$fixture" ".\src\terminal_client_fixture.zig"
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $fixture)) {
@@ -22,8 +22,8 @@ $startInfo.WorkingDirectory = $repoRoot
 $startInfo.UseShellExecute = $false
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
-$startInfo.Environment["HOME"] = $home
-$startInfo.Environment["USERPROFILE"] = $home
+$startInfo.Environment["HOME"] = $smokeHome
+$startInfo.Environment["USERPROFILE"] = $smokeHome
 $startInfo.Environment["FX_TERMINAL_CAPABILITY_FIXTURE"] = "start"
 $startInfo.Environment["FX_TERMINAL_HOST_IDLE_MS"] = "500"
 $startInfo.Environment["FX_DISABLE_KEYCHAIN"] = "1"
