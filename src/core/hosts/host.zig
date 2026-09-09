@@ -245,7 +245,7 @@ pub fn terminalSupportForOs(os_tag: std.Target.Os.Tag) TerminalSupport {
 pub fn nativeForOs(os_tag: std.Target.Os.Tag) Capabilities {
     return .{
         .os_sandbox = os_tag == .macos,
-        .background_processes = os_tag != .windows and os_tag != .wasi,
+        .background_processes = os_tag != .wasi,
         .url_open = os_tag == .macos or os_tag == .linux or os_tag == .windows,
         .native_url_open = os_tag == .macos or os_tag == .windows,
         .terminal = terminalSupportForOs(os_tag),

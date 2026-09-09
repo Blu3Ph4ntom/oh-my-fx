@@ -54,6 +54,11 @@ fn nativeEndpointPathLimit(target: std.Target.Os.Tag) ?usize {
     return switch (target) {
         .macos => 104,
         .linux => 108,
+        // Windows 10's AF_UNIX implementation uses the sockaddr_un-sized
+        // path accepted by Zig's native Windows socket backend. Keep the
+        // endpoint comfortably below that boundary so the same host/client
+        // protocol works without a second IPC transport.
+        .windows => 108,
         else => null,
     };
 }
@@ -70,8 +75,7 @@ fn validateEndpointPathForTarget(
     target: std.Target.Os.Tag,
     path: []const u8,
 ) !void {
-    const limit = nativeEndpointPathLimit(target) orelse
-        return error.TerminalHostUnsupported;
+    const limit = nativeEndpointPathLimit(target) orelse return error.TerminalHostUnsupported;
     if (path.len >= limit) return error.NameTooLong;
 }
 
@@ -95,8 +99,6 @@ fn resolveEndpointSelection(
     home: []const u8,
     uid: std.c.uid_t,
 ) !EndpointSelection {
-    const runtime_base = runtimeBase(target) orelse
-        return error.TerminalHostUnsupported;
     const profile_root = try profile_paths.rootDir(alloc, home);
     defer alloc.free(profile_root);
     const authority_root = try std.fs.path.join(alloc, &.{ profile_root, host_dir_name });
@@ -122,6 +124,7 @@ fn resolveEndpointSelection(
         },
     }
 
+    const runtime_base = runtimeBase(target) orelse return error.TerminalHostUnsupported;
     var hasher = std.crypto.hash.sha2.Sha256.init(.{});
     hasher.update(transport_hash_context);
     hasher.update(home);
@@ -377,7 +380,8 @@ pub fn run(alloc: Allocator, config: Config) !void {
 }
 
 fn runSupported(alloc: Allocator, config: Config) !void {
-    const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+    const home = io_mod.getenv("HOME") orelse
+        io_mod.getenv("USERPROFILE") orelse return error.HomeNotSet;
     var paths = try Paths.open(alloc, home);
     defer paths.deinit(alloc);
 
@@ -610,7 +614,9 @@ fn idleOwner(state: *HostState) void {
 }
 
 fn listenerReady(handle: std.Io.net.Socket.Handle) !bool {
-    if (comptime builtin.os.tag == .windows) return true;
+    if (comptime builtin.os.tag == .windows) {
+        return io_mod.socketWaitReadable(handle, listener_poll_ms);
+    }
     var poll_fds = [_]std.posix.pollfd{.{
         .fd = handle,
         .events = std.posix.POLL.IN,
@@ -658,14 +664,18 @@ fn handleClient(
     registry: *native_session.Registry,
 ) !void {
     defer stream.close(io_mod.getIo());
-    if (!peerMatchesCurrentUser(stream.socket.handle)) {
-        return error.ForeignTerminalHostPeer;
-    }
-    const peer_process_owner = try peerProcessOwner(
-        alloc,
-        process_provider,
-        stream.socket.handle,
-    );
+    const peer_process_owner = if (comptime builtin.os.tag == .windows)
+        try windowsPeerProcessOwner(alloc, process_provider, stream.socket)
+    else blk: {
+        if (!peerMatchesCurrentUser(stream.socket.handle)) {
+            return error.ForeignTerminalHostPeer;
+        }
+        break :blk try peerProcessOwner(
+            alloc,
+            process_provider,
+            stream.socket.handle,
+        );
+    };
     applySocketTimeout(stream);
     var read_buffer: [4096]u8 = undefined;
     var reader = stream.reader(io_mod.getIo(), &read_buffer);
@@ -1250,6 +1260,43 @@ fn peerProcessOwner(
     return contracts.ProcessOwner.init(@intCast(pid), token.view());
 }
 
+fn windowsPeerProcessOwner(
+    alloc: Allocator,
+    process_provider: background_process_provider.Provider,
+    socket: std.Io.net.Socket,
+) !contracts.ProcessOwner {
+    var pid_bytes: [4]u8 = undefined;
+    receiveSocketExact(socket, &pid_bytes) catch |err| switch (err) {
+        error.Timeout => return error.TerminalPeerIdentityUnavailable,
+        else => return err,
+    };
+    const pid = std.mem.readInt(u32, &pid_bytes, .little);
+    if (pid == 0) return error.TerminalPeerIdentityUnavailable;
+    var pid_buffer: [32]u8 = undefined;
+    const pid_text = try std.fmt.bufPrint(&pid_buffer, "{d}", .{pid});
+    const token = try process_provider.captureToken(alloc, pid_text);
+    return contracts.ProcessOwner.init(@intCast(pid), token.view());
+}
+
+fn receiveSocketExact(
+    socket: std.Io.net.Socket,
+    destination: []u8,
+) !void {
+    var offset: usize = 0;
+    while (offset < destination.len) {
+        const incoming = try socket.receiveTimeout(
+            io_mod.getIo(),
+            destination[offset..],
+            .{ .duration = .{
+                .clock = .awake,
+                .raw = .fromMilliseconds(5_000),
+            } },
+        );
+        if (incoming.data.len == 0) return error.EndOfStream;
+        offset += incoming.data.len;
+    }
+}
+
 fn writeIdentity(
     alloc: Allocator,
     process_provider: background_process_provider.Provider,
@@ -1360,9 +1407,9 @@ fn verifyEndpointPermissions(host_dir: *io_mod.VerifiedDir) !void {
         endpoint_name,
         .{ .follow_symlinks = false },
     );
-    if (stat.kind != .unix_domain_socket or
-        !io_mod.permissionsIsPrivateFile(stat.permissions))
-    {
+    if (stat.kind != .unix_domain_socket) return error.PrivateEndpointPermissionsUnsupported;
+    if (comptime builtin.os.tag == .windows) return;
+    if (!io_mod.permissionsIsPrivateFile(stat.permissions)) {
         return error.PrivateEndpointPermissionsUnsupported;
     }
 }
@@ -1503,8 +1550,6 @@ test "host identity capture and reconciliation use the injected provider" {
 }
 
 test "endpoint paths honor the native sockaddr capacity" {
-    // Unix-socket paths do not exist on Windows.
-    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     if (!isSupported()) return error.SkipZigTest;
     const path_limit = comptime nativeEndpointPathLimit(builtin.os.tag).?;
     var maximum: [path_limit - 1]u8 = @splat('x');
@@ -1515,6 +1560,9 @@ test "endpoint paths honor the native sockaddr capacity" {
 
 test "endpoint selection preserves short homes and deterministically separates long homes" {
     if (!isSupported()) return error.SkipZigTest;
+    // Windows AF_UNIX endpoints stay in the profile authority directory;
+    // unlike POSIX, there is no /tmp fallback namespace to test here.
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
     const alloc = std.testing.allocator;
     const short_home = "/Users/terminal-short";
     var short = try resolveEndpointSelection(
@@ -1575,10 +1623,12 @@ test "endpoint selection preserves short homes and deterministically separates l
 
 test "endpoint selection allocation and unsupported targets fail closed" {
     const alloc = std.testing.allocator;
-    try std.testing.expectError(
-        error.TerminalHostUnsupported,
-        resolveEndpointSelection(alloc, .windows, "C:\\profile", 501),
-    );
+    if (comptime builtin.os.tag != .windows) {
+        try std.testing.expectError(
+            error.TerminalHostUnsupported,
+            resolveEndpointSelection(alloc, .windows, "C:\\profile", 501),
+        );
+    }
 
     const long_home = "/profiles/" ++ "x" ** 160;
     var probe = std.testing.FailingAllocator.init(alloc, .{});

@@ -14,17 +14,24 @@ pub const ResolveError = error{
 pub const Profile = command_environment.Profile;
 pub const Environment = command_environment.Environment;
 
-const ShellKind = enum { bash, zsh };
+const ShellKind = enum { bash, zsh, cmd };
 
 fn shellKind(path: []const u8) ?ShellKind {
     const basename = std.fs.path.basename(path);
-    if (std.mem.eql(u8, basename, "bash")) return .bash;
-    if (std.mem.eql(u8, basename, "zsh")) return .zsh;
+    if (std.ascii.eqlIgnoreCase(basename, "bash")) return .bash;
+    if (std.ascii.eqlIgnoreCase(basename, "zsh")) return .zsh;
+    if (std.ascii.eqlIgnoreCase(basename, "cmd.exe") or
+        std.ascii.eqlIgnoreCase(basename, "cmd")) return .cmd;
     return null;
 }
 
 fn fallbackLoginShell() []const u8 {
-    return if (comptime builtin.os.tag == .macos) "/bin/zsh" else "/bin/bash";
+    return if (comptime builtin.os.tag == .windows)
+        "C:\\Windows\\System32\\cmd.exe"
+    else if (comptime builtin.os.tag == .macos)
+        "/bin/zsh"
+    else
+        "/bin/bash";
 }
 
 fn supportedLoginShell(configured_login_shell: ?[]const u8) ResolveError![]const u8 {
@@ -36,6 +43,7 @@ fn supportedLoginShell(configured_login_shell: ?[]const u8) ResolveError![]const
 
 pub const Invocation = struct {
     path: []const u8,
+    command_flag: []const u8 = "-c",
     values: [6][]const u8 = @splat(""),
     len: usize = 0,
 
@@ -49,7 +57,7 @@ pub const Invocation = struct {
     }
 
     pub fn setCommand(self: *Invocation, command: []const u8) void {
-        self.append("-c");
+        self.append(self.command_flag);
         self.append(command);
     }
 };
@@ -78,7 +86,10 @@ pub fn resolve(
 
     const kind = shellKind(selection.path) orelse return error.UnsupportedShell;
 
-    var result = Invocation{ .path = selection.path };
+    var result = Invocation{
+        .path = selection.path,
+        .command_flag = if (kind == .cmd) "/c" else "-c",
+    };
     result.append(selection.path);
     switch (kind) {
         .bash => {
@@ -98,6 +109,7 @@ pub fn resolve(
             }
             result.append("-i");
         },
+        .cmd => result.append("/d"),
     }
     return result;
 }
@@ -207,8 +219,9 @@ pub fn formatInvocationCommand(
 
 fn removeInteractiveFlag(invocation: *Invocation) void {
     std.debug.assert(invocation.len > 0);
-    std.debug.assert(std.mem.eql(u8, invocation.values[invocation.len - 1], "-i"));
-    invocation.len -= 1;
+    if (std.mem.eql(u8, invocation.values[invocation.len - 1], "-i")) {
+        invocation.len -= 1;
+    }
 }
 
 pub fn buildBootstrap(

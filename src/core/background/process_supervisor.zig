@@ -54,6 +54,12 @@ pub const ProcessInstanceToken = struct {
             {
                 return error.InvalidProcessInstanceToken;
             }
+        } else if (std.mem.eql(u8, platform, "windows")) {
+            const creation_time = parts.next() orelse
+                return error.InvalidProcessInstanceToken;
+            if (parts.next() != null or !isCanonicalDecimal(creation_time)) {
+                return error.InvalidProcessInstanceToken;
+            }
         } else {
             return error.InvalidProcessInstanceToken;
         }
@@ -1018,6 +1024,13 @@ test "process instance tokens are canonical and require exact match" {
         ProcessInstanceToken.parse(
             "linux:00112233445566778899AABBCCDDEEFF:12345",
         ),
+    );
+    const windows = try ProcessInstanceToken.parse(
+        "windows:00000000000000000000000000000000:12345",
+    );
+    try std.testing.expectEqualStrings(
+        "windows:00000000000000000000000000000000:12345",
+        windows.view(),
     );
 }
 

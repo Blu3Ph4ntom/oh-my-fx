@@ -273,8 +273,62 @@ fn captureToken(
             error.ProcessNotFound => error.ProcessNotFound,
             else => error.ProcessIdentityUnavailable,
         },
+        .windows => captureWindowsToken(pid) catch |err| switch (err) {
+            error.ProcessNotFound => error.ProcessNotFound,
+            else => error.ProcessIdentityUnavailable,
+        },
         else => error.ProcessIdentityUnsupported,
     };
+}
+
+const WindowsFileTime = extern struct {
+    low: std.os.windows.DWORD,
+    high: std.os.windows.DWORD,
+};
+
+extern "kernel32" fn OpenProcess(
+    desired_access: std.os.windows.DWORD,
+    inherit_handle: std.os.windows.BOOL,
+    process_id: std.os.windows.DWORD,
+) callconv(.winapi) ?std.os.windows.HANDLE;
+extern "kernel32" fn GetProcessTimes(
+    process: std.os.windows.HANDLE,
+    creation: *WindowsFileTime,
+    exit_time: *WindowsFileTime,
+    kernel_time: *WindowsFileTime,
+    user_time: *WindowsFileTime,
+) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn CloseHandle(
+    handle: std.os.windows.HANDLE,
+) callconv(.winapi) std.os.windows.BOOL;
+
+fn captureWindowsToken(
+    pid: u32,
+) !process_supervisor.ProcessInstanceToken {
+    if (comptime builtin.os.tag != .windows) {
+        _ = pid;
+        return error.ProcessIdentityUnsupported;
+    }
+    const process = OpenProcess(0x1000, .FALSE, pid) orelse
+        return error.ProcessNotFound;
+    defer _ = CloseHandle(process);
+    var creation: WindowsFileTime = undefined;
+    var ignored: WindowsFileTime = undefined;
+    if (GetProcessTimes(
+        process,
+        &creation,
+        &ignored,
+        &ignored,
+        &ignored,
+    ) == .FALSE) return error.ProcessIdentityUnavailable;
+    const creation_time = (@as(u64, creation.high) << 32) | creation.low;
+    var token_buffer: [128]u8 = undefined;
+    const token_text = try std.fmt.bufPrint(
+        &token_buffer,
+        "windows:00000000000000000000000000000000:{d}",
+        .{creation_time},
+    );
+    return process_supervisor.ProcessInstanceToken.parse(token_text);
 }
 
 fn matchToken(

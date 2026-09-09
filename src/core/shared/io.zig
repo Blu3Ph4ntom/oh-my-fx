@@ -537,10 +537,9 @@ pub fn currentUid() u32 {
     return std.c.getuid();
 }
 
-/// Numeric current-process id for filenames and logs. `std.c.getpid` is a
-/// process HANDLE on Windows, not a number, so its address value is used.
+/// Numeric current-process id for filenames and logs.
 pub fn currentProcessId() u64 {
-    if (comptime is_windows) return @intCast(@intFromPtr(std.c.getpid()));
+    if (comptime is_windows) return @intCast(std.os.windows.GetCurrentProcessId());
     return @intCast(std.c.getpid());
 }
 

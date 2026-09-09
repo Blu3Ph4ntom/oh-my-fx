@@ -25,6 +25,10 @@ const io_mod = @import("../shared/io.zig");
 const debug_trace = @import("../shared/debug_trace.zig");
 const types = @import("../shared/types.zig");
 const workspace_pathing = @import("../workspace/pathing.zig");
+const windows_conpty = if (builtin.os.tag == .windows)
+    @import("windows_conpty.zig")
+else
+    @import("windows_conpty_stub.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -3205,6 +3209,7 @@ const Session = struct {
     shell_ready_seen: bool = false,
     start_failure: ?contracts.StructuredErrorCode = null,
     master_fd: ?std.posix.fd_t = null,
+    windows_backend: ?windows_conpty.Pty = null,
     tmux_backend: ?tmux_session.Backend = null,
     tmux_capture: ?std.Io.net.Stream = null,
     tmux_lifecycle_index: usize = 0,
@@ -3751,8 +3756,9 @@ const Session = struct {
     }
 
     fn launchNative(self: *Session, request: contracts.StartRequest) !void {
-        // Native PTY sessions are macOS/Linux-only (see host capabilities).
-        if (comptime builtin.os.tag == .windows) return error.TerminalHostUnsupported;
+        if (comptime builtin.os.tag == .windows) {
+            return self.launchWindowsNative(request);
+        }
         var invocation = try shell_resolver.resolve(
             null,
             pinnedShell(request.shell, self.shell),
@@ -3899,12 +3905,59 @@ const Session = struct {
         self.child_released = true;
     }
 
+    fn launchWindowsNative(self: *Session, request: contracts.StartRequest) !void {
+        var invocation = try shell_resolver.resolve(
+            null,
+            pinnedShell(request.shell, self.shell),
+        );
+        if (request.command) |command| invocation.setCommand(command);
+
+        const backend = try windows_conpty.Pty.spawn(
+            self.alloc,
+            invocation.argv(),
+            request.cwd,
+            self.dimensions,
+        );
+        self.windows_backend = backend;
+
+        // ConPTY has no shell marker channel. The process handle and the
+        // direct command line are the startup boundary on Windows.
+        self.commitStartupBoundary();
+        self.publishStarted(backend.pid());
+        if (self.lifecycle != .running) return error.ProcessIdentityUnavailable;
+
+        self.output_active.store(true, .release);
+        self.output_thread = std.Thread.spawn(.{}, outputMain, .{self}) catch |err| {
+            self.output_active.store(false, .release);
+            return err;
+        };
+        self.backend_started = true;
+        self.control_thread = std.Thread.spawn(.{}, windowsControlMain, .{self}) catch |err| {
+            self.backend_started = false;
+            backend.kill();
+            if (self.output_thread) |thread| thread.join();
+            self.output_thread = null;
+            return err;
+        };
+        if (self.monitor_owner) |owner| try owner.arm();
+        self.child_released = true;
+    }
+
     fn deinit(self: *Session) void {
         self.shutdown();
         if (self.backend_started) {
             self.finalizeBackend();
         } else {
+            if (comptime builtin.os.tag == .windows) {
+                if (self.windows_backend) |backend| {
+                    if (!self.close_committed) backend.kill();
+                }
+            }
             if (self.output_thread) |thread| thread.join();
+            if (self.windows_backend) |backend| {
+                backend.close();
+                self.windows_backend = null;
+            }
             if (self.master_fd) |fd| closeFd(fd);
             if (self.tmux_capture) |stream| stream.close(io_mod.getIo());
             if (self.control_file) |file| file.close(io_mod.getIo());
@@ -4324,6 +4377,10 @@ const Session = struct {
             }
         }
         const master_fd = if (self.input_quiesced) null else self.master_fd;
+        const windows_backend = if (comptime builtin.os.tag == .windows)
+            if (self.input_quiesced) null else self.windows_backend
+        else
+            null;
         self.mutex.unlock(zio);
 
         if (self.monitor_owner) |owner| owner.onOutput(
@@ -4336,6 +4393,18 @@ const Session = struct {
             defer result.deinit(self.alloc);
             if (self.durable.record.backend == .tmux) {
                 std.debug.assert(result.replies.items.len == 0);
+            } else if (comptime builtin.os.tag == .windows) {
+                const backend = windows_backend orelse return;
+                for (result.replies.items) |reply| {
+                    backend.writeAll(reply.bytes) catch |err| {
+                        debug_trace.logf(
+                            "terminal_host",
+                            "terminal protocol reply failed id={s} err={s}",
+                            .{ self.id, @errorName(err) },
+                        );
+                        return;
+                    };
+                }
             } else {
                 const fd = master_fd orelse return;
                 for (result.replies.items) |reply| {
@@ -5154,8 +5223,14 @@ fn writeAction(
     const running = session.lifecycle == .running;
     const master_fd = if (session.input_quiesced) null else session.master_fd;
     const tmux_ready = !session.input_quiesced and session.tmux_backend != null;
+    const windows_backend = if (comptime builtin.os.tag == .windows)
+        if (session.input_quiesced) null else session.windows_backend
+    else
+        null;
     session.mutex.unlock(zio);
-    if (!running or (master_fd == null and !tmux_ready)) {
+    if (!running or
+        (master_fd == null and !tmux_ready and windows_backend == null))
+    {
         return error.InvalidLifecycle;
     }
 
@@ -5165,6 +5240,8 @@ fn writeAction(
             .text, .keys, .controls => false,
         };
         try backend.write(encoded.items, paste);
+    } else if (comptime builtin.os.tag == .windows) {
+        try windows_backend.?.writeAll(encoded.items);
     } else {
         try writeAllFd(master_fd.?, encoded.items, true);
     }
@@ -5294,9 +5371,15 @@ fn resizeAction(
     defer screen_text.deinit(session.alloc);
     session.mutex.lockUncancelable(zio);
     const fd = session.master_fd;
+    const windows_backend = if (comptime builtin.os.tag == .windows)
+        session.windows_backend
+    else
+        null;
     const tmux_ready = session.tmux_backend != null;
     const valid = session.lifecycle == .starting or session.lifecycle == .running;
-    if (!valid or (fd == null and !tmux_ready)) {
+    if (!valid or
+        (fd == null and windows_backend == null and !tmux_ready))
+    {
         session.mutex.unlock(zio);
         return error.InvalidLifecycle;
     }
@@ -5359,6 +5442,15 @@ fn resizeAction(
             );
             return err;
         };
+    } else if (comptime builtin.os.tag == .windows) {
+        windows_backend.?.resize(request.dimensions) catch |err| {
+            rollbackWindowsResize(
+                session,
+                previous_dimensions,
+                previous_payload,
+            );
+            return err;
+        };
     } else {
         resizeFd(fd.?, request.dimensions) catch |err| {
             rollbackDurableResize(
@@ -5369,18 +5461,14 @@ fn resizeAction(
             );
             return err;
         };
-        if (comptime builtin.os.tag == .windows) {
-            return error.TerminalHostUnsupported;
-        } else {
-            if (!session.signalNative(std.c.SIG.WINCH)) {
-                rollbackDurableResize(
-                    session,
-                    fd.?,
-                    previous_dimensions,
-                    previous_payload,
-                );
-                return error.ProcessIdentityUnavailable;
-            }
+        if (!session.signalNative(std.c.SIG.WINCH)) {
+            rollbackDurableResize(
+                session,
+                fd.?,
+                previous_dimensions,
+                previous_payload,
+            );
+            return error.ProcessIdentityUnavailable;
         }
     }
     if (session.tmux_backend != null and tmuxResizeCheckpointFailure()) {
@@ -5396,6 +5484,12 @@ fn resizeAction(
         session.mutex.unlock(zio);
         if (session.tmux_backend != null) {
             rollbackTmuxResize(
+                session,
+                previous_dimensions,
+                previous_payload,
+            );
+        } else if (comptime builtin.os.tag == .windows) {
+            rollbackWindowsResize(
                 session,
                 previous_dimensions,
                 previous_payload,
@@ -5476,6 +5570,30 @@ fn rollbackDurableResize(
         );
         return;
     }
+    restoreDurableResize(session, dimensions, checkpoint_payload);
+}
+
+fn rollbackWindowsResize(
+    session: *Session,
+    dimensions: contracts.Dimensions,
+    checkpoint_payload: []const u8,
+) void {
+    const backend = session.windows_backend orelse {
+        restoreDurableResize(session, dimensions, checkpoint_payload);
+        return;
+    };
+    backend.resize(dimensions) catch |err| {
+        const zio = io_mod.getIo();
+        session.mutex.lockUncancelable(zio);
+        session.screen_available = false;
+        session.mutex.unlock(zio);
+        debug_trace.logf(
+            "terminal_host",
+            "terminal resize rollback failed id={s} err={s}",
+            .{ session.id, @errorName(err) },
+        );
+        return;
+    };
     restoreDurableResize(session, dimensions, checkpoint_payload);
 }
 
@@ -5909,6 +6027,9 @@ fn readControlFile(file: std.Io.File) !ControlFrame {
 }
 
 fn outputMain(session: *Session) void {
+    if (comptime builtin.os.tag == .windows) {
+        return windowsOutputMain(session);
+    }
     defer {
         session.output_active.store(false, .release);
         if (session.command_boundary_requested.swap(false, .acq_rel)) {
@@ -5935,6 +6056,23 @@ fn outputMain(session: *Session) void {
             &buffer,
             control_poll_ms,
         ) catch break;
+    }
+}
+
+fn windowsOutputMain(session: *Session) void {
+    defer {
+        session.output_active.store(false, .release);
+        if (session.command_boundary_requested.swap(false, .acq_rel)) {
+            session.command_boundary_done.set(io_mod.getIo());
+        }
+        session.output_done.set(io_mod.getIo());
+    }
+    var buffer: [256 * 1024]u8 = undefined;
+    const backend = session.windows_backend orelse return;
+    while (true) {
+        const count = backend.read(&buffer) catch break;
+        if (count == 0) break;
+        session.appendOutput(buffer[0..count]);
     }
 }
 
@@ -6093,6 +6231,30 @@ fn controlMain(session: *Session) void {
     if (control_file) |file| file.close(zio);
     if (liveness_file) |file| file.close(zio);
     session.write_mutex.unlock(zio);
+}
+
+fn windowsControlMain(session: *Session) void {
+    defer {
+        session.backend_done.set(io_mod.getIo());
+        session.markNotLive();
+    }
+    const backend = session.windows_backend orelse {
+        session.markLost();
+        return;
+    };
+    const exit_code = backend.waitBlocking();
+    session.output_done.waitUncancelable(io_mod.getIo());
+    if (session.output_thread) |thread| {
+        thread.join();
+        session.output_thread = null;
+    }
+    maybeDelayForTest("FX_TERMINAL_TEST_BACKEND_CLEANUP_DELAY_MS");
+    session.setTerm(.{ .exited = @intCast(exit_code) });
+    const zio = io_mod.getIo();
+    session.mutex.lockUncancelable(zio);
+    if (session.windows_backend != null) session.windows_backend = null;
+    session.mutex.unlock(zio);
+    backend.close();
 }
 
 fn readOutputChunk(

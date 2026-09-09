@@ -765,7 +765,8 @@ fn connectAndHandshakeOnce(
     process_provider: background_process_provider.Provider,
 ) !Connected {
     if (!host.isSupported()) return error.TerminalHostUnsupported;
-    const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+    const home = io_mod.getenv("HOME") orelse
+        io_mod.getenv("USERPROFILE") orelse return error.HomeNotSet;
     var paths = try host.Paths.open(alloc, home);
     defer paths.deinit(alloc);
 
@@ -781,6 +782,17 @@ fn connectAndHandshakeOnce(
 
     var write_buffer: [4096]u8 = undefined;
     var writer = stream.writer(io_mod.getIo(), &write_buffer);
+    if (comptime builtin.os.tag == .windows) {
+        var pid_bytes: [4]u8 = undefined;
+        std.mem.writeInt(
+            u32,
+            &pid_bytes,
+            @intCast(io_mod.currentProcessId()),
+            .little,
+        );
+        try writer.interface.writeAll(&pid_bytes);
+        try writer.interface.flush();
+    }
     var hello_frame = try protocol.encodeFrame(
         alloc,
         contracts.compatibility_hello_revision,
