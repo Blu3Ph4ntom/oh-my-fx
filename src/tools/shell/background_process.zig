@@ -286,11 +286,6 @@ const WindowsFileTime = extern struct {
     high: std.os.windows.DWORD,
 };
 
-extern "kernel32" fn OpenProcess(
-    desired_access: std.os.windows.DWORD,
-    inherit_handle: std.os.windows.BOOL,
-    process_id: std.os.windows.DWORD,
-) callconv(.winapi) ?std.os.windows.HANDLE;
 extern "kernel32" fn GetProcessTimes(
     process: std.os.windows.HANDLE,
     creation: *WindowsFileTime,
@@ -298,10 +293,6 @@ extern "kernel32" fn GetProcessTimes(
     kernel_time: *WindowsFileTime,
     user_time: *WindowsFileTime,
 ) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn CloseHandle(
-    handle: std.os.windows.HANDLE,
-) callconv(.winapi) std.os.windows.BOOL;
-
 fn captureWindowsToken(
     pid: u32,
 ) !process_supervisor.ProcessInstanceToken {
