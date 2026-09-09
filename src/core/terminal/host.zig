@@ -322,7 +322,6 @@ fn directoryOwner(dir: std.Io.Dir) !std.c.uid_t {
         // current user's profile and access is enforced by the OS ACL, so the
         // portable uid placeholder from io_mod.currentUid() is the complete
         // ownership proof available to this backend.
-        _ = dir;
         return io_mod.currentUid();
     }
     return switch (builtin.os.tag) {
