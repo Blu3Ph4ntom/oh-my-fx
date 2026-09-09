@@ -390,7 +390,10 @@ pub fn streamCompletion(
 
     var finish_reason: ?types.ProviderFinishReason = null;
 
-    var sse_buffer: [32 * 1024]u8 = undefined;
+    // Responses/Messages can carry large tool schemas or accumulated tool
+    // arguments in a single SSE data line. Keep the line bounded, but large
+    // enough for the same 4 MiB provider payload limit used by catalog fetches.
+    var sse_buffer: [4 * 1024 * 1024]u8 = undefined;
     var reader = response.reader(&sse_buffer);
 
     while (true) {
