@@ -731,27 +731,30 @@ fn receiveCancellable(
         if (worker.cancelled.load(.acquire)) {
             return error.Cancelled;
         }
-        const incoming = if (comptime builtin.os.tag == .windows) blk: {
+        const incoming_len: usize = if (comptime builtin.os.tag == .windows) blk: {
             // Zig 0.16's Windows Io backend does not implement concurrent
-            // network receives. Poll the Winsock handle, then use the
-            // ordinary blocking receive after readiness is established.
+            // network receives. Poll the native AFD handle, then use the
+            // native stream read after readiness is established.
             if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 50)) {
                 continue;
             }
-            break :blk try socket.receive(io_mod.getIo(), destination[offset..]);
-        } else socket.receiveTimeout(
-            io_mod.getIo(),
-            destination[offset..],
-            .{ .duration = .{
-                .clock = .awake,
-                .raw = .fromMilliseconds(50),
-            } },
-        ) catch |err| switch (err) {
-            error.Timeout => continue,
-            else => return err,
+            break :blk try io_mod.socketReadStream(socket.handle, destination[offset..]);
+        } else blk: {
+            const incoming = socket.receiveTimeout(
+                io_mod.getIo(),
+                destination[offset..],
+                .{ .duration = .{
+                    .clock = .awake,
+                    .raw = .fromMilliseconds(50),
+                } },
+            ) catch |err| switch (err) {
+                error.Timeout => continue,
+                else => return err,
+            };
+            break :blk incoming.data.len;
         };
-        if (incoming.data.len == 0) return error.EndOfStream;
-        offset += incoming.data.len;
+        if (incoming_len == 0) return error.EndOfStream;
+        offset += incoming_len;
     }
 }
 
@@ -1045,37 +1048,40 @@ fn receiveBeforeDeadline(
         const remaining_ms = deadline_ms - io_mod.milliTimestamp();
         if (remaining_ms <= 0) return error.HostHandshakeTimeout;
         const poll_ms = @min(remaining_ms, 50);
-        const incoming = if (comptime builtin.os.tag == .windows) blk: {
+        const incoming_len: usize = if (comptime builtin.os.tag == .windows) blk: {
             // Timed net_receive is not available in Zig 0.16 on Windows;
-            // WSAPoll provides the same bounded handshake wait.
+            // Native AFD polling provides the same bounded handshake wait.
             if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), @intCast(poll_ms))) {
                 continue;
             }
-            break :blk try socket.receive(io_mod.getIo(), destination[offset..]);
-        } else socket.receiveTimeout(
-            io_mod.getIo(),
-            destination[offset..],
-            .{ .duration = .{
-                .clock = .awake,
-                .raw = .fromMilliseconds(poll_ms),
-            } },
-        ) catch |err| switch (err) {
-            error.Timeout => continue,
-            error.ConnectionResetByPeer => {
-                if (part == .header and offset == 0) {
-                    return error.HostClosedBeforeHandshake;
-                }
-                return error.TruncatedFrame;
-            },
-            else => return err,
+            break :blk try io_mod.socketReadStream(socket.handle, destination[offset..]);
+        } else blk: {
+            const incoming = socket.receiveTimeout(
+                io_mod.getIo(),
+                destination[offset..],
+                .{ .duration = .{
+                    .clock = .awake,
+                    .raw = .fromMilliseconds(poll_ms),
+                } },
+            ) catch |err| switch (err) {
+                error.Timeout => continue,
+                error.ConnectionResetByPeer => {
+                    if (part == .header and offset == 0) {
+                        return error.HostClosedBeforeHandshake;
+                    }
+                    return error.TruncatedFrame;
+                },
+                else => return err,
+            };
+            break :blk incoming.data.len;
         };
-        if (incoming.data.len == 0) {
+        if (incoming_len == 0) {
             if (part == .header and offset == 0) {
                 return error.HostClosedBeforeHandshake;
             }
             return error.TruncatedFrame;
         }
-        offset += incoming.data.len;
+        offset += incoming_len;
     }
 }
 

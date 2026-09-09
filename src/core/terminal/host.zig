@@ -1309,24 +1309,27 @@ fn receiveSocketExact(
 ) !void {
     var offset: usize = 0;
     while (offset < destination.len) {
-        const incoming = if (comptime builtin.os.tag == .windows) blk: {
+        const incoming_len: usize = if (comptime builtin.os.tag == .windows) blk: {
             // Zig 0.16's Windows Io backend does not implement concurrent
-            // timed network receives. Poll the Winsock handle first, then
-            // use the ordinary receive once data is ready.
+            // timed network receives. Poll the native AFD handle first, then
+            // use the native stream read once data is ready.
             if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 5_000)) {
                 return error.Timeout;
             }
-            break :blk try socket.receive(io_mod.getIo(), destination[offset..]);
-        } else try socket.receiveTimeout(
-            io_mod.getIo(),
-            destination[offset..],
-            .{ .duration = .{
-                .clock = .awake,
-                .raw = .fromMilliseconds(5_000),
-            } },
-        );
-        if (incoming.data.len == 0) return error.EndOfStream;
-        offset += incoming.data.len;
+            break :blk try io_mod.socketReadStream(socket.handle, destination[offset..]);
+        } else blk: {
+            const incoming = try socket.receiveTimeout(
+                io_mod.getIo(),
+                destination[offset..],
+                .{ .duration = .{
+                    .clock = .awake,
+                    .raw = .fromMilliseconds(5_000),
+                } },
+            );
+            break :blk incoming.data.len;
+        };
+        if (incoming_len == 0) return error.EndOfStream;
+        offset += incoming_len;
     }
 }
 

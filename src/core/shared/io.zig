@@ -746,6 +746,18 @@ pub fn socketWaitAccept(sock: usize, timeout_ms: i32) bool {
     return socketWaitForEvents(sock, timeout_ms, afd_poll_accept);
 }
 
+/// Reads from a connected Windows stream socket through the native stream
+/// backend. `std.Io.net.Socket.receive` is a datagram API and Zig 0.16 lowers
+/// it to AFD.RECEIVE_DATAGRAM, which is invalid for these AFD stream handles.
+pub fn socketReadStream(
+    socket: std.Io.net.Socket.Handle,
+    destination: []u8,
+) !usize {
+    if (comptime !is_windows) return error.Unsupported;
+    const io = getIo();
+    return io.vtable.netRead(io.userdata, socket, &.{destination});
+}
+
 fn socketWaitForEvents(
     sock: usize,
     timeout_ms: i32,
