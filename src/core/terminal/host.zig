@@ -383,7 +383,14 @@ const IdentityRecord = struct {
 
 pub fn run(alloc: Allocator, config: Config) !void {
     if (comptime !isSupported()) return error.TerminalHostUnsupported;
-    return runSupported(alloc, config);
+    return runSupported(alloc, config) catch |err| {
+        debug_trace.logf(
+            "terminal_host",
+            "host startup failed err={s}",
+            .{@errorName(err)},
+        );
+        return err;
+    };
 }
 
 fn runSupported(alloc: Allocator, config: Config) !void {

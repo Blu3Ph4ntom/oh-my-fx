@@ -946,7 +946,7 @@ fn launchHost(alloc: Allocator) !void {
     const executable = try std.process.executablePathAlloc(io_mod.getIo(), alloc);
     defer alloc.free(executable);
     const argv = [_][]const u8{ executable, host.internal_mode };
-    const child = try std.process.spawn(io_mod.getIo(), .{
+    const child = std.process.spawn(io_mod.getIo(), .{
         .argv = &argv,
         .stdin = .ignore,
         .stdout = .ignore,
@@ -955,7 +955,14 @@ fn launchHost(alloc: Allocator) !void {
             0
         else
             null,
-    });
+    }) catch |err| {
+        debug_trace.logf(
+            "terminal_client",
+            "host spawn failed err={s}",
+            .{@errorName(err)},
+        );
+        return err;
+    };
     var reaper = try std.Thread.spawn(.{}, reapChild, .{child});
     reaper.detach();
 }
