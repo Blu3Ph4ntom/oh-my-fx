@@ -221,7 +221,7 @@ fn spawnBlockedChild(
             .none => {},
             .macos_profile => return error.Unsupported,
         }
-        var executable = std.process.executablePathAlloc(
+        const executable = std.process.executablePathAlloc(
             io_mod.getIo(),
             alloc,
         ) catch return error.SpawnFailed;
