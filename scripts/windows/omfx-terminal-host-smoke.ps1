@@ -18,6 +18,80 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $fixture)) {
   throw "terminal client fixture build failed"
 }
 
+$endpoint = Join-Path $smokeHome ".fx\terminal-host\host.sock"
+$hostStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$hostStartInfo.FileName = (Resolve-Path -LiteralPath $Executable).Path
+$hostStartInfo.WorkingDirectory = $repoRoot
+$hostStartInfo.UseShellExecute = $false
+$hostStartInfo.RedirectStandardOutput = $true
+$hostStartInfo.RedirectStandardError = $true
+$hostStartInfo.Environment["HOME"] = $smokeHome
+$hostStartInfo.Environment["USERPROFILE"] = $smokeHome
+$hostStartInfo.Environment["FX_TERMINAL_HOST_IDLE_MS"] = "120_000"
+$hostStartInfo.Environment["FX_DISABLE_KEYCHAIN"] = "1"
+$hostStartInfo.Environment["FX_AUTO_UPGRADE"] = "0"
+$hostStartInfo.Environment["FX_TRACE_LOG"] = $trace
+$hostStartInfo.Environment["FX_TRACE_SCOPES"] = "terminal_host"
+$hostStartInfo.Environment["FX_TRACE_STDERR"] = "1"
+$hostStartInfo.Environment["FX_TERMINAL_HOST_DIAGNOSTIC"] = "1"
+[void]$hostStartInfo.ArgumentList.Add("--fx-internal-terminal-host")
+
+$hostProcess = [System.Diagnostics.Process]::new()
+$hostProcess.StartInfo = $hostStartInfo
+$hostStarted = $false
+$hostProbeError = $null
+$hostStdout = ""
+$hostStderr = ""
+try {
+  [void]$hostProcess.Start()
+  $hostStarted = $true
+  $hostStdoutTask = $hostProcess.StandardOutput.ReadToEndAsync()
+  $hostStderrTask = $hostProcess.StandardError.ReadToEndAsync()
+
+  $hostDeadline = (Get-Date).AddSeconds(20)
+  while ((Get-Date) -lt $hostDeadline -and -not (Test-Path -LiteralPath $endpoint)) {
+    if ($hostProcess.HasExited) { break }
+    Start-Sleep -Milliseconds 100
+  }
+  if (-not (Test-Path -LiteralPath $endpoint)) {
+    throw "host did not create endpoint for the native socket probe"
+  }
+
+  $probeSocket = [System.Net.Sockets.Socket]::new(
+    [System.Net.Sockets.AddressFamily]::Unix,
+    [System.Net.Sockets.SocketType]::Stream,
+    [System.Net.Sockets.ProtocolType]::Unspecified
+  )
+  try {
+    [void]$probeSocket.Connect(
+      [System.Net.Sockets.UnixDomainSocketEndPoint]::new($endpoint)
+    )
+    Write-Output "Windows native .NET AF_UNIX client connected to the omfx host"
+  } finally {
+    $probeSocket.Dispose()
+  }
+} catch {
+  $hostProbeError = $_.Exception.Message
+} finally {
+  if ($hostStarted -and -not $hostProcess.HasExited) {
+    try { $hostProcess.Kill($true) } catch { $hostProcess.Kill() }
+    $hostProcess.WaitForExit()
+  }
+  if ($hostStarted) {
+    $hostStdout = $hostStdoutTask.GetAwaiter().GetResult()
+    $hostStderr = $hostStderrTask.GetAwaiter().GetResult()
+  }
+  $hostProcess.Dispose()
+}
+if ($null -ne $hostProbeError) {
+  $hostTrace = if (Test-Path -LiteralPath $trace) {
+    (Get-Content -LiteralPath $trace -Tail 80 -ErrorAction SilentlyContinue) -join " | "
+  } else {
+    ""
+  }
+  throw "native .NET AF_UNIX probe failed: $hostProbeError (stdout=$hostStdout stderr=$hostStderr trace=$hostTrace)"
+}
+
 $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = (Resolve-Path -LiteralPath $fixture).Path
 $startInfo.WorkingDirectory = $repoRoot
