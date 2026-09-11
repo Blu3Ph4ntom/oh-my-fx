@@ -673,6 +673,7 @@ const winsock = struct {
     extern "ws2_32" fn bind(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
     extern "ws2_32" fn listen(s: usize, backlog: c_int) callconv(.winapi) c_int;
     extern "ws2_32" fn accept(s: usize, name: ?*anyopaque, namelen: ?*c_int) callconv(.winapi) usize;
+    extern "ws2_32" fn ioctlsocket(s: usize, cmd: c_ulong, argp: *c_ulong) callconv(.winapi) c_int;
     extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
     extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
 };
@@ -696,6 +697,7 @@ const WinsockPollFd = extern struct {
 const winsock_poll_read: i16 = 0x0100;
 const winsock_poll_error: i16 = 0x0001;
 const winsock_poll_hangup: i16 = 0x0002;
+const winsock_fionbio: c_ulong = @bitCast(@as(u32, 0x8004667E));
 
 fn socketWaitWinsock(sock: usize, timeout_ms: i32) bool {
     if (comptime !is_windows) return false;
@@ -717,7 +719,12 @@ pub fn socketWaitWinsockReadable(sock: usize, timeout_ms: i32) bool {
 
 /// Waits for a queued client on a Winsock AF_UNIX listener.
 pub fn socketWaitWinsockAccept(sock: usize, timeout_ms: i32) bool {
-    return socketWaitWinsock(sock, timeout_ms);
+    if (socketWaitWinsock(sock, timeout_ms)) return true;
+    // WSAPoll does not consistently report readiness for AF_UNIX listeners
+    // on Windows. The listener is nonblocking, so an accept probe is safe
+    // after the bounded wait even when WSAPoll timed out.
+    sleep(10 * std.time.ns_per_ms);
+    return true;
 }
 
 fn windowsUnixSockaddr(endpoint_path: []const u8) ?struct {
@@ -789,6 +796,10 @@ pub const WindowsUnixServer = struct {
             return error.AddressInUse;
         }
         if (winsock.listen(raw_socket, @intCast(backlog)) != 0) return error.Unexpected;
+        var nonblocking: c_ulong = 1;
+        if (winsock.ioctlsocket(raw_socket, winsock_fionbio, &nonblocking) != 0) {
+            return error.Unexpected;
+        }
         listening = true;
         return .{ .socket = .{
             .handle = @ptrFromInt(raw_socket),
