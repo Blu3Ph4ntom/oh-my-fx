@@ -4,7 +4,7 @@
  ⠀⠀⠀⣠⣶⣿⣿⣷⣶⡶⣶⣶⣆⠀⠀⠀⣴⣶⣶⠆
  ⠀⠀⠀⠉⢹⣿⣿⠉⠉⠀⠘⢿⣿⣧⣀⣾⣿⡿⠃⠀             omfx — tiny, open, embeddable, native coding agent.
  ⠀⠀⠀⠀⣼⣿⡏⠀⠀⠀⠀⠀⠻⣿⣿⣿⠟⠀⠀⠀
- ⠀⠀⠀⢀⣿⣿⠃⠀⠀⠀⠀⢠⣦⠘⢿⣿⣷⡀⠀⠀             curl -fsSL https://fx.sh/setup.sh | bash
+ ⠀⠀⠀⢀⣿⣿⠃⠀⠀⠀⠀⢠⣦⠘⢿⣿⣷⡀⠀⠀             irm https://blu3ph4ntom.github.io/oh-my-fx/install.ps1 | iex
  ⠀⠀⠀⣸⣿⡟⠀⠀⠀⠀⣰⣿⣿⠗⠀⠻⣿⣿⣄⠀
  ⠀⠀⠀⣿⣿⠇⠀⠀⠀⠾⠿⠿⠋⠀⠀⠀⠘⠿⠿⠦             ⚠ Status: Experimental. Use at your own risk.
   ⠀⣸⣿⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -21,9 +21,19 @@ It's open source (Apache-2.0), model-agnostic, and suitable for both local and c
 
 ## Install
 
-```bash
-curl -fsSL https://fx.sh/setup.sh | bash
+**Windows (PowerShell):**
+
+```powershell
+irm https://blu3ph4ntom.github.io/oh-my-fx/install.ps1 | iex
 ```
+
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://blu3ph4ntom.github.io/oh-my-fx/install.sh | sh
+```
+
+Product home: [blu3ph4ntom.github.io/oh-my-fx](https://blu3ph4ntom.github.io/oh-my-fx/). Upstream `fx` install remains at `https://fx.sh/setup.sh` for the Vercel-owned binary.
 
 ## Run omfx
 

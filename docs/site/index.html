@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>omfx — tiny, native coding agent</title>
+  <meta name="description" content="Community-owned fx. Any model. Any provider. Any platform. Windows-native." />
+  <meta property="og:title" content="omfx" />
+  <meta property="og:description" content="Tiny, native coding agent. Any model. Any provider. Any platform." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://blu3ph4ntom.github.io/oh-my-fx/" />
+  <link rel="canonical" href="https://blu3ph4ntom.github.io/oh-my-fx/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="top">
+    <a class="mark" href="./">omfx</a>
+    <nav>
+      <a href="https://github.com/blu3ph4ntom/oh-my-fx">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">community-owned fx</p>
+      <h1>omfx</h1>
+      <p class="tagline">tiny, native coding agent — any model, any provider, any platform.</p>
+      <p class="lede">The clean fx harness, extended for Windows and provider honesty. Shell-first. No Vercel lock-in required.</p>
+      <div class="cta">
+        <div class="install-block">
+          <div class="tabs" role="tablist" aria-label="Install platform">
+            <button type="button" class="tab is-active" data-tab="unix" role="tab" aria-selected="true">macOS / Linux</button>
+            <button type="button" class="tab" data-tab="win" role="tab" aria-selected="false">Windows</button>
+          </div>
+          <pre class="install" data-panel="unix" hidden><code>curl -fsSL https://blu3ph4ntom.github.io/oh-my-fx/install.sh | sh</code></pre>
+          <pre class="install is-visible" data-panel="win"><code>irm https://blu3ph4ntom.github.io/oh-my-fx/install.ps1 | iex</code></pre>
+          <button type="button" class="copy" data-copy>Copy</button>
+        </div>
+        <a class="ghost" href="https://github.com/blu3ph4ntom/oh-my-fx">View source</a>
+      </div>
+      <figure class="terminal" aria-label="Sample omfx session">
+        <div class="terminal-chrome"><span></span><span></span><span></span><code>omfx</code></div>
+        <pre><code><span class="dim">omfx v0.0.7 · Run /help for commands</span>
+<span class="brand">┃</span>
+<span class="muted">run /setup · YOLO · openai-compatible</span>
+
+<span class="text">$ omfx ask "summarize the diff"</span>
+<span class="ok">●</span> <span class="muted">read</span> README.md
+<span class="text">Community fork of fx with Windows-native support
+and equal-citizen providers.</span>
+<span class="cursor"> </span></code></pre>
+      </figure>
+    </section>
+
+    <section class="band">
+      <h2>Providers as equals</h2>
+      <p>Gateway is one option, not the brand. Setup treats every supported path as a peer.</p>
+      <ul class="providers">
+        <li>OpenAI-compatible</li>
+        <li>OpenCode Go</li>
+        <li>Codex</li>
+        <li>Grok</li>
+        <li>Vercel AI Gateway</li>
+        <li>Direct vendor keys <span class="soon">next</span></li>
+      </ul>
+    </section>
+
+    <section class="band">
+      <h2>Windows-native</h2>
+      <p>First-class ConPTY and Windows Terminal. Official <code>omfx.exe</code> artifacts from CI — not a WSL footnote.</p>
+    </section>
+
+    <section class="band">
+      <h2>Still fx-clean</h2>
+      <p>Inline transcript. Tiny Zig binary. Shell gravity. No permanent full-screen IDE chrome.</p>
+    </section>
+
+    <section class="band credit">
+      <h2>Upstream</h2>
+      <p>Forked from <a href="https://github.com/vercel-labs/fx">vercel-labs/fx</a>. Same loop; owned identity and Windows/provider extensions.</p>
+    </section>
+  </main>
+
+  <footer>
+    <span>Apache-2.0</span>
+    <a href="https://github.com/blu3ph4ntom/oh-my-fx">blu3ph4ntom/oh-my-fx</a>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>
