@@ -2,8 +2,14 @@ const std = @import("std");
 const builtin = @import("builtin");
 const types = @import("../../core/shared/types.zig");
 
-pub const interactive_mode_enable_sequence = "\x1b[>4;2m\x1b[>1u\x1b[?2004h\x1b[?7l";
-const tmux_interactive_mode_enable_sequence = "\x1b[>4;2m\x1b[?2004h\x1b[?7l";
+/// Inline mode must leave mouse reporting disabled so the host terminal keeps
+/// ownership of native scrollback. A parent PTY may have enabled any of the
+/// tracking modes before Fx starts.
+pub const mouse_tracking_reset_sequence = "\x1b[?1000;1002;1003;1006l";
+pub const interactive_mode_enable_sequence = mouse_tracking_reset_sequence ++
+    "\x1b[>4;2m\x1b[>1u\x1b[?2004h\x1b[?7l";
+const tmux_interactive_mode_enable_sequence = mouse_tracking_reset_sequence ++
+    "\x1b[>4;2m\x1b[?2004h\x1b[?7l";
 pub const theme_notification_enable_sequence = "\x1b[?2031h";
 pub const theme_notification_disable_sequence = "\x1b[?2031l";
 pub const theme_color_scheme_query = "\x1b[?996n";
@@ -11,7 +17,7 @@ pub const theme_background_query = "\x1b]11;?\x1b\\";
 pub const theme_response_fence_query = "\x1b[c";
 pub const theme_background_query_with_fence = theme_background_query ++ theme_response_fence_query;
 pub const alternate_screen_leave_sequence = "\x1b[?1049l";
-pub const alternate_mouse_tracking_leave_sequence = "\x1b[?1000l\x1b[?1006l";
+pub const alternate_mouse_tracking_leave_sequence = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
 
 pub const KeyboardProtocol = enum {
     legacy_csi,
@@ -157,7 +163,7 @@ test "interactive mode leaves kitty keyboard negotiation to tmux" {
     const sequence = interactiveModeEnableSequence("");
 
     try std.testing.expectEqualStrings(
-        "\x1b[>4;2m\x1b[?2004h\x1b[?7l",
+        mouse_tracking_reset_sequence ++ "\x1b[>4;2m\x1b[?2004h\x1b[?7l",
         sequence,
     );
     try std.testing.expect(std.mem.find(u8, sequence, "\x1b[>1u") == null);
@@ -172,5 +178,14 @@ test "interactive mode leaves native terminal scrollback enabled" {
         try std.testing.expect(std.mem.find(u8, sequence, "\x1b[?1000h") == null);
         try std.testing.expect(std.mem.find(u8, sequence, "\x1b[?1002h") == null);
         try std.testing.expect(std.mem.find(u8, sequence, "\x1b[?1006h") == null);
+    }
+}
+
+test "interactive mode clears inherited mouse reporting before native scrollback" {
+    for ([_]?[]const u8{ null, "" }) |tmux| {
+        const sequence = interactiveModeEnableSequence(tmux);
+        try std.testing.expect(
+            std.mem.find(u8, sequence, "\x1b[?1000;1002;1003;1006l") != null,
+        );
     }
 }

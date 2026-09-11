@@ -1,5 +1,15 @@
 # fx
 
+## 0.0.7
+
+<!-- release:start -->
+
+### Bug Fixes
+
+- **Inline terminal scrollback:** Keep host-terminal wheel scrolling available after launch and after closing the transcript viewer.
+
+<!-- release:end -->
+
 ## 0.0.6
 
 <!-- release:start -->

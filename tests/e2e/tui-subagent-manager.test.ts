@@ -4007,11 +4007,11 @@ describe.skipIf(!tmuxAvailable())("tui: Agents & processes", () => {
           ownedApprovalToggleStart,
           "owned file approval manager enter",
           (frames) => frames.some((frame) =>
-            frame.payload.includes("\x1b[?1000l\x1b[?1006l")
+            frame.payload.includes("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
           ),
         );
         expect(ownedApprovalToggleFrames.some((frame) =>
-          frame.payload.includes("\x1b[?1000l\x1b[?1006l")
+          frame.payload.includes("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
         )).toBe(true);
         expect(ownedApprovalToggleFrames.some((frame) =>
           frame.payload.includes("\x1b[?1049l") || frame.payload.includes("\x1b[?1049h")

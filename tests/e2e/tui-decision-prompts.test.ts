@@ -1212,7 +1212,7 @@ describe.skipIf(SKIP)("tui: decision prompt input isolation", () => {
       const stdout = Buffer.concat(stdoutFrames(tapePath).map((frame) => frame.payload));
       expect(stdout.includes(Buffer.from("\x1b[?1049h"))).toBe(false);
       const mouseTrackingEnter = Buffer.from("\x1b[?1000h\x1b[?1006h");
-      const mouseTrackingLeave = Buffer.from("\x1b[?1000l\x1b[?1006l");
+      const mouseTrackingLeave = Buffer.from("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l");
       const approvalPrompt = Buffer.from(APPROVAL_PROMPT);
       const firstApprovalIndex = stdout.indexOf(approvalPrompt);
       const lastApprovalIndex = stdout.lastIndexOf(approvalPrompt);

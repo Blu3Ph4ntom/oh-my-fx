@@ -167,7 +167,7 @@ function expectAtomicApprovalExit(tapePath: string, frameStart: number) {
   expect(leaveFrames).toHaveLength(1);
   const payload = leaveFrames[0]!.payload;
   const restoreIndex = payload.indexOf(
-    "\x1b[?1000l\x1b[?1006l\x1b[?1049l\x1b[?25l",
+    "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1049l\x1b[?25l",
   );
   const syncStart = payload.indexOf("\x1b[?2026h");
   const syncEnd = payload.indexOf("\x1b[?2026l");
@@ -182,7 +182,7 @@ function expectAtomicApprovalExit(tapePath: string, frameStart: number) {
   expect(restoreIndex).toBeGreaterThan(syncStart);
   expect(syncEnd).toBeGreaterThan(restoreIndex);
   expect(payload.length).toBeGreaterThan(
-    Buffer.byteLength("\x1b[?1000l\x1b[?1006l\x1b[?1049l\x1b[?25l"),
+    Buffer.byteLength("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1049l\x1b[?25l"),
   );
 }
 
