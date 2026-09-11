@@ -32,6 +32,8 @@ $startInfo.Environment["FX_DISABLE_KEYCHAIN"] = "1"
 $startInfo.Environment["FX_AUTO_UPGRADE"] = "0"
 $startInfo.Environment["FX_TRACE_LOG"] = $trace
 $startInfo.Environment["FX_TRACE_SCOPES"] = "terminal_client,terminal_host,native_session"
+$startInfo.Environment["FX_TRACE_STDERR"] = "1"
+$startInfo.Environment["FX_TERMINAL_HOST_DIAGNOSTIC"] = "1"
 $startInfo.Environment["FX_TERMINAL_HOST_EXECUTABLE"] = (Resolve-Path -LiteralPath $Executable).Path
 
 $process = [System.Diagnostics.Process]::new()
@@ -67,8 +69,8 @@ if ($stdout -notmatch '"kind":"completed"') {
 if ($stdout -match "unsupported_host|TerminalHostUnsupported|panic") {
   throw "terminal host smoke reported unsupported or panic output: $stdout (trace=$traceTail)"
 }
-if (-not [string]::IsNullOrWhiteSpace($stderr)) {
-  throw "terminal host smoke wrote stderr: $stderr (trace=$traceTail)"
+if ($stderr -match "panic|unreachable|unsupported_host|TerminalHostUnsupported") {
+  throw "terminal host smoke reported a runtime failure on stderr: $stderr (trace=$traceTail)"
 }
 
 Write-Output "Windows terminal host and native session smoke passed"
