@@ -336,17 +336,11 @@ test "terminal decoder key matrix does not emit duplicate events" {
     try expectDecodedAction(&.{ 0x1b, '[', 'B' }, .cursor_down);
     try expectDecodedAction(
         &.{ 0x1b, '[', 'D' },
-        .{ .composer_shortcut = .{ .move = .{
-            .kind = .character_left,
-            .extend_selection = false,
-        } } },
+        .cursor_left,
     );
     try expectDecodedAction(
         &.{ 0x1b, '[', 'C' },
-        .{ .composer_shortcut = .{ .move = .{
-            .kind = .character_right,
-            .extend_selection = false,
-        } } },
+        .cursor_right,
     );
     try expectDecodedAction(&.{ 0x1b, '[', 'H' }, .home);
     try expectDecodedAction(&.{ 0x1b, '[', 'F' }, .end);

@@ -3985,7 +3985,7 @@ test "app_input_runtime provider picker routes terminal actions through one owne
 
     try feedRoutingBytes(&app, "\x1b[B\x1b[B");
 
-    try std.testing.expect((auth_runtime.Choice{ .provider = .opencode_go }).eql(
+    try std.testing.expect((auth_runtime.Choice{ .provider = .codex }).eql(
         app.auth.pickerView().selected_choice.?,
     ));
     try std.testing.expect(app.shell.render_requests.hasReason(.footer));
@@ -4034,7 +4034,7 @@ test "app_input_runtime full transcript owns Enter before underlying auth" {
     activateFullTranscriptForRoutingTest(&app);
     try feedRoutingBytes(&app, "\x1b[B\x1b[13u");
     try std.testing.expect(app.auth.pickerView().active);
-    try std.testing.expect((auth_runtime.Choice{ .provider = .gateway }).eql(app.auth.pickerView().selected_choice.?));
+    try std.testing.expect((auth_runtime.Choice{ .provider = .openai_compatible }).eql(app.auth.pickerView().selected_choice.?));
     try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);
 }
 

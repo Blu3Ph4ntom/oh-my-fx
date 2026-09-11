@@ -328,6 +328,8 @@ jobs:
       # stays a future parity job; every filter below is named and required.
       - name: Run unit tests
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
           zig test -lc src/test_root.zig --test-filter "omfx identity contract"
           zig test -lc src/test_root.zig --test-filter "Night Signal palette"
           zig test -lc src/test_root.zig --test-filter "getenvProduct prefers"
@@ -340,7 +342,12 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "Go model routes cover"
           zig test -lc src/test_root.zig --test-filter "Go route request bodies"
           zig test -lc src/test_root.zig --test-filter "Go Chat Completions request forwards declared reasoning effort"
+          zig test -lc src/test_root.zig --test-filter "Go Responses request forwards declared reasoning effort"
+          zig test -lc src/test_root.zig --test-filter "Go Messages request forwards native reasoning controls"
+          zig test -lc src/test_root.zig --test-filter "Go toggle-only models expose a native thinking switch"
+          zig test -lc src/test_root.zig --test-filter "Go Qwen toggle models do not receive an effort object"
           zig test -lc src/test_root.zig --test-filter "Go catalog parser"
+          zig test -lc src/test_root.zig --test-filter "Go catalog parser enriches live ids"
           zig test -lc src/test_root.zig --test-filter "OpenAI-compatible endpoints"
           zig test -lc src/test_root.zig --test-filter "OpenAI-compatible endpoint builder"
           zig test -lc src/test_root.zig --test-filter "OpenAI-compatible request forwards declared reasoning effort"

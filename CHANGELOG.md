@@ -1,16 +1,22 @@
 # fx
 
-## 0.0.10
+## 0.0.11
 
 <!-- release:start -->
+
+### Improvements
+
+- **OpenCode Go reasoning parity:** Expose the live Go model catalog's supported reasoning controls and send each model's native reasoning format across Chat Completions, Responses, and Messages routes.
+
+<!-- release:end -->
+
+## 0.0.10
 
 ### New Features
 
 - **Named provider profiles:** Select OpenAI, OpenRouter, xAI, DeepSeek, Groq, Cerebras, Fireworks, Together, or Mistral with an isolated API-key environment variable and live `/models` catalog.
 
 - **Provider reasoning controls:** Preserve the selected reasoning effort and streamed reasoning for named OpenAI-compatible providers.
-
-<!-- release:end -->
 
 ## 0.0.9
 
@@ -33,15 +39,11 @@
 
 ## 0.0.6
 
-<!-- release:start -->
-
 ### Bug Fixes
 
 - **Windows terminal execution:** Run captured commands through the native Windows shell instead of rejecting the selected profile.
 - **Retry activity:** Keep the working indicator visible while a turn recovers from a transient provider failure.
 - **Windows command guidance:** Tell the agent which native command syntax is available before it uses the terminal.
-
-<!-- release:end -->
 
 ## 0.0.5
 

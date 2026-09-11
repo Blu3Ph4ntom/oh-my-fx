@@ -35,6 +35,7 @@ const chat_completions_model_ids = [_][]const u8{
     "kimi-k2.6",
     "longcat-2.0",
     "deepseek-v4-pro",
+    "deepseek-v4.1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
     "mimo-v2.5",
@@ -125,6 +126,24 @@ pub fn supportsChatCompletionsModel(model: []const u8) bool {
     return false;
 }
 
+fn chatModelUsesThinkingToggle(model: []const u8) bool {
+    return std.mem.eql(u8, model, "longcat-2.0");
+}
+
+fn messagesModelUsesEffort(model: []const u8) bool {
+    return std.mem.eql(u8, model, "qwen3.8-max") or
+        std.mem.eql(u8, model, "qwen3.8-flash");
+}
+
+fn messagesModelUsesThinkingToggle(model: []const u8) bool {
+    return std.mem.eql(u8, model, "minimax-m3") or
+        std.mem.eql(u8, model, "minimax-m2.7") or
+        std.mem.eql(u8, model, "minimax-m2.5") or
+        std.mem.eql(u8, model, "qwen3.7-max") or
+        std.mem.eql(u8, model, "qwen3.7-plus") or
+        std.mem.eql(u8, model, "qwen3.6-plus");
+}
+
 pub fn routeForModel(model: []const u8) ?GoRoute {
     if (supportsChatCompletionsModel(model)) return .chat_completions;
     for (responses_model_ids) |supported| {
@@ -145,7 +164,7 @@ pub fn buildRequest(
         if (budget.cancel_flag) |flag| if (flag.load(.seq_cst)) return error.Cancelled;
     }
     return switch (routeForModel(request.model) orelse .chat_completions) {
-        .chat_completions => openai.buildRequestBodyWithToolChoiceAndOptions(
+        .chat_completions => openai.buildRequestBodyWithToolChoiceAndOptionsAndThinking(
             alloc,
             request.model,
             request.messages,
@@ -154,6 +173,9 @@ pub fn buildRequest(
             true,
             request.tool_choice,
             request.provider_options,
+            chatModelUsesThinkingToggle(request.model) and
+                request.provider_options.reasoning != null and
+                std.mem.eql(u8, request.provider_options.reasoning.?.label(), "on"),
         ),
         .responses => buildResponsesBody(alloc, request),
         .messages => buildMessagesBody(alloc, request),
@@ -239,6 +261,11 @@ fn buildResponsesBody(alloc: Allocator, request: stream_provider.BuildRequest) !
         }
     }
     try w.writeAll("] ,\"stream\":true,\"store\":false");
+    if (request.provider_options.reasoning) |effort| if (!effort.isDefault()) {
+        try w.writeAll(",\"reasoning\":{\"effort\":");
+        try writeJsonString(w, effort.label());
+        try w.writeByte('}');
+    };
     if (request.max_output_tokens) |limit| {
         try w.print(",\"max_output_tokens\":{d}", .{limit});
     }
@@ -275,6 +302,26 @@ fn buildMessagesBody(alloc: Allocator, request: stream_provider.BuildRequest) ![
         try w.writeByte('}');
     }
     try w.writeAll("] ,\"stream\":true");
+    if (request.provider_options.reasoning) |effort| if (!effort.isDefault()) {
+        if (messagesModelUsesEffort(request.model)) {
+            if (std.mem.eql(u8, effort.label(), "none")) {
+                try w.writeAll(",\"thinking\":{\"type\":\"disabled\"}");
+            } else {
+                try w.writeAll(",\"thinking\":{\"type\":\"enabled\"}");
+                try w.writeAll(",\"output_config\":{\"effort\":");
+                try writeJsonString(w, effort.label());
+                try w.writeByte('}');
+            }
+        } else if (messagesModelUsesThinkingToggle(request.model) and
+            std.mem.eql(u8, effort.label(), "on"))
+        {
+            try w.writeAll(",\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":");
+            const max_tokens = request.max_output_tokens orelse 32_768;
+            const budget_tokens = if (max_tokens <= 1) 1 else if (max_tokens < 2_048) max_tokens - 1 else @min(max_tokens / 2, 32_768);
+            try w.print("{d}", .{budget_tokens});
+            try w.writeByte('}');
+        }
+    };
     if (request.max_output_tokens) |limit| try w.print(",\"max_tokens\":{d}", .{limit});
     for (request.messages) |msg| {
         if (msg.role == .system) if (msg.content) |content| {
@@ -617,6 +664,7 @@ test "Go route guard distinguishes Chat Completions models" {
 
 test "Go model routes cover every documented endpoint family" {
     try std.testing.expectEqual(GoRoute.chat_completions, routeForModel("glm-5.2").?);
+    try std.testing.expectEqual(GoRoute.chat_completions, routeForModel("deepseek-v4.1-flash").?);
     try std.testing.expectEqual(GoRoute.responses, routeForModel("gpt-5.6-luna").?);
     try std.testing.expectEqual(GoRoute.responses, routeForModel("muse-spark-1.3-contributor").?);
     try std.testing.expectEqual(GoRoute.messages, routeForModel("minimax-m3").?);
@@ -673,4 +721,61 @@ test "Go Chat Completions request forwards declared reasoning effort" {
     const body = try buildRequest(null, std.testing.allocator, request);
     defer std.testing.allocator.free(body);
     try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\":\"high\"") != null);
+}
+
+test "Go Responses request forwards declared reasoning effort" {
+    const request = stream_provider.BuildRequest{
+        .model = "gpt-5.6-luna",
+        .messages = &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        .serialized_tools = "[]",
+        .tool_choice = .auto,
+        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("xhigh") },
+    };
+    const body = try buildRequest(null, std.testing.allocator, request);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning\":{\"effort\":\"xhigh\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\"") == null);
+}
+
+test "Go Messages request forwards native reasoning controls" {
+    const request = stream_provider.BuildRequest{
+        .model = "qwen3.8-max",
+        .messages = &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        .serialized_tools = "[]",
+        .tool_choice = .auto,
+        .max_output_tokens = 8192,
+        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("xhigh") },
+    };
+    const body = try buildRequest(null, std.testing.allocator, request);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"enabled\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"output_config\":{\"effort\":\"xhigh\"}") != null);
+}
+
+test "Go toggle-only models expose a native thinking switch" {
+    const request = stream_provider.BuildRequest{
+        .model = "minimax-m3",
+        .messages = &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        .serialized_tools = "[]",
+        .tool_choice = .auto,
+        .max_output_tokens = 8192,
+        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("on") },
+    };
+    const body = try buildRequest(null, std.testing.allocator, request);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":4096}") != null);
+}
+
+test "Go Qwen toggle models do not receive an effort object" {
+    const request = stream_provider.BuildRequest{
+        .model = "qwen3.7-max",
+        .messages = &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        .serialized_tools = "[]",
+        .tool_choice = .auto,
+        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("on") },
+    };
+    const body = try buildRequest(null, std.testing.allocator, request);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"output_config\"") == null);
 }

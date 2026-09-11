@@ -93,6 +93,30 @@ pub fn buildRequestBodyWithToolChoiceAndOptions(
     tool_choice: types.ToolChoice,
     provider_options: model_capabilities.ResolvedProviderOptions,
 ) ![]u8 {
+    return buildRequestBodyWithToolChoiceAndOptionsAndThinking(
+        alloc,
+        model,
+        messages,
+        serialized_tools,
+        max_output_tokens,
+        stream,
+        tool_choice,
+        provider_options,
+        false,
+    );
+}
+
+pub fn buildRequestBodyWithToolChoiceAndOptionsAndThinking(
+    alloc: Allocator,
+    model: []const u8,
+    messages: []const types.ChatMessage,
+    serialized_tools: []const u8,
+    max_output_tokens: ?u32,
+    stream: bool,
+    tool_choice: types.ToolChoice,
+    provider_options: model_capabilities.ResolvedProviderOptions,
+    thinking_enabled: bool,
+) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(alloc);
     defer out.deinit();
     var w = &out.writer;
@@ -103,9 +127,12 @@ pub fn buildRequestBodyWithToolChoiceAndOptions(
     try w.writeAll(if (stream) "true" else "false");
 
     if (provider_options.reasoning) |effort| {
-        try w.writeAll(",\"reasoning_effort\":");
-        try writeJsonString(w, effort.label());
+        if (!thinking_enabled) {
+            try w.writeAll(",\"reasoning_effort\":");
+            try writeJsonString(w, effort.label());
+        }
     }
+    if (thinking_enabled) try w.writeAll(",\"thinking\":{\"type\":\"enabled\"}");
 
     if (max_output_tokens) |limit| {
         try w.writeAll(",\"max_tokens\":");

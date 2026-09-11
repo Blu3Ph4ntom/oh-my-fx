@@ -62,7 +62,7 @@ omfx provider opencode_go
 omfx models
 ```
 
-On Windows PowerShell, use `$env:OPENCODE_GO_API_KEY = "your-key"` for the current shell. OpenCode Go model IDs come from its authenticated `/v1/models` catalog.
+On Windows PowerShell, use `$env:OPENCODE_GO_API_KEY = "your-key"` for the current shell. OpenCode Go model IDs come from its authenticated `/v1/models` catalog. Models with native reasoning controls expose them in the effort picker; omfx sends the correct Chat Completions, Responses, or Anthropic Messages fields for the selected Go model.
 
 OpenAI-compatible providers use any HTTPS OpenAI-compatible service, or an HTTP loopback service for local development. Set the base URL and key, then select the provider:
 
