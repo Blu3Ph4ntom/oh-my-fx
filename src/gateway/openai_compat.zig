@@ -74,6 +74,19 @@ test "OpenAI-compatible endpoint builder appends the OpenAI paths" {
     try std.testing.expectEqualStrings("https://api.example.test/v1/chat/completions", existing);
 }
 
+test "OpenAI-compatible request forwards declared reasoning effort" {
+    const request = stream_provider.BuildRequest{
+        .model = "reasoning-model",
+        .messages = &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        .serialized_tools = "[]",
+        .tool_choice = .auto,
+        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("high") },
+    };
+    const body = try buildRequest(null, std.testing.allocator, request);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\":\"high\"") != null);
+}
+
 fn isLoopbackHost(host: anytype) bool {
     var host_buf: [std.Io.net.HostName.max_len]u8 = undefined;
     const host_str = host.toRaw(&host_buf) catch return false;

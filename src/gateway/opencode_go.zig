@@ -656,3 +656,16 @@ test "Go route request bodies use their native token fields" {
     try std.testing.expect(std.mem.indexOf(u8, continuation_body, "\"type\":\"function_call\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, continuation_body, "\"call_id\":\"fc_1\"") != null);
 }
+
+test "Go Chat Completions request forwards declared reasoning effort" {
+    const request = stream_provider.BuildRequest{
+        .model = "glm-5.2",
+        .messages = &[_]types.ChatMessage{.{ .role = .user, .content = "hello" }},
+        .serialized_tools = "[]",
+        .tool_choice = .auto,
+        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("high") },
+    };
+    const body = try buildRequest(null, std.testing.allocator, request);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\":\"high\"") != null);
+}
