@@ -913,6 +913,9 @@ fn connectOrStart(
 }
 
 fn tryConnect(endpoint_path: []const u8) ?std.Io.net.Stream {
+    if (comptime builtin.os.tag == .windows) {
+        return io_mod.connectWindowsUnix(endpoint_path);
+    }
     if (comptime builtin.os.tag != .macos and builtin.os.tag != .linux) {
         const address = std.Io.net.UnixAddress.init(endpoint_path) catch return null;
         return address.connect(io_mod.getIo()) catch null;

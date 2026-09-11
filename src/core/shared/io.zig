@@ -661,6 +661,60 @@ pub fn waitForStdinEnter(timeout_ms: u64) bool {
     return WaitForSingleObject(handle, capped) == 0;
 }
 
+// Zig 0.16's Windows UnixAddress client uses AFD.CONNECT directly. Windows
+// accepts the same endpoint through Winsock, while that direct path can
+// report CONNECTION_REFUSED against a listener that native clients can use.
+// Keep this compatibility shim in the platform I/O layer; the terminal
+// protocol still uses the regular std.Io stream after the connection opens.
+extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
+extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
+extern "ws2_32" fn connect(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
+
+const windows_invalid_socket: usize = std.math.maxInt(usize);
+var windows_wsa_started = false;
+
+fn ensureWindowsSocketStartup() void {
+    if (comptime !is_windows) return;
+    if (windows_wsa_started) return;
+    var wsa_data: [512]u8 = undefined;
+    if (WSAStartup(0x0202, &wsa_data) == 0) windows_wsa_started = true;
+}
+
+/// Opens a Windows AF_UNIX stream through Winsock and returns it in the
+/// regular std.Io stream shape. The caller owns the stream on success.
+pub fn connectWindowsUnix(endpoint_path: []const u8) ?std.Io.net.Stream {
+    if (comptime !is_windows) return null;
+    const ws2_32 = std.os.windows.ws2_32;
+    if (endpoint_path.len >= @sizeOf(@FieldType(ws2_32.sockaddr.un, "path"))) return null;
+
+    ensureWindowsSocketStartup();
+    const raw_socket = socket(
+        ws2_32.AF.UNIX,
+        ws2_32.SOCK.STREAM,
+        0,
+    );
+    if (raw_socket == windows_invalid_socket) return null;
+    var connected = false;
+    defer if (!connected) _ = closesocket(raw_socket);
+
+    var socket_address: ws2_32.sockaddr.un = .{
+        .family = ws2_32.AF.UNIX,
+        .path = @splat(0),
+    };
+    @memcpy(socket_address.path[0..endpoint_path.len], endpoint_path);
+    const address_len: c_int = @intCast(
+        @offsetOf(ws2_32.sockaddr.un, "path") + endpoint_path.len + 1,
+    );
+    if (connect(raw_socket, @ptrCast(&socket_address), address_len) != 0) return null;
+
+    connected = true;
+    return .{ .socket = .{
+        .handle = @ptrFromInt(raw_socket),
+        .address = .{ .ip4 = .loopback(0) },
+    } };
+}
+
 extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: ?*const anyopaque, optlen: c_int) callconv(.winapi) c_int;
 
 /// Best-effort SO_RCVTIMEO/SO_SNDTIMEO in milliseconds. Failures are ignored
