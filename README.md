@@ -81,7 +81,7 @@ $env:CUSTOM_PROVIDER_API_KEY = "your-key"
 omfx provider openai_compatible
 ```
 
-omfx fetches `/models` live and sends chat requests to `/chat/completions`. The base URL must not include credentials, a query, or a fragment. `FX_OPENAI_COMPATIBLE_BASE_URL` remains accepted as a legacy environment name.
+omfx fetches `/models` live and sends chat requests to `/chat/completions`. When a model advertises reasoning, the effort picker forwards the selected value and streamed reasoning is kept separate from the answer. The base URL must not include credentials, a query, or a fragment. `FX_OPENAI_COMPATIBLE_BASE_URL` remains accepted as a legacy environment name.
 
 To use an AI Gateway API key instead:
 

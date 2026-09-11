@@ -1,4 +1,5 @@
 const std = @import("std");
+const model_capabilities = @import("../core/config/model_capabilities.zig");
 const types = @import("../core/shared/types.zig");
 
 const Allocator = std.mem.Allocator;
@@ -19,6 +20,7 @@ pub const ToolCallDelta = struct {
 
 pub const StreamChunk = union(enum) {
     text_delta: []const u8,
+    reasoning_delta: []const u8,
     tool_call_delta: ToolCallDelta,
     finish_reason: []const u8,
     usage: struct {
@@ -48,7 +50,7 @@ pub fn buildRequestBody(
     max_output_tokens: ?u32,
     stream: bool,
 ) ![]u8 {
-    return buildRequestBodyWithToolChoice(
+    return buildRequestBodyWithToolChoiceAndOptions(
         alloc,
         model,
         messages,
@@ -56,6 +58,7 @@ pub fn buildRequestBody(
         max_output_tokens,
         stream,
         .auto,
+        .{},
     );
 }
 
@@ -68,6 +71,28 @@ pub fn buildRequestBodyWithToolChoice(
     stream: bool,
     tool_choice: types.ToolChoice,
 ) ![]u8 {
+    return buildRequestBodyWithToolChoiceAndOptions(
+        alloc,
+        model,
+        messages,
+        serialized_tools,
+        max_output_tokens,
+        stream,
+        tool_choice,
+        .{},
+    );
+}
+
+pub fn buildRequestBodyWithToolChoiceAndOptions(
+    alloc: Allocator,
+    model: []const u8,
+    messages: []const types.ChatMessage,
+    serialized_tools: []const u8,
+    max_output_tokens: ?u32,
+    stream: bool,
+    tool_choice: types.ToolChoice,
+    provider_options: model_capabilities.ResolvedProviderOptions,
+) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(alloc);
     defer out.deinit();
     var w = &out.writer;
@@ -76,6 +101,11 @@ pub fn buildRequestBodyWithToolChoice(
     try writeJsonString(w, model);
     try w.writeAll(",\"stream\":");
     try w.writeAll(if (stream) "true" else "false");
+
+    if (provider_options.reasoning) |effort| {
+        try w.writeAll(",\"reasoning_effort\":");
+        try writeJsonString(w, effort.label());
+    }
 
     if (max_output_tokens) |limit| {
         try w.writeAll(",\"max_tokens\":");
@@ -319,6 +349,15 @@ pub const StreamParser = struct {
         if (delta_val != .object) return null;
         const delta = delta_val.object;
 
+        // OpenAI-compatible reasoning models commonly stream hidden thinking
+        // in `reasoning_content`; a few providers use the shorter `reasoning`
+        // field. Keep it separate from the visible answer text.
+        if (delta.get("reasoning_content") orelse delta.get("reasoning")) |reasoning| {
+            if (reasoning == .string and reasoning.string.len > 0) {
+                return StreamChunk{ .reasoning_delta = try self.alloc.dupe(u8, reasoning.string) };
+            }
+        }
+
         // Text content
         if (delta.get("content")) |content| {
             if (content == .string and content.string.len > 0) {
@@ -485,6 +524,9 @@ test "parseDataLine recognizes reasoning content delta" {
     defer p.deinit();
     const chunk = try p.parseDataLine("{\"choices\":[{\"delta\":{\"reasoning_content\":\"think\"},\"finish_reason\":null}]}");
     try std.testing.expect(chunk != null);
+    try std.testing.expect(chunk.? == .reasoning_delta);
+    try std.testing.expectEqualStrings("think", chunk.?.reasoning_delta);
+    std.testing.allocator.free(chunk.?.reasoning_delta);
 }
 
 test "parse_provider_finish_reason maps OpenAI wire values" {

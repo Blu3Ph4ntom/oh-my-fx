@@ -1,5 +1,15 @@
 # fx
 
+## 0.0.9
+
+<!-- release:start -->
+
+### Improvements
+
+- **Reasoning controls:** Forward supported reasoning effort to OpenAI-compatible and OpenCode Go models, and keep streamed reasoning separate from the final answer.
+
+<!-- release:end -->
+
 ## 0.0.8
 
 ### New Features
@@ -9,13 +19,9 @@
 
 ## 0.0.7
 
-<!-- release:start -->
-
 ### Bug Fixes
 
 - **Inline terminal scrollback:** Keep host-terminal wheel scrolling available after launch and after closing the transcript viewer.
-
-<!-- release:end -->
 
 ## 0.0.6
 

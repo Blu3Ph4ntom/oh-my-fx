@@ -137,7 +137,7 @@ pub fn buildRequest(
     if (request.budget) |budget| {
         if (budget.cancel_flag) |flag| if (flag.load(.seq_cst)) return error.Cancelled;
     }
-    return openai.buildRequestBodyWithToolChoice(
+    return openai.buildRequestBodyWithToolChoiceAndOptions(
         alloc,
         request.model,
         request.messages,
@@ -145,6 +145,7 @@ pub fn buildRequest(
         request.max_output_tokens,
         true,
         request.tool_choice,
+        request.provider_options,
     );
 }
 
@@ -244,6 +245,10 @@ pub fn streamCompletion(
                 defer alloc.free(text);
                 request.on_content_chunk(request.callback_ctx, text);
                 try content_parts.appendSlice(alloc, text);
+            },
+            .reasoning_delta => |reasoning| {
+                defer alloc.free(reasoning);
+                if (request.on_reasoning_chunk) |callback| callback(request.callback_ctx, reasoning);
             },
             .tool_call_delta => |tc| {
                 defer {
