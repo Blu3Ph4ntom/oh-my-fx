@@ -138,16 +138,16 @@ $traceTail = if (Test-Path -LiteralPath $trace) {
 if ($process.ExitCode -ne 0) {
   throw "terminal host smoke exited with code $($process.ExitCode) (stdout=$stdout stderr=$stderr trace=$traceTail)"
 }
-if ($stdout -notmatch '"kind":"completed"') {
+if ($stdout -notmatch '"kind":"response"') {
   Write-Output "terminal host smoke stderr: $stderr"
   if (Test-Path -LiteralPath $trace) {
     Write-Output "terminal host smoke trace:"
     Get-Content -LiteralPath $trace
   }
-  throw "terminal host smoke did not complete a start request: $stdout (trace=$traceTail)"
+  throw "terminal host smoke did not receive a response: $stdout (trace=$traceTail)"
 }
-if ($stdout -match "unsupported_host|TerminalHostUnsupported|panic") {
-  throw "terminal host smoke reported unsupported or panic output: $stdout (trace=$traceTail)"
+if ($stdout -match '"kind":"(disconnected|unavailable)"|"code":"|unsupported_host|TerminalHostUnsupported|panic') {
+  throw "terminal host smoke reported a failed request: $stdout (trace=$traceTail)"
 }
 if ($stderr -match "panic|unreachable|unsupported_host|TerminalHostUnsupported") {
   throw "terminal host smoke reported a runtime failure on stderr: $stderr (trace=$traceTail)"
