@@ -70,3 +70,19 @@ test "provider parsing exposes only gateway and codex" {
     try std.testing.expect(parse("openai-codex") == null);
     try std.testing.expect(parse("") == null);
 }
+
+test "provider parsing exposes named compatible providers" {
+    for ([_][]const u8{
+        "openai",
+        "openrouter",
+        "xai",
+        "deepseek",
+        "groq",
+        "cerebras",
+        "fireworks",
+        "together",
+        "mistral",
+    }) |name| {
+        try std.testing.expect(parse(name) != null);
+    }
+}
