@@ -3381,7 +3381,7 @@ fn parseOptionsWithStdin(alloc: Allocator, args: []const [:0]const u8, stdin: St
         } else if (std.mem.eql(u8, arg, "--auto")) {
             if (opts.permission_override != null) return error.InvalidAskArgs;
             opts.permission_override = .auto;
-        } else if (std.mem.eql(u8, arg, "--yolo")) {
+        } else if (std.mem.eql(u8, arg, "--full-access") or std.mem.eql(u8, arg, "--yolo")) {
             if (opts.permission_override != null) return error.InvalidAskArgs;
             opts.permission_override = .yolo;
         } else if (std.mem.eql(u8, arg, "--resume") or std.mem.eql(u8, arg, "--resume-id")) {
@@ -3884,7 +3884,7 @@ fn testModelPromptOverlay(model: []const u8) ?[]const u8 {
 
 fn testConfig() Config {
     return .{
-        .command_usage = "ask [--auto|--yolo] [--image PATH] [--json] [--quiet] [--prompt-permissions] [--no-save] [--no-color] [--resume <last|id>|--resume-id <id>] [--] <prompt>",
+        .command_usage = "ask [--auto|--full-access] [--image PATH] [--json] [--quiet] [--prompt-permissions] [--no-save] [--no-color] [--resume <last|id>|--resume-id <id>] [--] <prompt>",
         .default_model = "model",
         .default_agent_step_limit = 4,
         .gateway_retry_count = 1,
@@ -4871,7 +4871,15 @@ test "parse options preserves active ask flags and operands" {
     try std.testing.expectEqualStrings("hello world", options.prompt);
 }
 
-test "parse options accepts yolo and rejects permission flag conflicts" {
+test "parse options accepts full access aliases and rejects permission flag conflicts" {
+    var full_access = try parseOptionsWithStdin(
+        std.testing.allocator,
+        &.{ "--full-access", "hello" },
+        .tty,
+    );
+    defer full_access.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(?PermissionMode, .yolo), full_access.permission_override);
+
     var yolo = try parseOptionsWithStdin(
         std.testing.allocator,
         &.{ "--yolo", "hello" },
@@ -4884,7 +4892,7 @@ test "parse options accepts yolo and rejects permission flag conflicts" {
         error.InvalidAskArgs,
         parseOptionsWithStdin(
             std.testing.allocator,
-            &.{ "--auto", "--yolo", "hello" },
+            &.{ "--auto", "--full-access", "hello" },
             .tty,
         ),
     );

@@ -1,5 +1,15 @@
 # fx
 
+## 0.0.14
+
+<!-- release:start -->
+
+### Improvements
+
+- **Full-access controls:** Use `--full-access` and `/permissions full-access` for unrestricted operation, while keeping `--yolo` and `/permissions yolo` as compatibility aliases.
+
+<!-- release:end -->
+
 ## 0.0.13
 
 <!-- release:start -->

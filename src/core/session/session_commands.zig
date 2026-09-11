@@ -22,7 +22,7 @@ const render_request = @import("../../ui/render_request.zig");
 
 const freeStringList = collections.freeStringList;
 const containsIgnoreCase = text_utils.containsIgnoreCase;
-const permissions_usage = "usage: /permissions [ask|auto|yolo|reset]\n       /permissions remember <allow|deny> <tool-name> <arguments-json>\n       /permissions revoke <rule-id>";
+const permissions_usage = "usage: /permissions [ask|auto|full-access|reset]\n       /permissions remember <allow|deny> <tool-name> <arguments-json>\n       /permissions revoke <rule-id>";
 
 pub fn reportUserSettingsCommit(
     app: anytype,
@@ -366,9 +366,11 @@ pub fn Commands(comptime App: type) type {
                 return;
             }
 
-            if (std.ascii.eqlIgnoreCase(rest, "yolo")) {
+            if (std.ascii.eqlIgnoreCase(rest, "full-access") or
+                std.ascii.eqlIgnoreCase(rest, "yolo"))
+            {
                 try app_permission_runtime.Runtime(App).selectMode(app, .yolo);
-                try app.writeDomainNotice(.{ .topic = "permissions", .tone = .warning, .body = "mode set to yolo" }, true);
+                try app.writeDomainNotice(.{ .topic = "permissions", .tone = .warning, .body = "mode set to full access" }, true);
                 return;
             }
 
@@ -2255,7 +2257,7 @@ test "session_commands handlePermissions persists modes and reset clears session
     try std.testing.expectEqual(types.PermissionMode.yolo, app.worker.synced_mode.?);
     try std.testing.expectEqual(@as(usize, 2), app.permission_mode_preference_commit_count);
     try std.testing.expectEqual(@as(?types.PermissionMode, .yolo), app.last_preference_permission_mode);
-    try expectTranscriptContains(&app, "mode set to yolo");
+    try expectTranscriptContains(&app, "mode set to full access");
 
     app.clearTranscript();
     try Commands(FakeApp).handlePermissions(&app, "ask");
@@ -2308,11 +2310,11 @@ test "session_commands handlePermissions reports usage and invalid action before
     defer app.deinit();
 
     try Commands(FakeApp).handlePermissions(&app, "add");
-    try expectTranscriptContains(&app, "usage: /permissions [ask|auto|yolo|reset]");
+    try expectTranscriptContains(&app, "usage: /permissions [ask|auto|full-access|reset]");
 
     app.clearTranscript();
     try Commands(FakeApp).handlePermissions(&app, "remove");
-    try expectTranscriptContains(&app, "usage: /permissions [ask|auto|yolo|reset]");
+    try expectTranscriptContains(&app, "usage: /permissions [ask|auto|full-access|reset]");
     try std.testing.expectEqual(@as(usize, 0), app.permission_mode_preference_commit_count);
 }
 

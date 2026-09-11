@@ -233,7 +233,7 @@ capability. Missing, revoked, stale, or closed authority fails before transport.
 
 Security is permission-first.
 
-* `permission_mode` controls baseline behavior (`ask`, `auto`, or `yolo`)
+* `permission_mode` controls baseline behavior (`ask`, `auto`, or persisted `yolo`, exposed as `full-access`)
 
 * `permission` config applies OpenCode-style wildcard rules
 
@@ -251,7 +251,7 @@ Security is permission-first.
 
 * bounded consecutive all-blocked response groups end the turn with ordinary blocker text and never open the human approval path automatically; any completed successful tool resets that recovery count, and configured and saved-session rules remain authoritative
 
-* the sandbox backend is configured independently; yolo uses an effective backend of `none` without rewriting the saved sandbox setting
+* the sandbox backend is configured independently; full-access uses an effective backend of `none` without rewriting the saved sandbox setting
 
 Do not add new sensitive tool behavior without integrating it into `src/core/permissions/permissions.zig`.
 
