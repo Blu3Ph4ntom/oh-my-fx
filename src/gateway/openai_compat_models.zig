@@ -42,7 +42,7 @@ fn fetchCatalog(
         return .{ .failure = .{ .category = .authentication, .http_status = .unauthorized } };
 
     const request_url = if (profile) |selected|
-        openai_compat.resolveModelsUrlForProfile(alloc, selected.*)
+        try openai_compat.resolveModelsUrlForProfile(alloc, selected.*)
     else
         openai_compat.resolveModelsUrl(alloc) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,

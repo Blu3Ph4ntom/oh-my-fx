@@ -182,7 +182,7 @@ pub fn streamCompletion(
             return error.CredentialSourceMismatch;
     }
     const url = if (profile) |selected|
-        resolveChatUrlForProfile(alloc, selected.*)
+        try resolveChatUrlForProfile(alloc, selected.*)
     else
         resolveChatUrl(alloc) catch |err| switch (err) {
             error.MissingOpenAiCompatibleBaseUrl => if (isLoopbackHttpUrl(request.chat_url))

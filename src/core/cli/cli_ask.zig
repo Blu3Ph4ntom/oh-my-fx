@@ -1077,6 +1077,7 @@ const AskContext = struct {
             .gateway => self.cfg.permission_reviewer_provider,
             .codex => self.cfg.codex_permission_reviewer_provider,
             .grok => null,
+            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => null,
             .openai_compatible => null,
             .opencode_go => null,
         } orelse
