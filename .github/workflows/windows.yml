@@ -351,6 +351,7 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "projects API status text"
           zig test -lc src/test_root.zig --test-filter "turn context names native Windows"
           zig test -lc src/test_root.zig --test-filter "converts gateway tools"
+          zig test -lc src/test_root.zig --test-filter "parseDataLine recognizes reasoning content delta"
           zig test -lc src/test_root.zig --test-filter "omits tools for none"
           zig test -lc src/test_root.zig --test-filter "Windows raw input mode"
           zig test -lc src/test_root.zig --test-filter "terminal decoder key matrix"

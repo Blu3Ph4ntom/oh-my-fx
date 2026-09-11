@@ -480,6 +480,13 @@ test "parseDataLine handles text delta" {
     std.testing.allocator.free(chunk.?.text_delta);
 }
 
+test "parseDataLine recognizes reasoning content delta" {
+    var p = StreamParser.init(std.testing.allocator);
+    defer p.deinit();
+    const chunk = try p.parseDataLine("{\"choices\":[{\"delta\":{\"reasoning_content\":\"think\"},\"finish_reason\":null}]}");
+    try std.testing.expect(chunk != null);
+}
+
 test "parse_provider_finish_reason maps OpenAI wire values" {
     try std.testing.expectEqual(
         types.ProviderFinishReason.stop,
