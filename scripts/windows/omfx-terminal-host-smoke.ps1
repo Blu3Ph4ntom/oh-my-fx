@@ -92,6 +92,12 @@ if ($null -ne $hostProbeError) {
   throw "native .NET AF_UNIX probe failed: $hostProbeError (stdout=$hostStdout stderr=$hostStderr trace=$hostTrace)"
 }
 
+# The probe intentionally leaves a queued connection behind. Start the real
+# client handshake from a clean profile so it exercises the normal cold-start
+# path rather than the probe's stale endpoint and identity record.
+Remove-Item -LiteralPath $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
+
 $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = (Resolve-Path -LiteralPath $fixture).Path
 $startInfo.WorkingDirectory = $repoRoot

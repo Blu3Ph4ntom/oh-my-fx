@@ -1389,12 +1389,7 @@ pub fn identityEvidence(
         else => return .unverifiable,
     };
     defer file.close(io_mod.getIo());
-    var read_buffer: [identity_max_bytes]u8 = undefined;
-    var reader = file.reader(io_mod.getIo(), &read_buffer);
-    const bytes = reader.interface.allocRemaining(
-        alloc,
-        .limited(identity_max_bytes),
-    ) catch return .unverifiable;
+    const bytes = io_mod.readFileToEnd(alloc, &file, identity_max_bytes) catch return .unverifiable;
     defer alloc.free(bytes);
     var parsed = std.json.parseFromSlice(
         IdentityRecord,
