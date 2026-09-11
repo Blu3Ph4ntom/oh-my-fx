@@ -974,18 +974,6 @@ fn socketWaitForEvents(
     } }) catch return false;
     if (result.device_io_control.u.Status != .SUCCESS) return false;
     if (poll_info.Handles[0].Status != .SUCCESS) return false;
-    if (getenv("FX_TERMINAL_SOCKET_POLL_DIAGNOSTIC") != null) {
-        std.debug.print(
-            "socket poll requested=0x{x} status=0x{x} info={d} handle_status=0x{x} returned=0x{x}\n",
-            .{
-                events,
-                @intFromEnum(result.device_io_control.u.Status),
-                result.device_io_control.Information,
-                @intFromEnum(poll_info.Handles[0].Status),
-                poll_info.Handles[0].Events,
-            },
-        );
-    }
     return poll_info.Handles[0].Events & events != 0;
 }
 
