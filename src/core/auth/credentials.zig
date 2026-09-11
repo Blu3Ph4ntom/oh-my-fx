@@ -192,6 +192,8 @@ pub const missing_grok_credential_message = "omfx needs a Grok subscription logi
 pub const missing_grok_interactive_credential_message = "Grok needs a subscription login. Run /login and choose Sign in with Grok.";
 pub const missing_opencode_go_credential_message = "omfx needs an OpenCode Go API key for this model. Set OPENCODE_GO_API_KEY.";
 pub const missing_opencode_go_interactive_credential_message = "OpenCode Go needs an API key. Set OPENCODE_GO_API_KEY.";
+pub const missing_openai_compatible_credential_message = "omfx needs an OpenAI-compatible API key and base URL. Set CUSTOM_PROVIDER_API_KEY and OMFX_OPENAI_COMPATIBLE_BASE_URL.";
+pub const missing_openai_compatible_interactive_credential_message = "OpenAI-compatible needs CUSTOM_PROVIDER_API_KEY and OMFX_OPENAI_COMPATIBLE_BASE_URL.";
 pub const unreadable_store_message = "omfx could not read the stored API key from " ++ stored_key_backend_label ++ ". A key may be saved but unreadable. Set FX_TRACE_LOG for the failing step, or set AI_GATEWAY_API_KEY.";
 
 pub fn required_credential_source_for_provider(provider: model_provider.ProviderId) ?Source {
@@ -230,6 +232,10 @@ pub fn missing_credential_message_for_provider(
     provider: model_provider.ProviderId,
     interactive: bool,
 ) []const u8 {
+    if (provider == .openai_compatible) return if (interactive)
+        missing_openai_compatible_interactive_credential_message
+    else
+        missing_openai_compatible_credential_message;
     const source = required_credential_source_for_provider(provider) orelse
         return if (interactive) missing_interactive_credential_message else missing_credential_message;
     return missing_credential_message_for_source(source, interactive);
@@ -750,6 +756,19 @@ test "provider credential guidance names the selected subscription source" {
         missing_opencode_go_interactive_credential_message,
         missing_credential_message_for_provider(.opencode_go, true),
     );
+}
+
+test "OpenAI-compatible credential guidance names both required inputs" {
+    try std.testing.expect(std.mem.find(
+        u8,
+        missing_credential_message_for_provider(.openai_compatible, false),
+        "CUSTOM_PROVIDER_API_KEY",
+    ) != null);
+    try std.testing.expect(std.mem.find(
+        u8,
+        missing_credential_message_for_provider(.openai_compatible, true),
+        "OMFX_OPENAI_COMPATIBLE_BASE_URL",
+    ) != null);
 }
 
 test "credential gateway team prefers team id" {

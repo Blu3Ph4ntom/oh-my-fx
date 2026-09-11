@@ -50,7 +50,7 @@ omfx login codex
 omfx
 ```
 
-Inside omfx, `/provider` switches between Gateway, Codex, and OpenCode Go, and `/model` lists the active provider's fetched models. Codex model IDs are the raw IDs returned by its authenticated catalog. Use `/logout codex` to remove the Codex session without affecting Vercel access.
+Inside omfx, `/provider` switches between Gateway, OpenAI-compatible, Codex, and OpenCode Go, and `/model` lists the active provider's fetched models. Codex model IDs are the raw IDs returned by its authenticated catalog. Use `/logout codex` to remove the Codex session without affecting Vercel access.
 
 The OpenAI Codex route uses ChatGPT subscription access directly and never sends its OAuth token to Vercel AI Gateway. The session is stored privately at `~/.fx/chatgpt-auth.json` and refreshed when needed. On supported Codex models, `/fast` requests OpenAI's priority service tier and consumes ChatGPT credits at the higher Fast mode rate.
 
@@ -63,6 +63,25 @@ omfx models
 ```
 
 On Windows PowerShell, use `$env:OPENCODE_GO_API_KEY = "your-key"` for the current shell. OpenCode Go model IDs come from its authenticated `/v1/models` catalog.
+
+OpenAI-compatible providers use any HTTPS OpenAI-compatible service, or an HTTP loopback service for local development. Set the base URL and key, then select the provider:
+
+```bash
+export OMFX_OPENAI_COMPATIBLE_BASE_URL=https://api.example.com/v1
+export CUSTOM_PROVIDER_API_KEY=your-key
+omfx provider openai_compatible
+omfx models
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:OMFX_OPENAI_COMPATIBLE_BASE_URL = "https://api.example.com/v1"
+$env:CUSTOM_PROVIDER_API_KEY = "your-key"
+omfx provider openai_compatible
+```
+
+omfx fetches `/models` live and sends chat requests to `/chat/completions`. The base URL must not include credentials, a query, or a fragment. `FX_OPENAI_COMPATIBLE_BASE_URL` remains accepted as a legacy environment name.
 
 To use an AI Gateway API key instead:
 

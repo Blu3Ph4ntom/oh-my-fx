@@ -6,7 +6,12 @@ const io_mod = @import("../core/shared/io.zig");
 const types = @import("../core/shared/types.zig");
 const openai = @import("openai.zig");
 
-const default_path = "/v1/chat/completions";
+pub const base_url_env = "OMFX_OPENAI_COMPATIBLE_BASE_URL";
+pub const legacy_base_url_env = "FX_OPENAI_COMPATIBLE_BASE_URL";
+pub const e2e_chat_url_env = "FX_E2E_OPENAI_COMPATIBLE_CHAT_URL";
+pub const e2e_models_url_env = "FX_E2E_OPENAI_COMPATIBLE_MODELS_URL";
+const chat_suffix = "/chat/completions";
+const models_suffix = "/models";
 const max_error_body_bytes: usize = 64 * 1024;
 
 pub const agent_stream_provider = stream_provider.Provider{
@@ -14,27 +19,19 @@ pub const agent_stream_provider = stream_provider.Provider{
     .stream_fn = streamCompletion,
 };
 
-fn isLoopbackHttpUrl(url: []const u8) bool {
+pub fn isLoopbackHttpUrl(url: []const u8) bool {
     const uri = std.Uri.parse(url) catch return false;
-    // Scheme must be http only (no https for loopback in this run)
-    if (!std.mem.eql(u8, uri.scheme, "http")) return false;
-    // Userinfo must be absent (reject user@host, user:pass@host)
-    if (uri.user != null) return false;
-    if (uri.password != null) return false;
-    // Host must be exactly loopback
+    if (!std.ascii.eqlIgnoreCase(uri.scheme, "http") or
+        uri.user != null or
+        uri.password != null or
+        uri.query != null or
+        uri.fragment != null or
+        uri.port == null)
+    {
+        return false;
+    }
     const host = uri.host orelse return false;
-    const host_str = switch (host) {
-        .raw => |raw| raw,
-        .percent_encoded => |raw| raw,
-    };
-    const is_loopback = std.mem.eql(u8, host_str, "127.0.0.1") or
-        std.mem.eql(u8, host_str, "localhost") or
-        std.mem.eql(u8, host_str, "::1") or
-        std.mem.eql(u8, host_str, "[::1]");
-    if (!is_loopback) return false;
-    // Path must not contain @ (which would indicate userinfo confusion)
-    // and must not be empty with host confusion
-    return true;
+    return isLoopbackHost(host);
 }
 
 test "loopback validation accepts valid and rejects host confusion" {
@@ -52,11 +49,71 @@ test "loopback validation accepts valid and rejects host confusion" {
     try std.testing.expect(!isLoopbackHttpUrl("ftp://127.0.0.1:43123"));
 }
 
-fn resolveEndpoint(base_url: []const u8) []const u8 {
-    // If base already contains /v1/, use as-is; otherwise append default path.
-    // This is called with the chat_url from the request, which should be the
-    // full endpoint. For the mock, the test will pass the full URL directly.
-    return base_url;
+test "OpenAI-compatible endpoints allow HTTPS and loopback HTTP only" {
+    try std.testing.expect(isAllowedUrl("https://api.example.test/v1"));
+    try std.testing.expect(isAllowedUrl("http://127.0.0.1:43123/v1"));
+    try std.testing.expect(isAllowedUrl("http://localhost:43123/v1"));
+    try std.testing.expect(!isAllowedUrl("http://api.example.test/v1"));
+    try std.testing.expect(!isAllowedUrl("https://user:pass@api.example.test/v1"));
+    try std.testing.expect(!isAllowedUrl("https://api.example.test/v1?key=secret"));
+    try std.testing.expect(!isAllowedUrl("https://api.example.test/v1#fragment"));
+}
+
+test "OpenAI-compatible endpoint builder appends the OpenAI paths" {
+    const alloc = std.testing.allocator;
+    const chat = try endpointFromBase(alloc, "https://api.example.test/v1", chat_suffix);
+    defer alloc.free(chat);
+    try std.testing.expectEqualStrings("https://api.example.test/v1/chat/completions", chat);
+
+    const models = try endpointFromBase(alloc, "https://api.example.test/v1/", models_suffix);
+    defer alloc.free(models);
+    try std.testing.expectEqualStrings("https://api.example.test/v1/models", models);
+
+    const existing = try endpointFromBase(alloc, "https://api.example.test/v1/chat/completions", chat_suffix);
+    defer alloc.free(existing);
+    try std.testing.expectEqualStrings("https://api.example.test/v1/chat/completions", existing);
+}
+
+fn isLoopbackHost(host: anytype) bool {
+    var host_buf: [std.Io.net.HostName.max_len]u8 = undefined;
+    const host_str = host.toRaw(&host_buf) catch return false;
+    return std.mem.eql(u8, host_str, "127.0.0.1") or
+        std.ascii.eqlIgnoreCase(host_str, "localhost") or
+        std.mem.eql(u8, host_str, "[::1]");
+}
+
+pub fn isAllowedUrl(url: []const u8) bool {
+    const uri = std.Uri.parse(url) catch return false;
+    if (uri.user != null or uri.password != null or uri.query != null or uri.fragment != null) return false;
+    const host = uri.host orelse return false;
+    if (std.ascii.eqlIgnoreCase(uri.scheme, "https")) return true;
+    return std.ascii.eqlIgnoreCase(uri.scheme, "http") and isLoopbackHost(host);
+}
+
+fn endpointFromBase(alloc: Allocator, base_url: []const u8, suffix: []const u8) ![]u8 {
+    if (!isAllowedUrl(base_url)) return error.InvalidEndpoint;
+    var root = std.mem.trimEnd(u8, base_url, "/");
+    if (std.mem.endsWith(u8, root, chat_suffix)) root = root[0 .. root.len - chat_suffix.len];
+    if (std.mem.endsWith(u8, root, models_suffix)) root = root[0 .. root.len - models_suffix.len];
+    if (std.mem.endsWith(u8, root, suffix)) return alloc.dupe(u8, root);
+    return std.fmt.allocPrint(alloc, "{s}{s}", .{ root, suffix });
+}
+
+fn resolveConfiguredEndpoint(alloc: Allocator, suffix: []const u8, override_env: []const u8) ![]u8 {
+    if (io_mod.getenv(override_env)) |override| {
+        if (isLoopbackHttpUrl(override)) return alloc.dupe(u8, override);
+    }
+    const base_url = io_mod.getenvProduct(base_url_env, legacy_base_url_env) orelse
+        return error.MissingOpenAiCompatibleBaseUrl;
+    return endpointFromBase(alloc, base_url, suffix);
+}
+
+pub fn resolveChatUrl(alloc: Allocator) ![]u8 {
+    return resolveConfiguredEndpoint(alloc, chat_suffix, e2e_chat_url_env);
+}
+
+pub fn resolveModelsUrl(alloc: Allocator) ![]u8 {
+    return resolveConfiguredEndpoint(alloc, models_suffix, e2e_models_url_env);
 }
 
 pub fn buildRequest(
@@ -83,8 +140,15 @@ pub fn streamCompletion(
     alloc: Allocator,
     request: stream_provider.Request,
 ) !stream_provider.Result {
-    const url = resolveEndpoint(request.chat_url);
-    if (!isLoopbackHttpUrl(url)) return error.InvalidEndpoint;
+    const url = resolveChatUrl(alloc) catch |err| switch (err) {
+        error.MissingOpenAiCompatibleBaseUrl => if (isLoopbackHttpUrl(request.chat_url))
+            try alloc.dupe(u8, request.chat_url)
+        else
+            return err,
+        else => return err,
+    };
+    defer alloc.free(url);
+    if (!isAllowedUrl(url)) return error.InvalidEndpoint;
 
     var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
     defer client.deinit();
@@ -227,7 +291,6 @@ pub fn streamCompletion(
 }
 
 test "e2e openai_compatible tool loop with fixture" {
-    const alloc = std.testing.allocator;
     try std.testing.expect(isLoopbackHttpUrl("http://127.0.0.1:1234/v1/chat/completions"));
     try std.testing.expect(isLoopbackHttpUrl("http://localhost:1234/v1/chat/completions"));
     try std.testing.expect(isLoopbackHttpUrl("http://[::1]:1234/v1/chat/completions"));
@@ -238,5 +301,4 @@ test "e2e openai_compatible tool loop with fixture" {
     try std.testing.expect(!isLoopbackHttpUrl("http://user@127.0.0.1:1234/v1/chat/completions"));
     try std.testing.expect(!isLoopbackHttpUrl("http://user:pass@localhost:1234/v1/chat/completions"));
     try std.testing.expect(!isLoopbackHttpUrl("ftp://127.0.0.1:1234/v1/chat/completions"));
-    _ = alloc;
 }

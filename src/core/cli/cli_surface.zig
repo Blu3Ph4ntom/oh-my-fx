@@ -181,6 +181,9 @@ pub const Config = struct {
     codex_agent_stream: ?agent_stream_provider.Provider = null,
     codex_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
     codex_model_catalog: ?model_catalog.Provider = null,
+    openai_compatible_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
+    openai_compatible_agent_stream: ?agent_stream_provider.Provider = null,
+    openai_compatible_model_catalog: ?model_catalog.Provider = null,
     opencode_go_agent_stream: ?agent_stream_provider.Provider = null,
     opencode_go_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
     opencode_go_model_catalog: ?model_catalog.Provider = null,
@@ -732,6 +735,8 @@ fn runNonInteractiveWithDeps(
                 .gateway_provider = cfg.gateway_provider,
                 .codex_agent_stream = cfg.codex_agent_stream,
                 .codex_model_catalog = cfg.codex_model_catalog,
+                .openai_compatible_agent_stream = cfg.openai_compatible_agent_stream,
+                .openai_compatible_model_catalog = cfg.openai_compatible_model_catalog,
                 .opencode_go_agent_stream = cfg.opencode_go_agent_stream,
                 .opencode_go_model_catalog = cfg.opencode_go_model_catalog,
                 .background_process_provider = cfg.background_process_provider,
@@ -890,15 +895,15 @@ fn runNonInteractiveWithDeps(
         },
         .provider => |rest| {
             if (rest.len != 1) {
-                try writeStderr(deps, "usage: omfx provider <gateway|codex|opencode_go>\n");
+                try writeStderr(deps, "usage: omfx provider <gateway|openai_compatible|codex|opencode_go>\n");
                 return .handled_failure;
             }
             const target = model_provider.parse(rest[0]) orelse {
-                try writeStderr(deps, "omfx provider: expected gateway, codex, or opencode_go\n");
+                try writeStderr(deps, "omfx provider: expected gateway, openai_compatible, codex, or opencode_go\n");
                 return .handled_failure;
             };
-            if (target != .gateway and target != .codex and target != .opencode_go) {
-                try writeStderr(deps, "omfx provider: expected gateway, codex, or opencode_go\n");
+            if (target != .gateway and target != .openai_compatible and target != .codex and target != .opencode_go) {
+                try writeStderr(deps, "omfx provider: expected gateway, openai_compatible, codex, or opencode_go\n");
                 return .handled_failure;
             }
             const workspace_root = try io_mod.realpathAlloc(alloc, ".");
@@ -914,9 +919,16 @@ fn runNonInteractiveWithDeps(
                     .gateway => "Gateway is already selected.\n",
                     .codex => "Codex is already selected.\n",
                     .opencode_go => "OpenCode Go is already selected.\n",
+                    .openai_compatible => "OpenAI-compatible is already selected.\n",
                     else => unreachable,
                 });
                 return .handled_success;
+            }
+            if (target == .openai_compatible and
+                io_mod.getenvProduct("OMFX_OPENAI_COMPATIBLE_BASE_URL", "FX_OPENAI_COMPATIBLE_BASE_URL") == null)
+            {
+                try writeStderr(deps, "omfx provider: set OMFX_OPENAI_COMPATIBLE_BASE_URL first\n");
+                return .handled_failure;
             }
 
             var resolution = try credentials.resolveForProvider(
@@ -948,6 +960,7 @@ fn runNonInteractiveWithDeps(
                     .codex => "omfx provider: run omfx login codex first\n",
                     .opencode_go => "omfx provider: set OPENCODE_GO_API_KEY first\n",
                     .gateway => "omfx provider: configure a Gateway credential first\n",
+                    .openai_compatible => "omfx provider: set CUSTOM_PROVIDER_API_KEY and OMFX_OPENAI_COMPATIBLE_BASE_URL first\n",
                     else => unreachable,
                 });
                 return .handled_failure;
@@ -956,6 +969,10 @@ fn runNonInteractiveWithDeps(
                 .gateway => cfg.gateway_provider.model_catalog,
                 .codex => cfg.codex_model_catalog orelse {
                     try writeStderr(deps, "omfx provider: Codex model catalog is unavailable\n");
+                    return .handled_failure;
+                },
+                .openai_compatible => cfg.openai_compatible_model_catalog orelse {
+                    try writeStderr(deps, "omfx provider: OpenAI-compatible model catalog is unavailable\n");
                     return .handled_failure;
                 },
                 .opencode_go => cfg.opencode_go_model_catalog orelse {
@@ -1005,6 +1022,7 @@ fn runNonInteractiveWithDeps(
             try writeStdout(deps, switch (target) {
                 .gateway => "Provider set to Gateway.\n",
                 .codex => "Provider set to Codex.\n",
+                .openai_compatible => "Provider set to OpenAI-compatible.\n",
                 .opencode_go => "Provider set to OpenCode Go.\n",
                 else => unreachable,
             });
@@ -1089,6 +1107,10 @@ fn runNonInteractiveWithDeps(
                 .gateway => cfg.gateway_provider.cli_model_catalog,
                 .codex => cfg.codex_cli_model_catalog orelse {
                     try writeStderr(deps, "omfx models: Codex model catalog is unavailable\n");
+                    return .handled_failure;
+                },
+                .openai_compatible => cfg.openai_compatible_cli_model_catalog orelse {
+                    try writeStderr(deps, "omfx models: OpenAI-compatible model catalog is unavailable\n");
                     return .handled_failure;
                 },
                 .opencode_go => cfg.opencode_go_cli_model_catalog orelse {
@@ -2926,6 +2948,8 @@ fn workflowConfig(cfg: Config) @import("cli_ask.zig").Config {
         .gateway_models_path = cfg.models_path,
         .gateway_provider = cfg.gateway_provider,
         .codex_agent_stream = cfg.codex_agent_stream,
+        .openai_compatible_agent_stream = cfg.openai_compatible_agent_stream,
+        .openai_compatible_model_catalog = cfg.openai_compatible_model_catalog,
         .opencode_go_agent_stream = cfg.opencode_go_agent_stream,
         .opencode_go_model_catalog = cfg.opencode_go_model_catalog,
         .background_process_provider = cfg.background_process_provider,

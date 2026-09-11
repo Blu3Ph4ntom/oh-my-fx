@@ -13,6 +13,38 @@ const openai_compat_models = @import("../gateway/openai_compat_models.zig");
 const opencode_go = @import("../gateway/opencode_go.zig");
 const opencode_go_models = @import("../gateway/opencode_go_models.zig");
 
+pub const openai_compatible_cli_model_catalog = gateway_provider.CliModelCatalogProvider{
+    .fetch_fn = fetchOpenAiCompatibleCliModelCatalog,
+};
+
+fn fetchOpenAiCompatibleCliModelCatalog(
+    _: ?*anyopaque,
+    alloc: std.mem.Allocator,
+    input: gateway_provider.CliModelCatalogInput,
+) gateway_provider.CliModelCatalogResult {
+    return switch (model_catalog.fetchWithPublicFallback(openai_compat_models.model_catalog_provider, alloc, .{
+        .access = input.access,
+        .endpoint = input.endpoint,
+        .cancel_flag = input.cancel_flag,
+        .view = .full,
+    })) {
+        .loaded => |loaded| blk: {
+            var catalog = loaded.catalog;
+            defer model_catalog.freeModelCatalog(alloc, &catalog);
+            const ids = model_catalog.projectModelIds(alloc, catalog.items) catch return .{ .failure = .{
+                .access = loaded.provenance.access,
+                .anonymous_fallback_used = loaded.provenance.anonymous_fallback_used,
+                .failure = .{ .category = .resource_exhausted },
+            } };
+            break :blk .{ .loaded = .{
+                .ids = ids,
+                .provenance = loaded.provenance,
+            } };
+        },
+        .failed => |failure| .{ .failure = failure },
+    };
+}
+
 pub const opencode_go_cli_model_catalog = gateway_provider.CliModelCatalogProvider{
     .fetch_fn = fetchOpenCodeGoCliModelCatalog,
 };

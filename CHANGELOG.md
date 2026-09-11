@@ -1,5 +1,12 @@
 # fx
 
+## 0.0.8
+
+### New Features
+
+- **OpenAI-compatible provider:** Configure any HTTPS OpenAI-compatible service with a base URL and API key, fetch its live `/models` list, and use its `/chat/completions` stream from the CLI, interactive shell, and ACP.
+- **Provider hub onboarding:** Discover OpenAI-compatible setup beside Gateway, Codex, and OpenCode Go in the provider picker.
+
 ## 0.0.7
 
 <!-- release:start -->

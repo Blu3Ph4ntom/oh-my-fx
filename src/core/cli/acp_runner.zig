@@ -24,6 +24,8 @@ pub const Config = struct {
     gateway_provider: gateway_provider.Provider,
     codex_agent_stream: ?agent_stream_provider.Provider = null,
     codex_model_catalog: ?model_catalog.Provider = null,
+    openai_compatible_agent_stream: ?agent_stream_provider.Provider = null,
+    openai_compatible_model_catalog: ?model_catalog.Provider = null,
     opencode_go_agent_stream: ?agent_stream_provider.Provider = null,
     opencode_go_model_catalog: ?model_catalog.Provider = null,
     background_process_provider: background_process_provider.Provider =

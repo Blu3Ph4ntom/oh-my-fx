@@ -225,6 +225,8 @@ pub const Config = struct {
     gateway_models_path: []const u8,
     gateway_provider: gateway_provider.Provider,
     codex_agent_stream: ?agent_stream_provider.Provider = null,
+    openai_compatible_agent_stream: ?agent_stream_provider.Provider = null,
+    openai_compatible_model_catalog: ?model_catalog.Provider = null,
     opencode_go_agent_stream: ?agent_stream_provider.Provider = null,
     opencode_go_model_catalog: ?model_catalog.Provider = null,
     background_process_provider: background_process_provider.Provider =
@@ -1092,7 +1094,7 @@ const AskContext = struct {
             .gateway => self.cfg.gateway_provider.agent_stream,
             .codex => self.cfg.codex_agent_stream orelse agent_stream_provider.unavailable_provider,
             .grok => agent_stream_provider.unavailable_provider,
-            .openai_compatible => agent_stream_provider.unavailable_provider,
+            .openai_compatible => self.cfg.openai_compatible_agent_stream orelse agent_stream_provider.unavailable_provider,
             .opencode_go => self.cfg.opencode_go_agent_stream orelse agent_stream_provider.unavailable_provider,
         };
     }
@@ -2003,6 +2005,7 @@ fn resolveModelCapabilities(raw_ctx: *anyopaque, _: Allocator, model: []const u8
     return ctx.capability_resolver.resolve(
         ctx.alloc,
         switch (ctx.provider) {
+            .openai_compatible => ctx.cfg.openai_compatible_model_catalog orelse ctx.cfg.gateway_provider.model_catalog,
             .opencode_go => ctx.cfg.opencode_go_model_catalog orelse ctx.cfg.gateway_provider.model_catalog,
             else => ctx.cfg.gateway_provider.model_catalog,
         },

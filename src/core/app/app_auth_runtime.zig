@@ -122,7 +122,7 @@ pub fn Runtime(comptime App: type) type {
                 try app.writeDomainNotice(.{
                     .topic = "provider",
                     .tone = .warning,
-                    .body = "Usage: /provider [gateway|codex|opencode_go]",
+                    .body = "Usage: /provider [gateway|openai_compatible|codex|opencode_go]",
                 }, true);
                 return;
             };
@@ -263,6 +263,17 @@ pub fn Runtime(comptime App: type) type {
                 .source => |source| try applySourceChoice(app, source),
                 .action => |action| switch (action) {
                     .opencode_go_login => try switchProvider(app, .opencode_go, false),
+                    .openai_compatible_setup => {
+                        if (io_mod.getenvProduct("OMFX_OPENAI_COMPATIBLE_BASE_URL", "FX_OPENAI_COMPATIBLE_BASE_URL") == null) {
+                            try app.writeDomainNotice(.{
+                                .topic = "provider",
+                                .tone = .warning,
+                                .body = credentials.missing_openai_compatible_interactive_credential_message,
+                            }, true);
+                        } else {
+                            try switchProvider(app, .openai_compatible, false);
+                        }
+                    },
                     .login => try beginSignIn(app, true),
                     .chatgpt_login => try beginChatGptSignIn(app),
                     .setup => {
@@ -619,6 +630,16 @@ pub fn Runtime(comptime App: type) type {
                     .topic = "provider",
                     .tone = .warning,
                     .body = "Codex provider switching is unavailable in this WASM session.",
+                }, true);
+                return;
+            }
+            if (target == .openai_compatible and
+                io_mod.getenvProduct("OMFX_OPENAI_COMPATIBLE_BASE_URL", "FX_OPENAI_COMPATIBLE_BASE_URL") == null)
+            {
+                try app.writeDomainNotice(.{
+                    .topic = "provider",
+                    .tone = .warning,
+                    .body = credentials.missing_openai_compatible_interactive_credential_message,
                 }, true);
                 return;
             }
