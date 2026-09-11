@@ -735,7 +735,7 @@ fn receiveCancellable(
             // Zig 0.16's Windows Io backend does not implement concurrent
             // network receives. Poll the native AFD handle, then use the
             // native stream read after readiness is established.
-            if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 50)) {
+            if (!io_mod.socketWaitWinsockReadable(@intFromPtr(socket.handle), 50)) {
                 continue;
             }
             break :blk try io_mod.socketReadStream(socket.handle, destination[offset..]);
@@ -1081,7 +1081,7 @@ fn receiveBeforeDeadline(
         const incoming_len: usize = if (comptime builtin.os.tag == .windows) blk: {
             // Timed net_receive is not available in Zig 0.16 on Windows;
             // Native AFD polling provides the same bounded handshake wait.
-            if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), @intCast(poll_ms))) {
+            if (!io_mod.socketWaitWinsockReadable(@intFromPtr(socket.handle), @intCast(poll_ms))) {
                 continue;
             }
             break :blk try io_mod.socketReadStream(socket.handle, destination[offset..]);

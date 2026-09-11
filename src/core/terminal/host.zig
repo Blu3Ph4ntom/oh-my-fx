@@ -431,7 +431,10 @@ fn runSupported(alloc: Allocator, config: Config) !void {
     cleanupIdentity(&paths.host_dir);
 
     const address = try std.Io.net.UnixAddress.init(paths.endpoint_path);
-    var server = try address.listen(io_mod.getIo(), .{});
+    var server = if (comptime builtin.os.tag == .windows)
+        try io_mod.WindowsUnixServer.listen(paths.endpoint_path, std.Io.net.default_kernel_backlog)
+    else
+        try address.listen(io_mod.getIo(), .{});
     defer server.deinit(io_mod.getIo());
     var endpoint_created = true;
     defer if (endpoint_created) cleanupEndpoint(paths.endpointDir());
@@ -489,6 +492,7 @@ fn runSupported(alloc: Allocator, config: Config) !void {
         if (state.stopping.load(.acquire)) break;
         var stream = server.accept(io_mod.getIo()) catch |err| switch (err) {
             error.SocketNotListening => break,
+            error.WouldBlock => continue,
             error.Unexpected => {
                 // AFD can report a connection that is being torn down between
                 // the readiness probe and WAIT_FOR_LISTEN. Keep the host alive
@@ -650,7 +654,7 @@ fn idleOwner(state: *HostState) void {
 
 fn listenerReady(handle: std.Io.net.Socket.Handle) !bool {
     if (comptime builtin.os.tag == .windows) {
-        return io_mod.socketWaitAccept(@intFromPtr(handle), listener_poll_ms);
+        return io_mod.socketWaitWinsockAccept(@intFromPtr(handle), listener_poll_ms);
     }
     var poll_fds = [_]std.posix.pollfd{.{
         .fd = handle,
@@ -1323,7 +1327,7 @@ fn receiveSocketExact(
             // Zig 0.16's Windows Io backend does not implement concurrent
             // timed network receives. Poll the native AFD handle first, then
             // use the native stream read once data is ready.
-            if (!io_mod.socketWaitReadable(@intFromPtr(socket.handle), 5_000)) {
+            if (!io_mod.socketWaitWinsockReadable(@intFromPtr(socket.handle), 5_000)) {
                 return error.Timeout;
             }
             break :blk try io_mod.socketReadStream(socket.handle, destination[offset..]);

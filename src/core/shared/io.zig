@@ -666,10 +666,16 @@ pub fn waitForStdinEnter(timeout_ms: u64) bool {
 // report CONNECTION_REFUSED against a listener that native clients can use.
 // Keep this compatibility shim in the platform I/O layer; the terminal
 // protocol still uses the regular std.Io stream after the connection opens.
-extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
-extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
-extern "ws2_32" fn connect(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
+const winsock = struct {
+    extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
+    extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
+    extern "ws2_32" fn connect(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
+    extern "ws2_32" fn bind(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
+    extern "ws2_32" fn listen(s: usize, backlog: c_int) callconv(.winapi) c_int;
+    extern "ws2_32" fn accept(s: usize, name: ?*anyopaque, namelen: ?*c_int) callconv(.winapi) usize;
+    extern "ws2_32" fn WSAPoll(fdarray: ?*anyopaque, nfds: c_ulong, timeout: c_int) callconv(.winapi) c_int;
+    extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
+};
 
 const windows_invalid_socket: usize = std.math.maxInt(usize);
 var windows_wsa_started = false;
@@ -678,37 +684,78 @@ fn ensureWindowsSocketStartup() void {
     if (comptime !is_windows) return;
     if (windows_wsa_started) return;
     var wsa_data: [512]u8 = undefined;
-    if (WSAStartup(0x0202, &wsa_data) == 0) windows_wsa_started = true;
+    if (winsock.WSAStartup(0x0202, &wsa_data) == 0) windows_wsa_started = true;
+}
+
+const WinsockPollFd = extern struct {
+    fd: usize,
+    events: i16,
+    revents: i16,
+};
+
+const winsock_poll_read: i16 = 0x0100;
+const winsock_poll_error: i16 = 0x0001;
+const winsock_poll_hangup: i16 = 0x0002;
+
+fn socketWaitWinsock(sock: usize, timeout_ms: i32) bool {
+    if (comptime !is_windows) return false;
+    ensureWindowsSocketStartup();
+    var poll_fd = WinsockPollFd{
+        .fd = sock,
+        .events = winsock_poll_read,
+        .revents = 0,
+    };
+    const result = winsock.WSAPoll(@ptrCast(&poll_fd), 1, timeout_ms);
+    if (result <= 0) return false;
+    return poll_fd.revents & (winsock_poll_read | winsock_poll_error | winsock_poll_hangup) != 0;
+}
+
+/// Waits for a readable stream backed by a Winsock AF_UNIX socket.
+pub fn socketWaitWinsockReadable(sock: usize, timeout_ms: i32) bool {
+    return socketWaitWinsock(sock, timeout_ms);
+}
+
+/// Waits for a queued client on a Winsock AF_UNIX listener.
+pub fn socketWaitWinsockAccept(sock: usize, timeout_ms: i32) bool {
+    return socketWaitWinsock(sock, timeout_ms);
+}
+
+fn windowsUnixSockaddr(endpoint_path: []const u8) ?struct {
+    address: std.os.windows.ws2_32.sockaddr.un,
+    length: c_int,
+} {
+    const ws2_32 = std.os.windows.ws2_32;
+    if (endpoint_path.len >= @sizeOf(@FieldType(ws2_32.sockaddr.un, "path"))) return null;
+    var address: ws2_32.sockaddr.un = .{
+        .family = ws2_32.AF.UNIX,
+        .path = @splat(0),
+    };
+    @memcpy(address.path[0..endpoint_path.len], endpoint_path);
+    return .{
+        .address = address,
+        .length = @intCast(@offsetOf(ws2_32.sockaddr.un, "path") + endpoint_path.len + 1),
+    };
 }
 
 /// Opens a Windows AF_UNIX stream through Winsock and returns it in the
 /// regular std.Io stream shape. The caller owns the stream on success.
 pub fn connectWindowsUnix(endpoint_path: []const u8) ?std.Io.net.Stream {
     if (comptime !is_windows) return null;
-    const ws2_32 = std.os.windows.ws2_32;
-    if (endpoint_path.len >= @sizeOf(@FieldType(ws2_32.sockaddr.un, "path"))) return null;
+    const sockaddr = windowsUnixSockaddr(endpoint_path) orelse return null;
 
     ensureWindowsSocketStartup();
-    const raw_socket = socket(
-        ws2_32.AF.UNIX,
-        ws2_32.SOCK.STREAM,
+    const raw_socket = winsock.socket(
+        std.os.windows.ws2_32.AF.UNIX,
+        std.os.windows.ws2_32.SOCK.STREAM,
         0,
     );
     if (raw_socket == windows_invalid_socket) return null;
     var connected = false;
     defer {
-        if (!connected) _ = closesocket(raw_socket);
+        if (!connected) _ = winsock.closesocket(raw_socket);
     }
 
-    var socket_address: ws2_32.sockaddr.un = .{
-        .family = ws2_32.AF.UNIX,
-        .path = @splat(0),
-    };
-    @memcpy(socket_address.path[0..endpoint_path.len], endpoint_path);
-    const address_len: c_int = @intCast(
-        @offsetOf(ws2_32.sockaddr.un, "path") + endpoint_path.len + 1,
-    );
-    if (connect(raw_socket, @ptrCast(&socket_address), address_len) != 0) return null;
+    if (winsock.connect(raw_socket, @ptrCast(&sockaddr.address), sockaddr.length) != 0) return null;
 
     connected = true;
     return .{ .socket = .{
@@ -716,6 +763,55 @@ pub fn connectWindowsUnix(endpoint_path: []const u8) ?std.Io.net.Stream {
         .address = .{ .ip4 = .loopback(0) },
     } };
 }
+
+/// Windows-native AF_UNIX server matching the std.Io net.Server shape while
+/// using Winsock for listener readiness and accept. Zig 0.16's AFD listener
+/// can be reached by Winsock clients but its direct polling path does not
+/// reliably report queued connections.
+pub const WindowsUnixServer = struct {
+    socket: std.Io.net.Socket,
+
+    pub fn listen(endpoint_path: []const u8, backlog: u31) !@This() {
+        if (comptime !is_windows) return error.AddressFamilyUnsupported;
+        const sockaddr = windowsUnixSockaddr(endpoint_path) orelse return error.AddressUnavailable;
+        ensureWindowsSocketStartup();
+        const raw_socket = winsock.socket(
+            std.os.windows.ws2_32.AF.UNIX,
+            std.os.windows.ws2_32.SOCK.STREAM,
+            0,
+        );
+        if (raw_socket == windows_invalid_socket) return error.SystemResources;
+        var listening = false;
+        defer {
+            if (!listening) _ = winsock.closesocket(raw_socket);
+        }
+        if (winsock.bind(raw_socket, @ptrCast(&sockaddr.address), sockaddr.length) != 0) {
+            return error.AddressInUse;
+        }
+        if (winsock.listen(raw_socket, @intCast(backlog)) != 0) return error.Unexpected;
+        listening = true;
+        return .{ .socket = .{
+            .handle = @ptrFromInt(raw_socket),
+            .address = .{ .ip4 = .loopback(0) },
+        } };
+    }
+
+    pub fn deinit(self: *@This(), io: std.Io) void {
+        _ = io;
+        _ = winsock.closesocket(@intFromPtr(self.socket.handle));
+        self.* = undefined;
+    }
+
+    pub fn accept(self: *@This(), io: std.Io) !std.Io.net.Stream {
+        _ = io;
+        const raw_socket = winsock.accept(@intFromPtr(self.socket.handle), null, null);
+        if (raw_socket == windows_invalid_socket) return error.WouldBlock;
+        return .{ .socket = .{
+            .handle = @ptrFromInt(raw_socket),
+            .address = .{ .ip4 = .loopback(0) },
+        } };
+    }
+};
 
 extern "ws2_32" fn setsockopt(s: usize, level: c_int, optname: c_int, optval: ?*const anyopaque, optlen: c_int) callconv(.winapi) c_int;
 
