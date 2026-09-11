@@ -7,6 +7,7 @@ const picker_state = @import("../../core/input/picker_state.zig");
 const command_specs = @import("../../core/slash_commands/command_specs.zig");
 const display_width = @import("../../core/shared/display_width.zig");
 const list_window = @import("../../core/shared/list_window.zig");
+const product_identity = @import("../../core/shared/product_identity.zig");
 const skill_runtime = @import("../../core/skills/skill_runtime.zig");
 const file_index = @import("../../core/workspace/file_index.zig");
 const ui_render = @import("../render.zig");
@@ -188,7 +189,7 @@ pub noinline fn composeAuthPickerRow(
 }
 
 const onboarding_note = "   ⚠︎ Note: omfx is experimental and defaults to auto mode.";
-const onboarding_note_link = onboarding_note ++ " \x1b]8;id=omfx-onboarding;https://fx.sh/docs/stability\x1b\\\x1b[4mLearn more\x1b[24m\x1b]8;;\x1b\\";
+const onboarding_note_link = onboarding_note ++ " \x1b]8;id=omfx-onboarding;" ++ product_identity.website ++ "\x1b\\\x1b[4mLearn more\x1b[24m\x1b]8;;\x1b\\";
 
 fn onboardingProjectedRowIndex(view: auth_runtime.PickerView, row_index: u16, row_count: u16) u16 {
     if (row_count >= 17) return row_index;
@@ -1622,7 +1623,7 @@ test "auth onboarding composes the welcome copy and setup choices" {
     try std.testing.expect(std.mem.find(u8, screen.items, "Welcome to omfx") != null);
     try std.testing.expect(std.mem.find(u8, screen.items, "omfx can access AI models with an account, subscription, or API key") != null);
     try std.testing.expect(std.mem.find(u8, screen.items, "You can change this anytime with /setup.") != null);
-    try std.testing.expect(std.mem.find(u8, screen.items, "⚠︎ Note: omfx is experimental and defaults to auto mode. \x1b]8;id=omfx-onboarding;https://fx.sh/docs/stability\x1b\\\x1b[4mLearn more\x1b[24m\x1b]8;;\x1b\\") != null);
+    try std.testing.expect(std.mem.find(u8, screen.items, "⚠︎ Note: omfx is experimental and defaults to auto mode. \x1b]8;id=omfx-onboarding;" ++ product_identity.website ++ "\x1b\\\x1b[4mLearn more\x1b[24m\x1b]8;;\x1b\\") != null);
     try std.testing.expect(std.mem.find(u8, screen.items, "Learn more: https://") == null);
     try std.testing.expect(std.mem.find(u8, screen.items, "Sign in with Vercel") != null);
     try std.testing.expect(std.mem.find(u8, screen.items, "Add an API key") != null);
@@ -1650,7 +1651,7 @@ test "auth onboarding composes the welcome copy and setup choices" {
 
     var narrow_note = try composeAuthPickerRow(alloc, view, 11, authPickerRowCount(view), 58);
     defer narrow_note.deinit(alloc);
-    try std.testing.expect(std.mem.find(u8, narrow_note.items, "https://fx.sh/docs/stability") == null);
+    try std.testing.expect(std.mem.find(u8, narrow_note.items, product_identity.website) == null);
 
     var compact_screen: std.ArrayList(u8) = .empty;
     defer compact_screen.deinit(alloc);

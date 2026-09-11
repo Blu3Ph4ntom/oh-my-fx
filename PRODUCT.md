@@ -24,7 +24,8 @@ tool actions, and leave the terminal exactly as they found it.
 
 Precise, calm, and opinionated. omfx should feel like a dependable instrument
 for serious terminal work: quick to respond, clear about state, and confident
-enough to stay visually quiet when the user is focused.
+enough to stay visually quiet when the user is focused. Public home:
+https://blu3ph4ntom.github.io/oh-my-fx/
 
 ## Anti-references
 

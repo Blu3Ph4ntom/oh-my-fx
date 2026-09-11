@@ -1726,7 +1726,7 @@ test "rendered top-level help is a complete CLI navigation page" {
     try std.testing.expect(std.mem.find(u8, text, "session resume [last|id]") != null);
     try std.testing.expect(std.mem.find(u8, text, "omfx status --json") != null);
     try std.testing.expect(std.mem.find(u8, text, "Run `/help` inside an interactive session for slash commands.") != null);
-    try std.testing.expect(std.mem.find(u8, text, "Learn more about omfx:  https://fx.sh/docs") != null);
+    try std.testing.expect(std.mem.find(u8, text, "Learn more about omfx:  " ++ product_identity.docs_url) != null);
     try std.testing.expect(std.mem.find(u8, text, "\nReport a problem:     run `/feedback` inside omfx\n") != null);
     try std.testing.expect(std.mem.find(u8, text, "\n\n\nRun `omfx <command> --help`") == null);
     try std.testing.expect(std.mem.find(u8, text, "Start:") == null);
@@ -1749,7 +1749,7 @@ test "terminal top-level help adds styling without changing visible content" {
     try std.testing.expect(std.mem.find(u8, terminal, "\x1b[1mUsage:\x1b[0m") != null);
     try std.testing.expect(std.mem.find(u8, terminal, "\x1b[39mask <prompt>\x1b[0m") != null);
     try std.testing.expect(std.mem.find(u8, terminal, "\x1b[38;5;243mFast, native coding agent") != null);
-    try std.testing.expect(std.mem.find(u8, terminal, "\x1b[4mhttps://fx.sh/docs\x1b[0m") != null);
+    try std.testing.expect(std.mem.find(u8, terminal, "\x1b[4m" ++ product_identity.docs_url ++ "\x1b[0m") != null);
     try std.testing.expect(std.mem.find(u8, terminal, "\x1b[39mrun `/feedback` inside omfx\x1b[0m") != null);
     try std.testing.expect(std.mem.find(u8, terminal, "\x1b[38;5;252m") == null);
     try std.testing.expect(std.mem.find(u8, terminal, "\x1b[38;5;245m") == null);

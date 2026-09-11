@@ -1,5 +1,6 @@
 const std = @import("std");
 const command_specs = @import("../core/slash_commands/command_specs.zig");
+const product_identity = @import("../core/shared/product_identity.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -372,7 +373,7 @@ pub const top_level_notes = [_][]const u8{
 };
 
 pub const top_level_resources = [_]TopLevelResource{
-    .{ .label = "Learn more about omfx:", .value = "https://fx.sh/docs", .link = true },
+    .{ .label = "Learn more about omfx:", .value = product_identity.docs_url, .link = true },
     .{ .label = "Report a problem:", .value = "run `/feedback` inside omfx" },
 };
 

@@ -11,7 +11,7 @@
  ⣿⣿⣿⠟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ```
 
-omfx is a coding agent harness and CLI written in Zig, optimized for research and embeddability as part of larger systems. The historical `fx` command remains available as a compatibility name.
+omfx is a coding agent harness and CLI written in Zig, optimized for research and embeddability as part of larger systems. The historical `fx` command remains available as a compatibility name. Product home: [blu3ph4ntom.github.io/oh-my-fx](https://blu3ph4ntom.github.io/oh-my-fx/).
 
 It focuses on minimalism and performance across the board, from system prompt design to its tools, feature set, and 7.8 MiB binary.
 
@@ -122,9 +122,9 @@ Add reusable instructions with [skills](https://fx.sh/docs/capabilities/skills),
 
 ## Documentation
 
-Read the [omfx documentation](https://fx.sh/docs), or start with the local
-[customization guide](docs/customization.md) for the Night Signal palette,
-keyboard surfaces, profile settings, providers, and Windows-native usage.
+Read the [omfx site](https://blu3ph4ntom.github.io/oh-my-fx/) for product identity and install.
+Shared upstream harness docs remain at [fx.sh/docs](https://fx.sh/docs). For local UI
+controls, see the [customization guide](docs/customization.md).
 
 ## Build from source
 
