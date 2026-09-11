@@ -666,10 +666,10 @@ pub fn waitForStdinEnter(timeout_ms: u64) bool {
 // report CONNECTION_REFUSED against a listener that native clients can use.
 // Keep this compatibility shim in the platform I/O layer; the terminal
 // protocol still uses the regular std.Io stream after the connection opens.
-extern "ws2_32" fn WSAStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
-extern "ws2_32" fn socket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
-extern "ws2_32" fn connect(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
-extern "ws2_32" fn closesocket(s: usize) callconv(.winapi) c_int;
+extern "ws2_32" fn windowsWsaStartup(wVersionRequested: u16, lpWSAData: ?*anyopaque) callconv(.winapi) c_int;
+extern "ws2_32" fn windowsSocket(af: c_int, socket_type: c_int, protocol: c_int) callconv(.winapi) usize;
+extern "ws2_32" fn windowsConnect(s: usize, name: ?*const anyopaque, namelen: c_int) callconv(.winapi) c_int;
+extern "ws2_32" fn windowsCloseSocket(s: usize) callconv(.winapi) c_int;
 
 const windows_invalid_socket: usize = std.math.maxInt(usize);
 var windows_wsa_started = false;
@@ -678,7 +678,7 @@ fn ensureWindowsSocketStartup() void {
     if (comptime !is_windows) return;
     if (windows_wsa_started) return;
     var wsa_data: [512]u8 = undefined;
-    if (WSAStartup(0x0202, &wsa_data) == 0) windows_wsa_started = true;
+    if (windowsWsaStartup(0x0202, &wsa_data) == 0) windows_wsa_started = true;
 }
 
 /// Opens a Windows AF_UNIX stream through Winsock and returns it in the
@@ -689,14 +689,16 @@ pub fn connectWindowsUnix(endpoint_path: []const u8) ?std.Io.net.Stream {
     if (endpoint_path.len >= @sizeOf(@FieldType(ws2_32.sockaddr.un, "path"))) return null;
 
     ensureWindowsSocketStartup();
-    const raw_socket = socket(
+    const raw_socket = windowsSocket(
         ws2_32.AF.UNIX,
         ws2_32.SOCK.STREAM,
         0,
     );
     if (raw_socket == windows_invalid_socket) return null;
     var connected = false;
-    defer if (!connected) _ = closesocket(raw_socket);
+    defer {
+        if (!connected) _ = windowsCloseSocket(raw_socket);
+    }
 
     var socket_address: ws2_32.sockaddr.un = .{
         .family = ws2_32.AF.UNIX,
@@ -706,7 +708,7 @@ pub fn connectWindowsUnix(endpoint_path: []const u8) ?std.Io.net.Stream {
     const address_len: c_int = @intCast(
         @offsetOf(ws2_32.sockaddr.un, "path") + endpoint_path.len + 1,
     );
-    if (connect(raw_socket, @ptrCast(&socket_address), address_len) != 0) return null;
+    if (windowsConnect(raw_socket, @ptrCast(&socket_address), address_len) != 0) return null;
 
     connected = true;
     return .{ .socket = .{
