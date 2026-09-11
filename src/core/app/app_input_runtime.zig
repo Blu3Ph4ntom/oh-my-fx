@@ -3992,7 +3992,7 @@ test "app_input_runtime provider picker routes terminal actions through one owne
 
     try feedRoutingBytes(&app, "\r");
 
-    try std.testing.expectEqual(model_provider.ProviderId.opencode_go, app.selected_provider);
+    try std.testing.expectEqual(model_provider.ProviderId.codex, app.selected_provider);
     try std.testing.expect(!app.auth.pickerView().active);
     try std.testing.expectEqualStrings("keep this draft", app.input_runtime.edit_state.input.items);
     try std.testing.expectEqual(@as(usize, 0), app.submitted_prompt_count);

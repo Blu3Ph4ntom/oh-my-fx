@@ -1,20 +1,15 @@
 # fx
 
-## 0.0.12
+## 0.0.13
 
 <!-- release:start -->
 
 ### Improvements
 
 - **OpenCode Go reasoning parity:** Expose the live Go model catalog's supported reasoning controls and send each model's native reasoning format across Chat Completions, Responses, and Messages routes.
+- **Windows test reliability:** Make filtered native test failures visible to the required Windows gate.
 
 <!-- release:end -->
-
-## 0.0.11
-
-### Improvements
-
-- **Windows test reliability:** Make filtered native test failures visible to the required Windows gate.
 
 ## 0.0.10
 
