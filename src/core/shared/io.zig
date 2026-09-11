@@ -802,7 +802,7 @@ pub const WindowsUnixServer = struct {
         self.* = undefined;
     }
 
-    pub fn accept(self: *@This(), io: std.Io) !std.Io.net.Stream {
+    pub fn accept(self: *@This(), io: std.Io) std.Io.net.Server.AcceptError!std.Io.net.Stream {
         _ = io;
         const raw_socket = winsock.accept(@intFromPtr(self.socket.handle), null, null);
         if (raw_socket == windows_invalid_socket) return error.WouldBlock;
