@@ -1541,7 +1541,10 @@ test "getenvProduct prefers the omfx name and preserves the legacy name" {
         "new-value",
         getenvProduct("OMFX_IO_TEST", "FX_IO_TEST").?,
     );
-    global_environ = null;
+    var legacy_environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer legacy_environ.deinit();
+    try legacy_environ.put("FX_IO_TEST", "legacy-value");
+    setEnvironMap(&legacy_environ);
     try std.testing.expectEqualStrings(
         "legacy-value",
         getenvProduct("OMFX_IO_TEST", "FX_IO_TEST").?,
