@@ -6,6 +6,7 @@ const debug_trace = @import("../shared/debug_trace.zig");
 const host = @import("../hosts/host.zig");
 const io_mod = @import("../shared/io.zig");
 const model_provider = @import("../config/model_provider.zig");
+const openai_compat_profiles = @import("../../gateway/openai_compat_profiles.zig");
 const oauth = @import("oauth.zig");
 const oauth_session = @import("oauth_session.zig");
 const oauth_transport = @import("oauth_transport.zig");
@@ -13,6 +14,37 @@ const secret = @import("secret.zig");
 const types = @import("../shared/types.zig");
 
 pub const Source = types.CredentialSource;
+
+fn isNamedSource(source: anytype) bool {
+    return switch (source) {
+        .openai_api_key,
+        .openrouter_api_key,
+        .xai_api_key,
+        .deepseek_api_key,
+        .groq_api_key,
+        .cerebras_api_key,
+        .fireworks_api_key,
+        .together_api_key,
+        .mistral_api_key,
+        => true,
+        else => false,
+    };
+}
+
+fn providerForSource(source: Source) model_provider.ProviderId {
+    return switch (source) {
+        .openai_api_key => .openai,
+        .openrouter_api_key => .openrouter,
+        .xai_api_key => .xai,
+        .deepseek_api_key => .deepseek,
+        .groq_api_key => .groq,
+        .cerebras_api_key => .cerebras,
+        .fireworks_api_key => .fireworks,
+        .together_api_key => .together,
+        .mistral_api_key => .mistral,
+        else => .gateway,
+    };
+}
 
 pub const CatalogPublicOnly = union(enum) {
     no_credential,
@@ -23,6 +55,15 @@ pub const CatalogPublicOnly = union(enum) {
     chatgpt_subscription,
     grok_subscription,
     opencode_go_subscription,
+    openai_api_key,
+    openrouter_api_key,
+    xai_api_key,
+    deepseek_api_key,
+    groq_api_key,
+    cerebras_api_key,
+    fireworks_api_key,
+    together_api_key,
+    mistral_api_key,
 
     fn credentialSource(self: CatalogPublicOnly) ?Source {
         return switch (self) {
@@ -33,6 +74,15 @@ pub const CatalogPublicOnly = union(enum) {
             .chatgpt_subscription => .chatgpt_subscription,
             .grok_subscription => .grok_subscription,
             .opencode_go_subscription => .opencode_go_subscription,
+            .openai_api_key => .openai_api_key,
+            .openrouter_api_key => .openrouter_api_key,
+            .xai_api_key => .xai_api_key,
+            .deepseek_api_key => .deepseek_api_key,
+            .groq_api_key => .groq_api_key,
+            .cerebras_api_key => .cerebras_api_key,
+            .fireworks_api_key => .fireworks_api_key,
+            .together_api_key => .together_api_key,
+            .mistral_api_key => .mistral_api_key,
         };
     }
 };
@@ -48,6 +98,15 @@ pub const CatalogAuthenticatedSource = enum {
     grok_subscription,
     custom_provider,
     opencode_go_subscription,
+    openai_api_key,
+    openrouter_api_key,
+    xai_api_key,
+    deepseek_api_key,
+    groq_api_key,
+    cerebras_api_key,
+    fireworks_api_key,
+    together_api_key,
+    mistral_api_key,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
         return switch (self) {
@@ -59,6 +118,15 @@ pub const CatalogAuthenticatedSource = enum {
             .grok_subscription => .grok_subscription,
             .custom_provider => .custom_provider,
             .opencode_go_subscription => .opencode_go_subscription,
+            .openai_api_key => .openai_api_key,
+            .openrouter_api_key => .openrouter_api_key,
+            .xai_api_key => .xai_api_key,
+            .deepseek_api_key => .deepseek_api_key,
+            .groq_api_key => .groq_api_key,
+            .cerebras_api_key => .cerebras_api_key,
+            .fireworks_api_key => .fireworks_api_key,
+            .together_api_key => .together_api_key,
+            .mistral_api_key => .mistral_api_key,
         };
     }
 };
@@ -96,7 +164,7 @@ pub const CatalogAccess = union(enum) {
     pub fn publicFallbackAfterRejection(self: CatalogAccess) ?CatalogAccess {
         return switch (self) {
             .public_only => null,
-            .authenticated => |access| if (access.source == .chatgpt_subscription or access.source == .grok_subscription or access.source == .opencode_go_subscription)
+            .authenticated => |access| if (access.source == .chatgpt_subscription or access.source == .grok_subscription or access.source == .opencode_go_subscription or isNamedSource(access.source))
                 null
             else
                 .{
@@ -157,6 +225,15 @@ pub fn catalogAccessForCredential(
         .grok_subscription => .grok_subscription,
         .custom_provider => .custom_provider,
         .opencode_go_subscription => .opencode_go_subscription,
+        .openai_api_key => .openai_api_key,
+        .openrouter_api_key => .openrouter_api_key,
+        .xai_api_key => .xai_api_key,
+        .deepseek_api_key => .deepseek_api_key,
+        .groq_api_key => .groq_api_key,
+        .cerebras_api_key => .cerebras_api_key,
+        .fireworks_api_key => .fireworks_api_key,
+        .together_api_key => .together_api_key,
+        .mistral_api_key => .mistral_api_key,
         .fx_login => blk: {
             const team = team_context orelse
                 return .{ .public_only = .fx_login_team_required };
@@ -169,7 +246,7 @@ pub fn catalogAccessForCredential(
         .authenticated = .{
             .source = authenticated_source,
             .credential = credential,
-            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription or authenticated_source == .opencode_go_subscription) null else team_context,
+            .team_context = if (authenticated_source == .chatgpt_subscription or authenticated_source == .grok_subscription or authenticated_source == .opencode_go_subscription or isNamedSource(authenticated_source)) null else team_context,
         },
     };
 }
@@ -201,6 +278,15 @@ pub fn required_credential_source_for_provider(provider: model_provider.Provider
         .codex => .chatgpt_subscription,
         .grok => .grok_subscription,
         .opencode_go => .opencode_go_subscription,
+        .openai => .openai_api_key,
+        .openrouter => .openrouter_api_key,
+        .xai => .xai_api_key,
+        .deepseek => .deepseek_api_key,
+        .groq => .groq_api_key,
+        .cerebras => .cerebras_api_key,
+        .fireworks => .fireworks_api_key,
+        .together => .together_api_key,
+        .mistral => .mistral_api_key,
         .gateway, .openai_compatible => null,
     };
 }
@@ -219,6 +305,19 @@ pub fn missing_credential_message_for_source(source: Source, interactive: bool) 
             missing_opencode_go_interactive_credential_message
         else
             missing_opencode_go_credential_message,
+        .openai_api_key,
+        .openrouter_api_key,
+        .xai_api_key,
+        .deepseek_api_key,
+        .groq_api_key,
+        .cerebras_api_key,
+        .fireworks_api_key,
+        .together_api_key,
+        .mistral_api_key,
+        => if (interactive)
+            openai_compat_profiles.forProvider(providerForSource(source)).?.missing_interactive_message
+        else
+            openai_compat_profiles.forProvider(providerForSource(source)).?.missing_message,
         .vercel_oidc_token,
         .ai_gateway_api_key,
         .fx_login,
@@ -236,6 +335,10 @@ pub fn missing_credential_message_for_provider(
         missing_openai_compatible_interactive_credential_message
     else
         missing_openai_compatible_credential_message;
+    if (openai_compat_profiles.forProvider(provider)) |profile| return if (interactive)
+        profile.missing_interactive_message
+    else
+        profile.missing_message;
     const source = required_credential_source_for_provider(provider) orelse
         return if (interactive) missing_interactive_credential_message else missing_credential_message;
     return missing_credential_message_for_source(source, interactive);
@@ -334,6 +437,20 @@ pub fn resolveForProvider(
         },
         .opencode_go => {
             const credential = try loadEnvCredential(alloc, "OPENCODE_GO_API_KEY", .opencode_go_subscription);
+            return .{ .credential = credential };
+        },
+        .openai,
+        .openrouter,
+        .xai,
+        .deepseek,
+        .groq,
+        .cerebras,
+        .fireworks,
+        .together,
+        .mistral,
+        => {
+            const profile = openai_compat_profiles.forProvider(provider).?;
+            const credential = try loadEnvCredential(alloc, profile.api_key_env, profile.credential_source);
             return .{ .credential = credential };
         },
         .gateway => {},
@@ -452,6 +569,19 @@ pub fn loadSource(
         .grok_subscription => loadGrokCredential(alloc, transport, .if_needed),
         .custom_provider => loadEnvCredential(alloc, "CUSTOM_PROVIDER_API_KEY", source),
         .opencode_go_subscription => loadEnvCredential(alloc, "OPENCODE_GO_API_KEY", source),
+        .openai_api_key,
+        .openrouter_api_key,
+        .xai_api_key,
+        .deepseek_api_key,
+        .groq_api_key,
+        .cerebras_api_key,
+        .fireworks_api_key,
+        .together_api_key,
+        .mistral_api_key,
+        => blk: {
+            const profile = openai_compat_profiles.forProvider(providerForSource(source)).?;
+            break :blk loadEnvCredential(alloc, profile.api_key_env, source);
+        },
     };
 }
 
@@ -479,6 +609,19 @@ pub fn sourceExists(
         .grok_subscription => grok_oauth.sourceExists(alloc),
         .custom_provider => nonEmptyEnvValue("CUSTOM_PROVIDER_API_KEY") != null,
         .opencode_go_subscription => nonEmptyEnvValue("OPENCODE_GO_API_KEY") != null,
+        .openai_api_key,
+        .openrouter_api_key,
+        .xai_api_key,
+        .deepseek_api_key,
+        .groq_api_key,
+        .cerebras_api_key,
+        .fireworks_api_key,
+        .together_api_key,
+        .mistral_api_key,
+        => blk: {
+            const profile = openai_compat_profiles.forProvider(providerForSource(source)).?;
+            break :blk nonEmptyEnvValue(profile.api_key_env) != null;
+        },
         .stored_key => blk: {
             if (secret_store.isDisabled()) break :blk false;
             const stored = secret_store.load(alloc) catch |err| switch (err) {
@@ -707,6 +850,16 @@ pub fn sourceLabel(source: Source) []const u8 {
         .grok_subscription => "Grok subscription",
         .custom_provider => "CUSTOM_PROVIDER_API_KEY",
         .opencode_go_subscription => "OPENCODE_GO_API_KEY",
+        .openai_api_key,
+        .openrouter_api_key,
+        .xai_api_key,
+        .deepseek_api_key,
+        .groq_api_key,
+        .cerebras_api_key,
+        .fireworks_api_key,
+        .together_api_key,
+        .mistral_api_key,
+        => openai_compat_profiles.forProvider(providerForSource(source)).?.api_key_env,
     };
 }
 
@@ -769,6 +922,30 @@ test "OpenAI-compatible credential guidance names both required inputs" {
         missing_credential_message_for_provider(.openai_compatible, true),
         "OMFX_OPENAI_COMPATIBLE_BASE_URL",
     ) != null);
+}
+
+test "named provider credentials stay isolated from each other" {
+    const cases = [_]struct {
+        provider: model_provider.ProviderId,
+        source: Source,
+        missing: []const u8,
+    }{
+        .{ .provider = .openai, .source = .openai_api_key, .missing = "OPENAI_API_KEY" },
+        .{ .provider = .openrouter, .source = .openrouter_api_key, .missing = "OPENROUTER_API_KEY" },
+        .{ .provider = .xai, .source = .xai_api_key, .missing = "XAI_API_KEY" },
+        .{ .provider = .deepseek, .source = .deepseek_api_key, .missing = "DEEPSEEK_API_KEY" },
+        .{ .provider = .groq, .source = .groq_api_key, .missing = "GROQ_API_KEY" },
+        .{ .provider = .cerebras, .source = .cerebras_api_key, .missing = "CEREBRAS_API_KEY" },
+        .{ .provider = .fireworks, .source = .fireworks_api_key, .missing = "FIREWORKS_API_KEY" },
+        .{ .provider = .together, .source = .together_api_key, .missing = "TOGETHER_API_KEY" },
+        .{ .provider = .mistral, .source = .mistral_api_key, .missing = "MISTRAL_API_KEY" },
+    };
+    for (cases) |case| {
+        try std.testing.expectEqual(case.source, required_credential_source_for_provider(case.provider).?);
+        try std.testing.expectEqual(case.source, catalogAccessForCredential(case.source, "key", "ignored-team").credentialSource().?);
+        try std.testing.expect(std.mem.find(u8, missing_credential_message_for_provider(case.provider, false), case.missing) != null);
+        try std.testing.expect(!model_provider.authorizesCredential(case.provider, .custom_provider));
+    }
 }
 
 test "credential gateway team prefers team id" {

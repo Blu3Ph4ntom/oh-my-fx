@@ -122,7 +122,7 @@ pub fn Runtime(comptime App: type) type {
                 try app.writeDomainNotice(.{
                     .topic = "provider",
                     .tone = .warning,
-                    .body = "Usage: /provider [gateway|openai_compatible|codex|opencode_go]",
+                    .body = "Usage: /provider [gateway|openai|openrouter|xai|deepseek|groq|cerebras|fireworks|together|mistral|openai_compatible|codex|opencode_go]",
                 }, true);
                 return;
             };
@@ -764,7 +764,7 @@ pub fn Runtime(comptime App: type) type {
                 .gateway => settings.model,
                 .codex => settings.codex_model,
                 .grok => settings.model,
-                .openai_compatible => settings.model,
+                .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .openai_compatible => settings.model,
                 .opencode_go => settings.model,
             };
             const requested_model = io_mod.getenvProduct("OMFX_MODEL", "FX_MODEL") orelse saved_model;
@@ -820,6 +820,16 @@ pub fn Runtime(comptime App: type) type {
                     .gateway => .{ .provider = .gateway, .model = provider_runtime.model(app) },
                     .codex => .{ .provider = .codex, .codex_model = provider_runtime.model(app) },
                     .grok => .{ .provider = .grok, .model = provider_runtime.model(app) },
+                    .openai,
+                    .openrouter,
+                    .xai,
+                    .deepseek,
+                    .groq,
+                    .cerebras,
+                    .fireworks,
+                    .together,
+                    .mistral,
+                    => .{ .provider = target, .model = provider_runtime.model(app) },
                     .openai_compatible => .{ .provider = .openai_compatible, .model = provider_runtime.model(app) },
                     .opencode_go => .{ .provider = .opencode_go, .model = provider_runtime.model(app) },
                 });

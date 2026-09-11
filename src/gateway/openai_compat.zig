@@ -2,9 +2,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const stream_provider = @import("../core/agent/stream_provider.zig");
+const model_provider = @import("../core/config/model_provider.zig");
 const io_mod = @import("../core/shared/io.zig");
 const types = @import("../core/shared/types.zig");
 const openai = @import("openai.zig");
+const profiles = @import("openai_compat_profiles.zig");
 
 pub const base_url_env = "OMFX_OPENAI_COMPATIBLE_BASE_URL";
 pub const legacy_base_url_env = "FX_OPENAI_COMPATIBLE_BASE_URL";
@@ -18,6 +20,15 @@ pub const agent_stream_provider = stream_provider.Provider{
     .build_fn = buildRequest,
     .stream_fn = streamCompletion,
 };
+
+pub fn agentStreamProvider(provider: model_provider.ProviderId) stream_provider.Provider {
+    const profile = profiles.forProvider(provider) orelse return agent_stream_provider;
+    return .{
+        .context = @constCast(profile),
+        .build_fn = buildRequest,
+        .stream_fn = streamCompletion,
+    };
+}
 
 pub fn isLoopbackHttpUrl(url: []const u8) bool {
     const uri = std.Uri.parse(url) catch return false;
@@ -129,6 +140,14 @@ pub fn resolveModelsUrl(alloc: Allocator) ![]u8 {
     return resolveConfiguredEndpoint(alloc, models_suffix, e2e_models_url_env);
 }
 
+pub fn resolveModelsUrlForProfile(alloc: Allocator, profile: profiles.Profile) ![]u8 {
+    return endpointFromBase(alloc, profile.base_url, models_suffix);
+}
+
+pub fn resolveChatUrlForProfile(alloc: Allocator, profile: profiles.Profile) ![]u8 {
+    return endpointFromBase(alloc, profile.base_url, chat_suffix);
+}
+
 pub fn buildRequest(
     _: ?*anyopaque,
     alloc: Allocator,
@@ -150,17 +169,28 @@ pub fn buildRequest(
 }
 
 pub fn streamCompletion(
-    _: ?*anyopaque,
+    context: ?*anyopaque,
     alloc: Allocator,
     request: stream_provider.Request,
 ) !stream_provider.Result {
-    const url = resolveChatUrl(alloc) catch |err| switch (err) {
-        error.MissingOpenAiCompatibleBaseUrl => if (isLoopbackHttpUrl(request.chat_url))
-            try alloc.dupe(u8, request.chat_url)
-        else
-            return err,
-        else => return err,
-    };
+    const profile: ?*const profiles.Profile = if (context) |raw|
+        @ptrCast(@alignCast(raw))
+    else
+        null;
+    if (profile) |selected| {
+        if (request.credential_source != selected.credential_source)
+            return error.CredentialSourceMismatch;
+    }
+    const url = if (profile) |selected|
+        resolveChatUrlForProfile(alloc, selected.*)
+    else
+        resolveChatUrl(alloc) catch |err| switch (err) {
+            error.MissingOpenAiCompatibleBaseUrl => if (isLoopbackHttpUrl(request.chat_url))
+                try alloc.dupe(u8, request.chat_url)
+            else
+                return err,
+            else => return err,
+        };
     defer alloc.free(url);
     if (!isAllowedUrl(url)) return error.InvalidEndpoint;
 

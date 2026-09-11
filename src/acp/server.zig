@@ -374,6 +374,20 @@ pub fn streamProviderFor(
         .codex => state.cfg.codex_agent_stream orelse
             @import("../core/agent/stream_provider.zig").unavailable_provider,
         .grok => @import("../core/agent/stream_provider.zig").unavailable_provider,
+        .openai,
+        .openrouter,
+        .xai,
+        .deepseek,
+        .groq,
+        .cerebras,
+        .fireworks,
+        .together,
+        .mistral,
+        => if (state.cfg.named_compatible_agent_stream) |factory|
+            factory(provider)
+        else
+            state.cfg.openai_compatible_agent_stream orelse
+                @import("../core/agent/stream_provider.zig").unavailable_provider,
         .openai_compatible => state.cfg.openai_compatible_agent_stream orelse
             @import("../core/agent/stream_provider.zig").unavailable_provider,
         .opencode_go => state.cfg.opencode_go_agent_stream orelse
@@ -389,6 +403,19 @@ pub fn catalogProviderFor(
         .gateway => state.cfg.gateway_provider.model_catalog,
         .codex => state.cfg.codex_model_catalog,
         .grok => null,
+        .openai,
+        .openrouter,
+        .xai,
+        .deepseek,
+        .groq,
+        .cerebras,
+        .fireworks,
+        .together,
+        .mistral,
+        => if (state.cfg.named_compatible_model_catalog) |factory|
+            factory(provider)
+        else
+            state.cfg.openai_compatible_model_catalog,
         .openai_compatible => state.cfg.openai_compatible_model_catalog,
         .opencode_go => state.cfg.opencode_go_model_catalog,
     };
@@ -1713,7 +1740,7 @@ fn handleSetConfigOption(state: *ServerState, alloc: Allocator, msg: *jsonrpc.Me
                 .gateway => settings.model,
                 .codex => settings.codex_model,
                 .grok => settings.model,
-                .openai_compatible => settings.model,
+                .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .openai_compatible => settings.model,
                 .opencode_go => settings.model,
             };
             var selected_model = catalog.items[0].id;

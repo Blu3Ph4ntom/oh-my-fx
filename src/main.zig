@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const build_options = @import("build_options");
 const io_mod = @import("core/shared/io.zig");
 
-pub const version = "0.0.9";
+pub const version = "0.0.10";
 
 const app_lifecycle = @import("core/app/app_lifecycle.zig");
 const provider_runtime = @import("core/app/provider_runtime.zig");
@@ -1636,6 +1636,10 @@ const App = struct {
                     builtin_providers.agentStream(.opencode_go),
                 .permission_reviewer_provider = null,
             },
+            .named_compatible_provider = if (comptime host_target.is_wasm)
+                null
+            else
+                builtin_providers.agentStream,
         };
     }
 
@@ -3347,8 +3351,11 @@ fn fullEntryConfig() app_entry_runtime.Config {
         .codex_cli_model_catalog = openai_codex_models.cli_model_catalog_provider,
         .codex_model_catalog = openai_codex_models.model_catalog_provider,
         .openai_compatible_cli_model_catalog = builtin_providers.openai_compatible_cli_model_catalog,
+        .named_compatible_cli_model_catalog = builtin_providers.openaiCompatibleCliModelCatalog,
         .openai_compatible_agent_stream = builtin_providers.agentStream(.openai_compatible),
         .openai_compatible_model_catalog = builtin_providers.modelCatalog(.openai_compatible),
+        .named_compatible_agent_stream = builtin_providers.agentStream,
+        .named_compatible_model_catalog = builtin_providers.modelCatalog,
         .opencode_go_agent_stream = builtin_providers.agentStream(.opencode_go),
         .opencode_go_cli_model_catalog = builtin_providers.opencode_go_cli_model_catalog,
         .opencode_go_model_catalog = builtin_providers.modelCatalog(.opencode_go),
@@ -3393,8 +3400,11 @@ fn localEntryConfig() app_entry_runtime.Config {
         .codex_cli_model_catalog = openai_codex_models.cli_model_catalog_provider,
         .codex_model_catalog = openai_codex_models.model_catalog_provider,
         .openai_compatible_cli_model_catalog = builtin_providers.openai_compatible_cli_model_catalog,
+        .named_compatible_cli_model_catalog = builtin_providers.openaiCompatibleCliModelCatalog,
         .openai_compatible_agent_stream = builtin_providers.agentStream(.openai_compatible),
         .openai_compatible_model_catalog = builtin_providers.modelCatalog(.openai_compatible),
+        .named_compatible_agent_stream = builtin_providers.agentStream,
+        .named_compatible_model_catalog = builtin_providers.modelCatalog,
         .opencode_go_agent_stream = builtin_providers.agentStream(.opencode_go),
         .opencode_go_cli_model_catalog = builtin_providers.opencode_go_cli_model_catalog,
         .opencode_go_model_catalog = builtin_providers.modelCatalog(.opencode_go),
@@ -3437,8 +3447,11 @@ fn emptyEntryConfig() app_entry_runtime.Config {
         .codex_cli_model_catalog = openai_codex_models.cli_model_catalog_provider,
         .codex_model_catalog = openai_codex_models.model_catalog_provider,
         .openai_compatible_cli_model_catalog = builtin_providers.openai_compatible_cli_model_catalog,
+        .named_compatible_cli_model_catalog = builtin_providers.openaiCompatibleCliModelCatalog,
         .openai_compatible_agent_stream = builtin_providers.agentStream(.openai_compatible),
         .openai_compatible_model_catalog = builtin_providers.modelCatalog(.openai_compatible),
+        .named_compatible_agent_stream = builtin_providers.agentStream,
+        .named_compatible_model_catalog = builtin_providers.modelCatalog,
         .opencode_go_agent_stream = builtin_providers.agentStream(.opencode_go),
         .opencode_go_cli_model_catalog = builtin_providers.opencode_go_cli_model_catalog,
         .opencode_go_model_catalog = builtin_providers.modelCatalog(.opencode_go),

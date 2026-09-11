@@ -182,8 +182,11 @@ pub const Config = struct {
     codex_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
     codex_model_catalog: ?model_catalog.Provider = null,
     openai_compatible_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
+    named_compatible_cli_model_catalog: ?*const fn (model_provider.ProviderId) gateway_provider.CliModelCatalogProvider = null,
     openai_compatible_agent_stream: ?agent_stream_provider.Provider = null,
     openai_compatible_model_catalog: ?model_catalog.Provider = null,
+    named_compatible_agent_stream: ?*const fn (model_provider.ProviderId) agent_stream_provider.Provider = null,
+    named_compatible_model_catalog: ?*const fn (model_provider.ProviderId) model_catalog.Provider = null,
     opencode_go_agent_stream: ?agent_stream_provider.Provider = null,
     opencode_go_cli_model_catalog: ?gateway_provider.CliModelCatalogProvider = null,
     opencode_go_model_catalog: ?model_catalog.Provider = null,
@@ -737,6 +740,8 @@ fn runNonInteractiveWithDeps(
                 .codex_model_catalog = cfg.codex_model_catalog,
                 .openai_compatible_agent_stream = cfg.openai_compatible_agent_stream,
                 .openai_compatible_model_catalog = cfg.openai_compatible_model_catalog,
+                .named_compatible_agent_stream = cfg.named_compatible_agent_stream,
+                .named_compatible_model_catalog = cfg.named_compatible_model_catalog,
                 .opencode_go_agent_stream = cfg.opencode_go_agent_stream,
                 .opencode_go_model_catalog = cfg.opencode_go_model_catalog,
                 .background_process_provider = cfg.background_process_provider,
@@ -895,17 +900,13 @@ fn runNonInteractiveWithDeps(
         },
         .provider => |rest| {
             if (rest.len != 1) {
-                try writeStderr(deps, "usage: omfx provider <gateway|openai_compatible|codex|opencode_go>\n");
+                try writeStderr(deps, "usage: omfx provider <gateway|openai|openrouter|xai|deepseek|groq|cerebras|fireworks|together|mistral|openai_compatible|codex|opencode_go>\n");
                 return .handled_failure;
             }
             const target = model_provider.parse(rest[0]) orelse {
-                try writeStderr(deps, "omfx provider: expected gateway, openai_compatible, codex, or opencode_go\n");
+                try writeStderr(deps, "omfx provider: unknown provider\n");
                 return .handled_failure;
             };
-            if (target != .gateway and target != .openai_compatible and target != .codex and target != .opencode_go) {
-                try writeStderr(deps, "omfx provider: expected gateway, openai_compatible, codex, or opencode_go\n");
-                return .handled_failure;
-            }
             const workspace_root = try io_mod.realpathAlloc(alloc, ".");
             defer alloc.free(workspace_root);
             var settings = config_runtime.loadMergedSettings(alloc, workspace_root) catch |err| {
@@ -915,13 +916,9 @@ fn runNonInteractiveWithDeps(
             };
             defer settings.deinit(alloc);
             if ((settings.provider orelse .gateway) == target) {
-                try writeStdout(deps, switch (target) {
-                    .gateway => "Gateway is already selected.\n",
-                    .codex => "Codex is already selected.\n",
-                    .opencode_go => "OpenCode Go is already selected.\n",
-                    .openai_compatible => "OpenAI-compatible is already selected.\n",
-                    else => unreachable,
-                });
+                const message = try std.fmt.allocPrint(alloc, "{s} is already selected.\n", .{model_provider.label(target)});
+                defer alloc.free(message);
+                try writeStdout(deps, message);
                 return .handled_success;
             }
             if (target == .openai_compatible and
@@ -956,13 +953,13 @@ fn runNonInteractiveWithDeps(
                 );
             }
             const credential = if (resolution.credential) |*value| value else {
-                try writeStderr(deps, switch (target) {
-                    .codex => "omfx provider: run omfx login codex first\n",
-                    .opencode_go => "omfx provider: set OPENCODE_GO_API_KEY first\n",
-                    .gateway => "omfx provider: configure a Gateway credential first\n",
-                    .openai_compatible => "omfx provider: set CUSTOM_PROVIDER_API_KEY and OMFX_OPENAI_COMPATIBLE_BASE_URL first\n",
-                    else => unreachable,
-                });
+                const message = try std.fmt.allocPrint(
+                    alloc,
+                    "omfx provider: {s}\n",
+                    .{credentials.missing_credential_message_for_provider(target, false)},
+                );
+                defer alloc.free(message);
+                try writeStderr(deps, message);
                 return .handled_failure;
             };
             const catalog_provider = switch (target) {
@@ -979,7 +976,12 @@ fn runNonInteractiveWithDeps(
                     try writeStderr(deps, "omfx provider: OpenCode Go model catalog is unavailable\n");
                     return .handled_failure;
                 },
-                else => unreachable,
+                else => if (cfg.named_compatible_model_catalog) |factory|
+                    factory(target)
+                else {
+                    try writeStderr(deps, "omfx provider: named provider model catalog is unavailable\n");
+                    return .handled_failure;
+                },
             };
             const fetch_result = model_catalog.fetchWithPublicFallback(catalog_provider, alloc, .{
                 .access = credentials.catalogAccessAt(credential.*, io_mod.milliTimestamp()),
@@ -1024,7 +1026,7 @@ fn runNonInteractiveWithDeps(
                 .codex => "Provider set to Codex.\n",
                 .openai_compatible => "Provider set to OpenAI-compatible.\n",
                 .opencode_go => "Provider set to OpenCode Go.\n",
-                else => unreachable,
+                else => "Provider set to named OpenAI-compatible service.\n",
             });
             return .handled_success;
         },
@@ -1109,6 +1111,22 @@ fn runNonInteractiveWithDeps(
                     try writeStderr(deps, "omfx models: Codex model catalog is unavailable\n");
                     return .handled_failure;
                 },
+                .openai,
+                .openrouter,
+                .xai,
+                .deepseek,
+                .groq,
+                .cerebras,
+                .fireworks,
+                .together,
+                .mistral,
+                => if (cfg.named_compatible_cli_model_catalog) |factory|
+                    factory(startup.provider)
+                else
+                    cfg.openai_compatible_cli_model_catalog orelse {
+                        try writeStderr(deps, "omfx models: OpenAI-compatible model catalog is unavailable\n");
+                        return .handled_failure;
+                    },
                 .openai_compatible => cfg.openai_compatible_cli_model_catalog orelse {
                     try writeStderr(deps, "omfx models: OpenAI-compatible model catalog is unavailable\n");
                     return .handled_failure;
@@ -2950,6 +2968,8 @@ fn workflowConfig(cfg: Config) @import("cli_ask.zig").Config {
         .codex_agent_stream = cfg.codex_agent_stream,
         .openai_compatible_agent_stream = cfg.openai_compatible_agent_stream,
         .openai_compatible_model_catalog = cfg.openai_compatible_model_catalog,
+        .named_compatible_agent_stream = cfg.named_compatible_agent_stream,
+        .named_compatible_model_catalog = cfg.named_compatible_model_catalog,
         .opencode_go_agent_stream = cfg.opencode_go_agent_stream,
         .opencode_go_model_catalog = cfg.opencode_go_model_catalog,
         .background_process_provider = cfg.background_process_provider,

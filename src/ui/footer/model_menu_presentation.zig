@@ -359,6 +359,16 @@ fn loadedCatalogStatusText(state: model_cache_runtime.ModelMenuCatalogState) ?[]
             .chatgpt_subscription => "Codex models require an authenticated Codex catalog.",
             .grok_subscription => "Grok models require an authenticated Grok catalog.",
             .opencode_go_subscription => "OpenCode Go models require an OpenCode Go API key.",
+            .openai_api_key,
+            .openrouter_api_key,
+            .xai_api_key,
+            .deepseek_api_key,
+            .groq_api_key,
+            .cerebras_api_key,
+            .fireworks_api_key,
+            .together_api_key,
+            .mistral_api_key,
+            => "The selected provider requires its API key.",
         };
     }
     if (state.access_level == .authenticated) {
@@ -372,6 +382,15 @@ fn loadedCatalogStatusText(state: model_cache_runtime.ModelMenuCatalogState) ?[]
             .grok_subscription => "Grok catalog: authenticated with a subscription.",
             .custom_provider => "Custom provider: authenticated with custom endpoint.",
             .opencode_go_subscription => "OpenCode Go catalog: authenticated with an API key.",
+            .openai_api_key => "OpenAI catalog: authenticated with an API key.",
+            .openrouter_api_key => "OpenRouter catalog: authenticated with an API key.",
+            .xai_api_key => "xAI catalog: authenticated with an API key.",
+            .deepseek_api_key => "DeepSeek catalog: authenticated with an API key.",
+            .groq_api_key => "Groq catalog: authenticated with an API key.",
+            .cerebras_api_key => "Cerebras catalog: authenticated with an API key.",
+            .fireworks_api_key => "Fireworks catalog: authenticated with an API key.",
+            .together_api_key => "Together catalog: authenticated with an API key.",
+            .mistral_api_key => "Mistral catalog: authenticated with an API key.",
         };
     }
     return null;

@@ -50,7 +50,7 @@ omfx login codex
 omfx
 ```
 
-Inside omfx, `/provider` switches between Gateway, OpenAI-compatible, Codex, and OpenCode Go, and `/model` lists the active provider's fetched models. Codex model IDs are the raw IDs returned by its authenticated catalog. Use `/logout codex` to remove the Codex session without affecting Vercel access.
+Inside omfx, `/provider` switches between Gateway, Codex, OpenCode Go, and named OpenAI-compatible providers. The named profiles are OpenAI, OpenRouter, xAI, DeepSeek, Groq, Cerebras, Fireworks, Together, and Mistral. `/model` lists the active provider's fetched models. Codex model IDs are the raw IDs returned by its authenticated catalog. Use `/logout codex` to remove the Codex session without affecting Vercel access.
 
 The OpenAI Codex route uses ChatGPT subscription access directly and never sends its OAuth token to Vercel AI Gateway. The session is stored privately at `~/.fx/chatgpt-auth.json` and refreshed when needed. On supported Codex models, `/fast` requests OpenAI's priority service tier and consumes ChatGPT credits at the higher Fast mode rate.
 
@@ -82,6 +82,16 @@ omfx provider openai_compatible
 ```
 
 omfx fetches `/models` live and sends chat requests to `/chat/completions`. When a model advertises reasoning, the effort picker forwards the selected value and streamed reasoning is kept separate from the answer. The base URL must not include credentials, a query, or a fragment. `FX_OPENAI_COMPATIBLE_BASE_URL` remains accepted as a legacy environment name.
+
+Named profiles use their provider's fixed HTTPS endpoint and dedicated environment variable. For example:
+
+```powershell
+$env:OPENROUTER_API_KEY = "your-key"
+omfx provider openrouter
+omfx models
+```
+
+The other profiles use `OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `TOGETHER_API_KEY`, and `MISTRAL_API_KEY` respectively. Their model catalogs and reasoning metadata are kept separate from the custom endpoint profile.
 
 To use an AI Gateway API key instead:
 

@@ -36,18 +36,34 @@ pub const ProviderRoute = struct {
     permission_reviewer_provider: ?auto_classifier.Provider,
 };
 
+pub const NamedCompatibleProviderFactory = *const fn (model_provider.ProviderId) stream_provider.Provider;
+
 pub const ProviderRoutes = struct {
     gateway: ProviderRoute,
     codex: ProviderRoute,
     grok: ProviderRoute,
     openai_compatible: ProviderRoute,
     opencode_go: ProviderRoute,
+    named_compatible_provider: ?NamedCompatibleProviderFactory = null,
 
     pub fn select(self: ProviderRoutes, provider: model_provider.ProviderId) ProviderRoute {
         return switch (provider) {
             .gateway => self.gateway,
             .codex => self.codex,
             .grok => self.grok,
+            .openai,
+            .openrouter,
+            .xai,
+            .deepseek,
+            .groq,
+            .cerebras,
+            .fireworks,
+            .together,
+            .mistral,
+            => if (self.named_compatible_provider) |factory|
+                .{ .agent_stream_provider = factory(provider), .permission_reviewer_provider = null }
+            else
+                self.openai_compatible,
             .openai_compatible => self.openai_compatible,
             .opencode_go => self.opencode_go,
         };

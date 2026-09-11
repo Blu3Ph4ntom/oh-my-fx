@@ -386,7 +386,7 @@ pub const PickerView = struct {
                 6
             else
                 7,
-            .provider => 4,
+            .provider => 13,
             .sign_in, .api_key => 0,
             .change_team => blk: {
                 var count: usize = 0;
@@ -443,6 +443,15 @@ pub const PickerView = struct {
                 1 => .{ .provider = .openai_compatible },
                 2 => .{ .provider = .codex },
                 3 => .{ .provider = .opencode_go },
+                4 => .{ .provider = .openai },
+                5 => .{ .provider = .openrouter },
+                6 => .{ .provider = .xai },
+                7 => .{ .provider = .deepseek },
+                8 => .{ .provider = .groq },
+                9 => .{ .provider = .cerebras },
+                10 => .{ .provider = .fireworks },
+                11 => .{ .provider = .together },
+                12 => .{ .provider = .mistral },
                 else => null,
             },
             .sign_in, .api_key => null,
@@ -1389,6 +1398,24 @@ pub const Runtime = struct {
                     self,
                     loadRuntimeCredentialSource,
                 ),
+            .openai,
+            .openrouter,
+            .xai,
+            .deepseek,
+            .groq,
+            .cerebras,
+            .fireworks,
+            .together,
+            .mistral,
+            => if (self.credentialSource() == credentials.required_credential_source_for_provider(provider).?)
+                false
+            else
+                self.selectSourceWithLoader(
+                    alloc,
+                    credentials.required_credential_source_for_provider(provider).?,
+                    self,
+                    loadRuntimeCredentialSource,
+                ),
             .openai_compatible => if (self.credentialSource() == .custom_provider)
                 false
             else
@@ -2310,11 +2337,21 @@ test "provider picker exposes OpenCode Go alongside built-in providers" {
     runtime.openProviderPicker(alloc, .gateway);
 
     const picker = runtime.pickerView();
-    try std.testing.expectEqual(@as(usize, 4), picker.choiceCount());
+    try std.testing.expectEqual(@as(usize, 13), picker.choiceCount());
     try std.testing.expect((Choice{ .provider = .gateway }).eql(picker.choiceAt(0).?));
     try std.testing.expect((Choice{ .provider = .openai_compatible }).eql(picker.choiceAt(1).?));
     try std.testing.expect((Choice{ .provider = .codex }).eql(picker.choiceAt(2).?));
     try std.testing.expect((Choice{ .provider = .opencode_go }).eql(picker.choiceAt(3).?));
+    try std.testing.expect((Choice{ .provider = .openai }).eql(picker.choiceAt(4).?));
+    try std.testing.expect((Choice{ .provider = .openrouter }).eql(picker.choiceAt(5).?));
+    try std.testing.expect((Choice{ .provider = .xai }).eql(picker.choiceAt(6).?));
+    try std.testing.expect((Choice{ .provider = .deepseek }).eql(picker.choiceAt(7).?));
+    try std.testing.expect((Choice{ .provider = .groq }).eql(picker.choiceAt(8).?));
+    try std.testing.expect((Choice{ .provider = .cerebras }).eql(picker.choiceAt(9).?));
+    try std.testing.expect((Choice{ .provider = .fireworks }).eql(picker.choiceAt(10).?));
+    try std.testing.expect((Choice{ .provider = .together }).eql(picker.choiceAt(11).?));
+    try std.testing.expect((Choice{ .provider = .mistral }).eql(picker.choiceAt(12).?));
+    try std.testing.expect(picker.choiceAt(13) == null);
 }
 
 test "credential switcher excludes provider-routed ChatGPT sessions" {

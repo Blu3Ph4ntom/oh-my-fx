@@ -742,6 +742,7 @@ pub const ModelListSnapshot = struct {
             .gateway => "gateway",
             .codex => model_provider.label(.codex),
             .grok => model_provider.label(.grok),
+            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => model_provider.label(self.provider),
             .openai_compatible => model_provider.label(.openai_compatible),
             .opencode_go => model_provider.label(.opencode_go),
         };
@@ -759,6 +760,16 @@ pub const ModelListSnapshot = struct {
             .chatgpt_subscription => "Codex models require an authenticated Codex catalog.",
             .grok_subscription => "Grok models require an authenticated Grok catalog.",
             .opencode_go_subscription => "OpenCode Go models require an OpenCode Go API key.",
+            .openai_api_key,
+            .openrouter_api_key,
+            .xai_api_key,
+            .deepseek_api_key,
+            .groq_api_key,
+            .cerebras_api_key,
+            .fireworks_api_key,
+            .together_api_key,
+            .mistral_api_key,
+            => "The selected provider requires its API key.",
         };
     }
 };

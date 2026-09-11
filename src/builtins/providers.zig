@@ -10,6 +10,7 @@ const xai_grok = @import("../gateway/xai_grok.zig");
 const xai_grok_models = @import("../gateway/xai_grok_models.zig");
 const openai_compat = @import("../gateway/openai_compat.zig");
 const openai_compat_models = @import("../gateway/openai_compat_models.zig");
+const openai_compat_profiles = @import("../gateway/openai_compat_profiles.zig");
 const opencode_go = @import("../gateway/opencode_go.zig");
 const opencode_go_models = @import("../gateway/opencode_go_models.zig");
 
@@ -17,12 +18,24 @@ pub const openai_compatible_cli_model_catalog = gateway_provider.CliModelCatalog
     .fetch_fn = fetchOpenAiCompatibleCliModelCatalog,
 };
 
+pub fn openaiCompatibleCliModelCatalog(provider: model_provider.ProviderId) gateway_provider.CliModelCatalogProvider {
+    const profile = openai_compat_profiles.forProvider(provider) orelse return openai_compatible_cli_model_catalog;
+    return .{
+        .context = @constCast(profile),
+        .fetch_fn = fetchOpenAiCompatibleCliModelCatalog,
+    };
+}
+
 fn fetchOpenAiCompatibleCliModelCatalog(
-    _: ?*anyopaque,
+    context: ?*anyopaque,
     alloc: std.mem.Allocator,
     input: gateway_provider.CliModelCatalogInput,
 ) gateway_provider.CliModelCatalogResult {
-    return switch (model_catalog.fetchWithPublicFallback(openai_compat_models.model_catalog_provider, alloc, .{
+    const catalog_provider = if (context) |raw| blk: {
+        const profile: *const openai_compat_profiles.Profile = @ptrCast(@alignCast(raw));
+        break :blk openai_compat_models.modelCatalogProvider(profile.provider);
+    } else openai_compat_models.model_catalog_provider;
+    return switch (model_catalog.fetchWithPublicFallback(catalog_provider, alloc, .{
         .access = input.access,
         .endpoint = input.endpoint,
         .cancel_flag = input.cancel_flag,
@@ -84,6 +97,7 @@ pub fn agentStream(provider: model_provider.ProviderId) stream_provider.Provider
         .grok => xai_grok.agent_stream_provider,
         .openai_compatible => openai_compat.agent_stream_provider,
         .opencode_go => opencode_go.agent_stream_provider,
+        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => openai_compat.agentStreamProvider(provider),
     };
 }
 
@@ -94,5 +108,6 @@ pub fn modelCatalog(provider: model_provider.ProviderId) model_catalog.Provider 
         .grok => xai_grok_models.model_catalog_provider,
         .openai_compatible => openai_compat_models.model_catalog_provider,
         .opencode_go => opencode_go_models.model_catalog_provider,
+        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => openai_compat_models.modelCatalogProvider(provider),
     };
 }

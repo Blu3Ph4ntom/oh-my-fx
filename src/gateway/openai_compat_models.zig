@@ -2,10 +2,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const model_catalog = @import("../core/gateway/model_catalog.zig");
+const model_provider = @import("../core/config/model_provider.zig");
 const io_mod = @import("../core/shared/io.zig");
 const secret = @import("../core/auth/secret.zig");
 const gateway_client = @import("client.zig");
 const openai_compat = @import("openai_compat.zig");
+const profiles = @import("openai_compat_profiles.zig");
 
 const max_catalog_models: usize = 512;
 const max_model_id_bytes: usize = 1024;
@@ -15,21 +17,37 @@ pub const model_catalog_provider = model_catalog.Provider{
     .fetch_fn = fetchCatalog,
 };
 
+pub fn modelCatalogProvider(provider: model_provider.ProviderId) model_catalog.Provider {
+    const profile = profiles.forProvider(provider) orelse return model_catalog_provider;
+    return .{
+        .context = @constCast(profile),
+        .fetch_fn = fetchCatalog,
+    };
+}
+
 fn fetchCatalog(
-    _: ?*anyopaque,
+    context: ?*anyopaque,
     alloc: Allocator,
     input: model_catalog.FetchInput,
 ) Allocator.Error!model_catalog.ProviderResult {
-    if (input.access.credentialSource() != .custom_provider) {
+    const profile: ?*const profiles.Profile = if (context) |raw|
+        @ptrCast(@alignCast(raw))
+    else
+        null;
+    const expected_source = if (profile) |selected| selected.credential_source else .custom_provider;
+    if (input.access.credentialSource() != expected_source) {
         return .{ .failure = .{ .category = .authentication, .http_status = .unauthorized } };
     }
     const credential = input.access.authorizationCredential() orelse
         return .{ .failure = .{ .category = .authentication, .http_status = .unauthorized } };
 
-    const request_url = openai_compat.resolveModelsUrl(alloc) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        else => return .{ .failure = .{ .category = .runtime } },
-    };
+    const request_url = if (profile) |selected|
+        openai_compat.resolveModelsUrlForProfile(alloc, selected.*)
+    else
+        openai_compat.resolveModelsUrl(alloc) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return .{ .failure = .{ .category = .runtime } },
+        };
     defer alloc.free(request_url);
 
     var fallback_cancel = std.atomic.Value(bool).init(false);

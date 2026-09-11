@@ -1,14 +1,22 @@
 # fx
 
-## 0.0.9
+## 0.0.10
 
 <!-- release:start -->
+
+### New Features
+
+- **Named provider profiles:** Select OpenAI, OpenRouter, xAI, DeepSeek, Groq, Cerebras, Fireworks, Together, or Mistral with an isolated API-key environment variable and live `/models` catalog.
+
+- **Provider reasoning controls:** Preserve the selected reasoning effort and streamed reasoning for named OpenAI-compatible providers.
+
+<!-- release:end -->
+
+## 0.0.9
 
 ### Improvements
 
 - **Reasoning controls:** Forward supported reasoning effort to OpenAI-compatible and OpenCode Go models, and keep streamed reasoning separate from the final answer.
-
-<!-- release:end -->
 
 ## 0.0.8
 

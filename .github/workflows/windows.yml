@@ -346,6 +346,8 @@ jobs:
           zig test -lc src/test_root.zig --test-filter "OpenAI-compatible request forwards declared reasoning effort"
           zig test -lc src/test_root.zig --test-filter "OpenAI-compatible catalog parser"
           zig test -lc src/test_root.zig --test-filter "OpenAI-compatible credential guidance"
+          zig test -lc src/test_root.zig --test-filter "named OpenAI-compatible profiles"
+          zig test -lc src/test_root.zig --test-filter "named provider credentials stay isolated"
           zig test -lc src/test_root.zig --test-filter "provider parsing exposes named compatible providers"
           zig test -lc src/test_root.zig --test-filter "Windows uses cmd fallback"
           zig test -lc src/test_root.zig --test-filter "Windows captured profiles execute"
