@@ -780,6 +780,11 @@ fn connectAndHandshakeOnce(
         io_mod.getenv("USERPROFILE") orelse return error.HomeNotSet;
     var paths = try host.Paths.open(alloc, home);
     defer paths.deinit(alloc);
+    debug_trace.logf(
+        "terminal_client",
+        "client paths home={s} authority={s} endpoint={s}",
+        .{ home, paths.authority_root_path, paths.endpoint_path },
+    );
 
     var stream = connectOrStart(alloc, process_provider, &paths) catch |err| {
         debug_trace.logf(
@@ -878,6 +883,16 @@ fn connectOrStart(
         .acquired,
         identity,
     );
+    debug_trace.logf(
+        "terminal_client",
+        "host decision connection={s} identity={s} decision={s} endpoint={s}",
+        .{
+            @tagName(connection),
+            @tagName(identity),
+            @tagName(decision),
+            paths.endpoint_path,
+        },
+    );
     switch (decision) {
         .start_host => authority_lock.release(),
         .remove_stale_then_start => {
@@ -959,6 +974,15 @@ fn launchHost(alloc: Allocator) !void {
     else
         try std.process.executablePathAlloc(io_mod.getIo(), alloc);
     defer alloc.free(executable);
+    debug_trace.logf(
+        "terminal_client",
+        "launching host executable={s} home={s} userprofile={s}",
+        .{
+            executable,
+            io_mod.getenv("HOME") orelse "<unset>",
+            io_mod.getenv("USERPROFILE") orelse "<unset>",
+        },
+    );
     const argv = [_][]const u8{ executable, host.internal_mode };
     const child = std.process.spawn(io_mod.getIo(), .{
         .argv = &argv,

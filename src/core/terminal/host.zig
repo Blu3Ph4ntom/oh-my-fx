@@ -398,6 +398,16 @@ fn runSupported(alloc: Allocator, config: Config) !void {
         io_mod.getenv("USERPROFILE") orelse return error.HomeNotSet;
     var paths = try Paths.open(alloc, home);
     defer paths.deinit(alloc);
+    debug_trace.logf(
+        "terminal_host",
+        "host paths home={s} authority={s} endpoint={s} userprofile={s}",
+        .{
+            home,
+            paths.authority_root_path,
+            paths.endpoint_path,
+            io_mod.getenv("USERPROFILE") orelse "<unset>",
+        },
+    );
 
     var authority_lock = io_mod.acquireTimedAdvisoryLock(
         &paths.host_dir,
