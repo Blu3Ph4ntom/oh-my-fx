@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const background_runtime = @import("../core/background/background_runtime.zig");
 const change_tracker = @import("../core/workspace/change_tracker.zig");
 const debug_trace = @import("../core/shared/debug_trace.zig");
@@ -2028,6 +2029,12 @@ fn buildTurnContextFragment(arena: Allocator, workspace_root: []const u8) ![]con
     try out.writer.writeAll("shell_path: ");
     try model_context_encoding.writeScalar(&out.writer, shell);
     try out.writer.writeByte('\n');
+    if (comptime builtin.os.tag == .windows) {
+        try out.writer.writeAll(
+            "terminal_command_syntax: cmd.exe\n" ++
+                "terminal_command_guidance: Use Windows cmd.exe syntax for terminal.exec and terminal.start: echo, cd, dir, where, type, and set. Do not use POSIX-only pwd, ls, date -u, rm, or chmod. Use powershell -NoProfile -Command ... when PowerShell is needed.\n",
+        );
+    }
     try out.writer.print("date_utc: {s}\n", .{date_text});
     try out.writer.writeAll("home_directory: ");
     try model_context_encoding.writeScalar(&out.writer, home);
@@ -2748,6 +2755,16 @@ test "turn context selection is byte identical on the native path" {
         null,
     );
     try std.testing.expectEqualStrings(native, selected);
+}
+
+test "turn context names native Windows command syntax" {
+    if (comptime builtin.os.tag != .windows) return;
+
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const fragment = try buildTurnContextFragment(arena_state.allocator(), "C:\\workspace");
+    try expectContains(fragment, "terminal_command_syntax: cmd.exe\n");
+    try expectContains(fragment, "Do not use POSIX-only pwd, ls, date -u, rm, or chmod.");
 }
 
 test "turn context uses explicit browser workspace and git unavailable state" {

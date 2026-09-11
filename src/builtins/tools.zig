@@ -90,8 +90,10 @@ const terminal_exec_only_cwd_description =
     "Working directory; defaults to the workspace.";
 const terminal_exec_only_command_description =
     "Command to run.";
+const terminal_profile_description =
+    "Startup profile for exec or start; omission defaults to user, while clean skips user startup files. User-profile execution uses the configured native login shell: Bash or zsh on POSIX, cmd.exe on Windows. On Windows, use cmd.exe syntax such as echo, cd, dir, where, type, and set; use powershell -NoProfile -Command ... when PowerShell is needed. Bash login execution reads login startup files; .bashrc is available only when sourced by the login profile. For start, an explicit shell is used instead of the default profile and is mutually exclusive with profile.";
 const terminal_exec_only_profile_description =
-    "Profile for exec; omission defaults to user, while clean skips user initialization files. User execution supports the configured Bash or zsh login shell. Bash login execution reads login initialization files; .bashrc is available only when sourced by the login profile.";
+    "Profile for exec; omission defaults to user, while clean skips user initialization files. User execution uses the configured native login shell: Bash or zsh on POSIX, cmd.exe on Windows. On Windows, use cmd.exe syntax such as echo, cd, dir, where, type, and set; use powershell -NoProfile -Command ... when PowerShell is needed. Bash login execution reads login initialization files; .bashrc is available only when sourced by the login profile.";
 
 const terminal_shell_schema = gateway_schema.ObjectSchema{
     .properties = &.{
@@ -194,7 +196,7 @@ const terminal_properties = [_]gateway_schema.Property{
     .{ .name = "session_id", .json_type = .string, .description = "Required for session-targeted actions. Set null for start and list; owner-catalog authority is private." },
     .{ .name = "cwd", .json_type = .string, .description = "Working directory for exec or start; defaults to the workspace." },
     .{ .name = "command", .json_type = .string, .max_length = terminal_contracts.max_command_bytes, .description = "Command for exec, or optional command for start; omit on start for an interactive shell." },
-    .{ .name = "profile", .json_type = .string, .shape = &.{ .enum_values = &.{ "clean", "user" } }, .description = "Startup profile for exec or start; omission defaults to user, while clean skips user startup files. User-profile execution supports the configured Bash or zsh login shell. Bash login execution reads login startup files; .bashrc is available only when sourced by the login profile. For start, an explicit shell is used instead of the default profile and is mutually exclusive with profile." },
+    .{ .name = "profile", .json_type = .string, .shape = &.{ .enum_values = &.{ "clean", "user" } }, .description = terminal_profile_description },
     .{ .name = "shell", .json_type = .object, .shape = &.{ .object = &terminal_shell_schema } },
     .{ .name = "backend", .json_type = .string, .shape = &.{ .enum_values = &.{ "native", "tmux" } }, .description = "Start backend or optional list filter." },
     .{ .name = "return_when", .json_type = .object, .shape = &.{ .object = &terminal_return_schema }, .description = "Only for start or wait; required for every wait. After a signal intended to stop the session, use kind exit. For output matching, use kind match with pattern; output_contains is monitor-only." },
@@ -1489,7 +1491,7 @@ test "terminal tool schema derives one closed branch per terminal action" {
         schemaProperty(write_schema, "lease").?.description,
     );
     try std.testing.expectEqualStrings(
-        "Startup profile for exec or start; omission defaults to user, while clean skips user startup files. User-profile execution supports the configured Bash or zsh login shell. Bash login execution reads login startup files; .bashrc is available only when sourced by the login profile. For start, an explicit shell is used instead of the default profile and is mutually exclusive with profile.",
+        terminal_profile_description,
         schemaProperty(start_schema, "profile").?.description,
     );
     try std.testing.expectEqualStrings(

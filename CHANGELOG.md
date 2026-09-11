@@ -1,5 +1,17 @@
 # fx
 
+## 0.0.6
+
+<!-- release:start -->
+
+### Bug Fixes
+
+- **Windows terminal execution:** Run captured commands through the native Windows shell instead of rejecting the selected profile.
+- **Retry activity:** Keep the working indicator visible while a turn recovers from a transient provider failure.
+- **Windows command guidance:** Tell the agent which native command syntax is available before it uses the terminal.
+
+<!-- release:end -->
+
 ## 0.0.5
 
 ### Improvements
@@ -7,8 +19,6 @@
 - **OpenCode Go model parity:** Route each live Go model through its documented API and preserve native streaming tool calls for agent workflows.
 
 ## 0.0.4
-
-<!-- release:start -->
 
 ### New Features
 
@@ -35,8 +45,6 @@
 - **Process cleanup:** Cancel and reap headless terminal commands on SIGTERM, preserve signal status, and tolerate short-lived Linux processes disappearing during cleanup
 - **Model output limits:** Omit invalid limits that consume a model's full context window
 - **Terminal lease transitions:** Reject write payloads on lease acquisition, release, and revocation before session state changes
-
-<!-- release:end -->
 
 ## 0.0.3
 

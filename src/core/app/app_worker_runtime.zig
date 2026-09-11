@@ -824,7 +824,7 @@ pub fn Runtime(comptime App: type) type {
                         }
                     },
                     .api_status_text => |text| {
-                        resetStream(app, false);
+                        resetStreamPreservingActivity(app);
                         app.shell.worker_status_state().set_api(text, .danger);
                         app.shell.render_requests.request(.footer);
                     },
@@ -999,6 +999,16 @@ pub fn Runtime(comptime App: type) type {
                 app.shell.render_requests.request(.footer);
             }
             app.shell.resetCommandOutputDisplay(app.alloc, "worker inactive");
+        }
+
+        fn resetStreamPreservingActivity(app: *App) void {
+            const was_active = app.stream.active;
+            const turn_started_ms = app.stream.turn_started_ms;
+            resetStream(app, false);
+            if (was_active) {
+                app.stream.active = true;
+                app.stream.turn_started_ms = turn_started_ms;
+            }
         }
 
         fn applyToolActivity(stream: *types.StreamState, kind: types.ToolActivityKind) void {
@@ -2354,8 +2364,16 @@ test "core.app_worker_runtime projects API status text as sticky status row" {
     var app = FakeApp.init(std.testing.allocator);
     defer app.deinit();
 
+    app.worker.processing = true;
+    app.stream = .{
+        .active = true,
+        .turn_started_ms = 1_234,
+    };
     try app.worker.pushEvent(std.heap.c_allocator, .{ .api_status_text = try std.heap.c_allocator.dupe(u8, "⚠ API access denied · HTTP 403 · Provider: wafer") });
     try tickNoop(&app);
+
+    try std.testing.expect(app.stream.active);
+    try std.testing.expectEqual(@as(i64, 1_234), app.stream.turn_started_ms);
 
     switch (app.shell.activityProjection()) {
         .turn_thinking => |thinking| {

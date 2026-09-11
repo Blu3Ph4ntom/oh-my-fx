@@ -35,7 +35,10 @@ fn fallbackLoginShell() []const u8 {
 }
 
 fn supportedLoginShell(configured_login_shell: ?[]const u8) ResolveError![]const u8 {
-    const path = configured_login_shell orelse return error.MissingLoginShell;
+    const path = configured_login_shell orelse blk: {
+        if (comptime builtin.os.tag == .windows) break :blk fallbackLoginShell();
+        return error.MissingLoginShell;
+    };
     if (!std.fs.path.isAbsolute(path)) return error.RelativeShellPath;
     if (shellKind(path) != null) return path;
     return fallbackLoginShell();
@@ -351,11 +354,16 @@ test "resolver makes clean startup explicit" {
     );
 }
 
-test "resolver rejects missing relative and unsupported shells" {
-    try std.testing.expectError(
-        error.MissingLoginShell,
-        resolve(null, .user_login),
-    );
+test "resolver rejects relative and unsupported shells" {
+    if (comptime builtin.os.tag == .windows) {
+        const fallback = try resolve(null, .user_login);
+        try std.testing.expectEqualStrings(fallbackLoginShell(), fallback.path);
+    } else {
+        try std.testing.expectError(
+            error.MissingLoginShell,
+            resolve(null, .user_login),
+        );
+    }
     try std.testing.expectError(
         error.RelativeShellPath,
         resolve(null, .{ .executable = .{ .path = "zsh" } }),
@@ -369,7 +377,13 @@ test "resolver rejects missing relative and unsupported shells" {
 test "login shell resolution falls back without accepting explicit unsupported shells" {
     const fallback = try resolve("/opt/homebrew/bin/fish", .user_login);
     try std.testing.expectEqualStrings(fallbackLoginShell(), fallback.path);
-    if (comptime builtin.os.tag == .macos) {
+    if (comptime builtin.os.tag == .windows) {
+        try std.testing.expectEqualSlices(
+            []const u8,
+            &.{ fallbackLoginShell(), "/d" },
+            fallback.argv(),
+        );
+    } else if (comptime builtin.os.tag == .macos) {
         try std.testing.expectEqualSlices(
             []const u8,
             &.{ "/bin/zsh", "-l", "-i" },
@@ -438,6 +452,25 @@ test "profile normalization defaults captured and persistent execution to user" 
     try std.testing.expectEqualStrings(
         "/bin/zsh",
         (try profileShell(arena, "/bin/zsh", .clean)).executable.path,
+    );
+}
+
+test "Windows uses cmd fallback for captured execution without a login shell" {
+    if (comptime builtin.os.tag != .windows) return;
+
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const fallback = fallbackLoginShell();
+    const environment_value = try environment(arena, null, null);
+    try std.testing.expect(environment_value.eql(.{ .user = fallback }));
+
+    const invocation = try capturedInvocation(environment_value, "echo terminal test OK");
+    try std.testing.expectEqualSlices(
+        []const u8,
+        &.{ fallback, "/d", "/c", "echo terminal test OK" },
+        invocation.argv(),
     );
 }
 

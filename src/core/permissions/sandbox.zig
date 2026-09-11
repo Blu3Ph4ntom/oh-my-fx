@@ -2004,17 +2004,35 @@ fn executeRawInvocation(
     cwd: []const u8,
     invocation: *const shell_resolver.Invocation,
 ) !command_contract.RunCommandResult {
-    if (comptime builtin.os.tag == .windows or builtin.os.tag == .wasi) {
-        return error.InvalidCommandEnvironment;
-    }
-    const result = try executeProcessWithScript(
-        scratch,
-        cfg,
-        invocation.argv(),
-        cwd,
-        "",
-    );
+    if (comptime builtin.os.tag == .wasi) return error.InvalidCommandEnvironment;
+    const result = if (comptime builtin.os.tag == .windows)
+        try executeProcess(scratch, cfg, invocation.argv(), cwd)
+    else
+        try executeProcessWithScript(scratch, cfg, invocation.argv(), cwd, "");
     return formatCollectedOutput(alloc, command, cwd, result);
+}
+
+test "Windows captured profiles execute through native cmd" {
+    if (comptime builtin.os.tag != .windows) return;
+
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const cfg = Config{
+        .backend = .none,
+        .workspace_root = "C:\\",
+        .max_command_output_bytes = 16 * 1024,
+    };
+
+    const result = try executeCommandInEnvironment(
+        cfg,
+        arena,
+        "echo profile-stdout",
+        "C:\\",
+        .{ .user = "C:\\Windows\\System32\\cmd.exe" },
+    );
+    try std.testing.expect(std.mem.find(u8, result.output, "profile-stdout") != null);
+    try std.testing.expect(std.mem.find(u8, result.output, "exit_code=0") != null);
 }
 
 test "explicit captured profiles execute exact shells without synthetic stderr" {
