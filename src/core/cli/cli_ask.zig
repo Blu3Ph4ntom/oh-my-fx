@@ -1077,7 +1077,7 @@ const AskContext = struct {
             .gateway => self.cfg.permission_reviewer_provider,
             .codex => self.cfg.codex_permission_reviewer_provider,
             .grok => null,
-            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => null,
+            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google => null,
             .openai_compatible => null,
             .opencode_go => null,
         } orelse
@@ -1106,6 +1106,7 @@ const AskContext = struct {
             .fireworks,
             .together,
             .mistral,
+            .google,
             => if (self.cfg.named_compatible_agent_stream) |factory|
                 factory(self.provider)
             else
@@ -2030,6 +2031,7 @@ fn resolveModelCapabilities(raw_ctx: *anyopaque, _: Allocator, model: []const u8
             .fireworks,
             .together,
             .mistral,
+            .google,
             => if (ctx.cfg.named_compatible_model_catalog) |factory|
                 factory(ctx.provider)
             else

@@ -742,7 +742,7 @@ pub const ModelListSnapshot = struct {
             .gateway => "gateway",
             .codex => model_provider.label(.codex),
             .grok => model_provider.label(.grok),
-            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => model_provider.label(self.provider),
+            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google => model_provider.label(self.provider),
             .openai_compatible => model_provider.label(.openai_compatible),
             .opencode_go => model_provider.label(.opencode_go),
         };

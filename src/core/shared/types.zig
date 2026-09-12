@@ -103,6 +103,7 @@ pub const CredentialSource = enum {
     fireworks_api_key,
     together_api_key,
     mistral_api_key,
+    google_api_key,
     custom_provider,
     opencode_go_subscription,
 };

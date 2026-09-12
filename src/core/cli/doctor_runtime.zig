@@ -128,7 +128,7 @@ pub fn collect(
             .gateway => detailed.settings.model,
             .codex => detailed.settings.codex_model,
             .grok => detailed.settings.model,
-            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .openai_compatible => detailed.settings.model,
+            .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google, .openai_compatible => detailed.settings.model,
             .opencode_go => detailed.settings.model,
         },
         .permission_mode = detailed.settings.permission_mode,

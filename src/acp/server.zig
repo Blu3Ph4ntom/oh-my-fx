@@ -383,6 +383,7 @@ pub fn streamProviderFor(
         .fireworks,
         .together,
         .mistral,
+        .google,
         => if (state.cfg.named_compatible_agent_stream) |factory|
             factory(provider)
         else
@@ -412,6 +413,7 @@ pub fn catalogProviderFor(
         .fireworks,
         .together,
         .mistral,
+        .google,
         => if (state.cfg.named_compatible_model_catalog) |factory|
             factory(provider)
         else
@@ -1740,7 +1742,7 @@ fn handleSetConfigOption(state: *ServerState, alloc: Allocator, msg: *jsonrpc.Me
                 .gateway => settings.model,
                 .codex => settings.codex_model,
                 .grok => settings.model,
-                .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .openai_compatible => settings.model,
+                .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google, .openai_compatible => settings.model,
                 .opencode_go => settings.model,
             };
             var selected_model = catalog.items[0].id;

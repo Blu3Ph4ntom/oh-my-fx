@@ -1133,7 +1133,7 @@ fn configuredProviderSelection(
         .gateway => settings.model orelse default_model,
         .codex => settings.codex_model orelse return error.CodexModelNotSelected,
         .grok => settings.model orelse default_model,
-        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .openai_compatible => settings.model orelse default_model,
+        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google, .openai_compatible => settings.model orelse default_model,
         .opencode_go => settings.model orelse default_model,
     };
     return .{ .provider = provider, .model = model };

@@ -26,6 +26,7 @@ fn isNamedSource(source: anytype) bool {
         .fireworks_api_key,
         .together_api_key,
         .mistral_api_key,
+        .google_api_key,
         => true,
         else => false,
     };
@@ -42,6 +43,7 @@ fn providerForSource(source: Source) model_provider.ProviderId {
         .fireworks_api_key => .fireworks,
         .together_api_key => .together,
         .mistral_api_key => .mistral,
+        .google_api_key => .google,
         else => .gateway,
     };
 }
@@ -64,6 +66,7 @@ pub const CatalogPublicOnly = union(enum) {
     fireworks_api_key,
     together_api_key,
     mistral_api_key,
+    google_api_key,
 
     fn credentialSource(self: CatalogPublicOnly) ?Source {
         return switch (self) {
@@ -83,6 +86,7 @@ pub const CatalogPublicOnly = union(enum) {
             .fireworks_api_key => .fireworks_api_key,
             .together_api_key => .together_api_key,
             .mistral_api_key => .mistral_api_key,
+            .google_api_key => .google_api_key,
         };
     }
 };
@@ -107,6 +111,7 @@ pub const CatalogAuthenticatedSource = enum {
     fireworks_api_key,
     together_api_key,
     mistral_api_key,
+    google_api_key,
 
     fn credentialSource(self: CatalogAuthenticatedSource) Source {
         return switch (self) {
@@ -127,6 +132,7 @@ pub const CatalogAuthenticatedSource = enum {
             .fireworks_api_key => .fireworks_api_key,
             .together_api_key => .together_api_key,
             .mistral_api_key => .mistral_api_key,
+            .google_api_key => .google_api_key,
         };
     }
 };
@@ -234,6 +240,7 @@ pub fn catalogAccessForCredential(
         .fireworks_api_key => .fireworks_api_key,
         .together_api_key => .together_api_key,
         .mistral_api_key => .mistral_api_key,
+        .google_api_key => .google_api_key,
         .fx_login => blk: {
             const team = team_context orelse
                 return .{ .public_only = .fx_login_team_required };
@@ -287,6 +294,7 @@ pub fn required_credential_source_for_provider(provider: model_provider.Provider
         .fireworks => .fireworks_api_key,
         .together => .together_api_key,
         .mistral => .mistral_api_key,
+        .google => .google_api_key,
         .gateway, .openai_compatible => null,
     };
 }
@@ -314,6 +322,7 @@ pub fn missing_credential_message_for_source(source: Source, interactive: bool) 
         .fireworks_api_key,
         .together_api_key,
         .mistral_api_key,
+        .google_api_key,
         => if (interactive)
             openai_compat_profiles.forProvider(providerForSource(source)).?.missing_interactive_message
         else
@@ -448,6 +457,7 @@ pub fn resolveForProvider(
         .fireworks,
         .together,
         .mistral,
+        .google,
         => {
             const profile = openai_compat_profiles.forProvider(provider).?;
             const credential = try loadEnvCredential(alloc, profile.api_key_env, profile.credential_source);
@@ -578,6 +588,7 @@ pub fn loadSource(
         .fireworks_api_key,
         .together_api_key,
         .mistral_api_key,
+        .google_api_key,
         => blk: {
             const profile = openai_compat_profiles.forProvider(providerForSource(source)).?;
             break :blk loadEnvCredential(alloc, profile.api_key_env, source);
@@ -618,6 +629,7 @@ pub fn sourceExists(
         .fireworks_api_key,
         .together_api_key,
         .mistral_api_key,
+        .google_api_key,
         => blk: {
             const profile = openai_compat_profiles.forProvider(providerForSource(source)).?;
             break :blk nonEmptyEnvValue(profile.api_key_env) != null;
@@ -859,6 +871,7 @@ pub fn sourceLabel(source: Source) []const u8 {
         .fireworks_api_key,
         .together_api_key,
         .mistral_api_key,
+        .google_api_key,
         => openai_compat_profiles.forProvider(providerForSource(source)).?.api_key_env,
     };
 }
@@ -939,6 +952,7 @@ test "named provider credentials stay isolated from each other" {
         .{ .provider = .fireworks, .source = .fireworks_api_key, .missing = "FIREWORKS_API_KEY" },
         .{ .provider = .together, .source = .together_api_key, .missing = "TOGETHER_API_KEY" },
         .{ .provider = .mistral, .source = .mistral_api_key, .missing = "MISTRAL_API_KEY" },
+        .{ .provider = .google, .source = .google_api_key, .missing = "GOOGLE_API_KEY" },
     };
     for (cases) |case| {
         try std.testing.expectEqual(case.source, required_credential_source_for_provider(case.provider).?);

@@ -60,6 +60,7 @@ pub const ProviderRoutes = struct {
             .fireworks,
             .together,
             .mistral,
+            .google,
             => if (self.named_compatible_provider) |factory|
                 .{ .agent_stream_provider = factory(provider), .permission_reviewer_provider = null }
             else

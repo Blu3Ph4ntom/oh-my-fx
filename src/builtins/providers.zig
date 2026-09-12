@@ -97,7 +97,7 @@ pub fn agentStream(provider: model_provider.ProviderId) stream_provider.Provider
         .grok => xai_grok.agent_stream_provider,
         .openai_compatible => openai_compat.agent_stream_provider,
         .opencode_go => opencode_go.agent_stream_provider,
-        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => openai_compat.agentStreamProvider(provider),
+        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google => openai_compat.agentStreamProvider(provider),
     };
 }
 
@@ -108,6 +108,6 @@ pub fn modelCatalog(provider: model_provider.ProviderId) model_catalog.Provider 
         .grok => xai_grok_models.model_catalog_provider,
         .openai_compatible => openai_compat_models.model_catalog_provider,
         .opencode_go => opencode_go_models.model_catalog_provider,
-        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral => openai_compat_models.modelCatalogProvider(provider),
+        .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google => openai_compat_models.modelCatalogProvider(provider),
     };
 }

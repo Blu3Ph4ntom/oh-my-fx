@@ -139,7 +139,7 @@ pub const top_level_specs = [_]TopLevelSpec{
     .{
         .kind = .provider,
         .token = "provider",
-        .usage = "provider <gateway|openai_compatible|codex|opencode_go>",
+        .usage = "provider <gateway|codex|opencode_go|openai_compatible|openai|openrouter|xai|deepseek|groq|cerebras|fireworks|together|mistral|google>",
         .summary = "Choose the model provider used by omfx",
     },
     .{
@@ -296,7 +296,7 @@ pub const top_level_help_groups = [_]TopLevelHelpGroup{
     .{ .entries = &.{
         .{ .kind = .login, .usage = "login [opencode_go|vercel|codex]" },
         .{ .kind = .logout, .usage = "logout [vercel|codex]" },
-        .{ .kind = .provider, .usage = "provider <gateway|openai_compatible|codex|opencode_go>" },
+        .{ .kind = .provider, .usage = "provider <gateway|codex|opencode_go|openai_compatible|openai|openrouter|xai|deepseek|groq|cerebras|fireworks|together|mistral|google>" },
         .{ .kind = .setup, .usage = "setup" },
         .{ .kind = .teams, .usage = "teams" },
         .{ .kind = .credits, .usage = "credits|balance" },
@@ -435,7 +435,7 @@ pub const slash_specs = [_]SlashSpec{
     .{ .kind = .images, .command = "/images", .help_entry = "/images [clear]", .completion_description = "manage pending image attachments", .presentation_category = .media, .has_args = true, .accepts_payload = true },
     .{ .kind = .model, .command = "/model", .help_entry = "/model <id-or-query>", .completion_description = "choose what model and reasoning effort to use", .presentation_category = .model, .has_args = true, .accepts_payload = true },
     .{ .kind = .models, .command = "/models", .help_entry = "/models", .completion_description = "browse available models", .presentation_category = .model },
-    .{ .kind = .provider, .command = "/provider", .help_entry = "/provider [gateway|openai_compatible|codex|opencode_go]", .completion_description = "choose Gateway, OpenAI-compatible, Codex, or OpenCode Go", .presentation_category = .model, .has_args = true, .accepts_payload = true },
+    .{ .kind = .provider, .command = "/provider", .help_entry = "/provider <provider>", .completion_description = "choose Gateway, subscriptions, or a named OpenAI-compatible provider", .presentation_category = .model, .has_args = true, .accepts_payload = true },
     .{ .kind = .permissions, .command = "/permissions", .help_entry = "/permissions [ask|auto|full-access|reset]", .completion_description = "choose what omfx is allowed to do", .presentation_category = .security, .show_in_welcome = true, .has_args = true, .accepts_payload = true },
     .{ .kind = .allowlist, .command = "/allowlist", .help_entry = "/allowlist [view [effective|local|user]|[local|user] add|remove|reset ...]", .completion_description = "manage trusted commands, tools, and URLs", .presentation_category = .security, .show_in_welcome = true, .has_args = true, .accepts_payload = true },
     .{ .kind = .undo, .command = "/undo", .help_entry = "/undo", .completion_description = "undo the latest tracked file operation", .presentation_category = .session },

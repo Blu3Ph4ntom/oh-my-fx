@@ -50,7 +50,7 @@ omfx login codex
 omfx
 ```
 
-Inside omfx, `/provider` switches between Gateway, Codex, OpenCode Go, and named OpenAI-compatible providers. The named profiles are OpenAI, OpenRouter, xAI, DeepSeek, Groq, Cerebras, Fireworks, Together, and Mistral. `/model` lists the active provider's fetched models. Codex model IDs are the raw IDs returned by its authenticated catalog. Use `/logout codex` to remove the Codex session without affecting Vercel access.
+Inside omfx, `/provider` switches between Gateway, Codex, OpenCode Go, and named OpenAI-compatible providers. The named profiles are OpenAI, OpenRouter, xAI, DeepSeek, Groq, Cerebras, Fireworks, Together, Mistral, and Google Gemini. Each profile uses its own API-key environment variable and live `/models` catalog. `/model` lists the active provider's fetched models. Codex model IDs are the raw IDs returned by its authenticated catalog. Use `/logout codex` to remove the Codex session without affecting Vercel access.
 
 The OpenAI Codex route uses ChatGPT subscription access directly and never sends its OAuth token to Vercel AI Gateway. The session is stored privately at `~/.fx/chatgpt-auth.json` and refreshed when needed. On supported Codex models, `/fast` requests OpenAI's priority service tier and consumes ChatGPT credits at the higher Fast mode rate.
 
@@ -82,6 +82,16 @@ omfx provider openai_compatible
 ```
 
 omfx fetches `/models` live and sends chat requests to `/chat/completions`. When a model advertises reasoning, the effort picker forwards the selected value and streamed reasoning is kept separate from the answer. The base URL must not include credentials, a query, or a fragment. `FX_OPENAI_COMPATIBLE_BASE_URL` remains accepted as a legacy environment name.
+
+Google Gemini uses Google's OpenAI-compatible endpoint. Set `GOOGLE_API_KEY`, then choose it with `/provider google` or `omfx provider google`:
+
+```bash
+export GOOGLE_API_KEY=your-key
+omfx provider google
+omfx models
+```
+
+On Windows PowerShell, use `$env:GOOGLE_API_KEY = "your-key"` for the current shell. Gemini's OpenAI-compatible API exposes a live `/models` catalog, streaming, tool calls, multimodal message content, and `reasoning_effort` mapping for supported thinking models.
 
 Named profiles use their provider's fixed HTTPS endpoint and dedicated environment variable. For example:
 

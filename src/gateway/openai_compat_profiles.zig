@@ -93,6 +93,15 @@ const mistral = Profile{
     .missing_message = "omfx needs a Mistral API key for this model. Set MISTRAL_API_KEY.",
     .missing_interactive_message = "Mistral needs an API key. Set MISTRAL_API_KEY.",
 };
+const google = Profile{
+    .provider = .google,
+    .label = "Google Gemini",
+    .api_key_env = "GOOGLE_API_KEY",
+    .base_url = "https://generativelanguage.googleapis.com/v1beta/openai",
+    .credential_source = .google_api_key,
+    .missing_message = "omfx needs a Google Gemini API key for this model. Set GOOGLE_API_KEY.",
+    .missing_interactive_message = "Google Gemini needs an API key. Set GOOGLE_API_KEY.",
+};
 
 pub fn forProvider(provider: model_provider.ProviderId) ?*const Profile {
     return switch (provider) {
@@ -105,6 +114,7 @@ pub fn forProvider(provider: model_provider.ProviderId) ?*const Profile {
         .fireworks => &fireworks,
         .together => &together,
         .mistral => &mistral,
+        .google => &google,
         else => null,
     };
 }
@@ -129,6 +139,7 @@ test "named OpenAI-compatible profiles keep fixed endpoints and isolated keys" {
         .{ .provider = .fireworks, .base_url = "https://api.fireworks.ai/inference/v1", .env = "FIREWORKS_API_KEY", .source = .fireworks_api_key },
         .{ .provider = .together, .base_url = "https://api.together.xyz/v1", .env = "TOGETHER_API_KEY", .source = .together_api_key },
         .{ .provider = .mistral, .base_url = "https://api.mistral.ai/v1", .env = "MISTRAL_API_KEY", .source = .mistral_api_key },
+        .{ .provider = .google, .base_url = "https://generativelanguage.googleapis.com/v1beta/openai", .env = "GOOGLE_API_KEY", .source = .google_api_key },
     };
     for (cases) |case| {
         const profile = forProvider(case.provider).?;

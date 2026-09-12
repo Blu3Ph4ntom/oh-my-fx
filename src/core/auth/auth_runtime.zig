@@ -386,7 +386,7 @@ pub const PickerView = struct {
                 6
             else
                 7,
-            .provider => 13,
+            .provider => 14,
             .sign_in, .api_key => 0,
             .change_team => blk: {
                 var count: usize = 0;
@@ -452,6 +452,7 @@ pub const PickerView = struct {
                 10 => .{ .provider = .fireworks },
                 11 => .{ .provider = .together },
                 12 => .{ .provider = .mistral },
+                13 => .{ .provider = .google },
                 else => null,
             },
             .sign_in, .api_key => null,
@@ -1407,6 +1408,7 @@ pub const Runtime = struct {
             .fireworks,
             .together,
             .mistral,
+            .google,
             => if (self.credentialSource() == credentials.required_credential_source_for_provider(provider).?)
                 false
             else
@@ -2337,7 +2339,7 @@ test "provider picker exposes OpenCode Go alongside built-in providers" {
     runtime.openProviderPicker(alloc, .gateway);
 
     const picker = runtime.pickerView();
-    try std.testing.expectEqual(@as(usize, 13), picker.choiceCount());
+    try std.testing.expectEqual(@as(usize, 14), picker.choiceCount());
     try std.testing.expect((Choice{ .provider = .gateway }).eql(picker.choiceAt(0).?));
     try std.testing.expect((Choice{ .provider = .openai_compatible }).eql(picker.choiceAt(1).?));
     try std.testing.expect((Choice{ .provider = .codex }).eql(picker.choiceAt(2).?));
@@ -2351,7 +2353,8 @@ test "provider picker exposes OpenCode Go alongside built-in providers" {
     try std.testing.expect((Choice{ .provider = .fireworks }).eql(picker.choiceAt(10).?));
     try std.testing.expect((Choice{ .provider = .together }).eql(picker.choiceAt(11).?));
     try std.testing.expect((Choice{ .provider = .mistral }).eql(picker.choiceAt(12).?));
-    try std.testing.expect(picker.choiceAt(13) == null);
+    try std.testing.expect((Choice{ .provider = .google }).eql(picker.choiceAt(13).?));
+    try std.testing.expect(picker.choiceAt(14) == null);
 }
 
 test "credential switcher excludes provider-routed ChatGPT sessions" {

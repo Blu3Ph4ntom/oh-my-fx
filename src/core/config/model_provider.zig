@@ -14,6 +14,7 @@ pub const ProviderId = enum {
     fireworks,
     together,
     mistral,
+    google,
     openai_compatible,
     opencode_go,
 };
@@ -36,6 +37,7 @@ pub fn parse(value: []const u8) ?ProviderId {
     if (std.ascii.eqlIgnoreCase(value, "fireworks")) return .fireworks;
     if (std.ascii.eqlIgnoreCase(value, "together")) return .together;
     if (std.ascii.eqlIgnoreCase(value, "mistral")) return .mistral;
+    if (std.ascii.eqlIgnoreCase(value, "google") or std.ascii.eqlIgnoreCase(value, "gemini")) return .google;
     if (std.ascii.eqlIgnoreCase(value, "openai_compatible")) return .openai_compatible;
     if (std.ascii.eqlIgnoreCase(value, "openai-compatible")) return .openai_compatible;
     if (std.ascii.eqlIgnoreCase(value, "opencode_go")) return .opencode_go;
@@ -57,6 +59,7 @@ pub fn label(provider: ProviderId) []const u8 {
         .fireworks => "Fireworks",
         .together => "Together",
         .mistral => "Mistral",
+        .google => "Google Gemini",
         .openai_compatible => "OpenAI-compatible",
         .opencode_go => "OpenCode Go subscription",
     };
@@ -77,6 +80,7 @@ pub fn authorizesCredential(provider: ProviderId, source: ?types.CredentialSourc
         .fireworks => selected == .fireworks_api_key,
         .together => selected == .together_api_key,
         .mistral => selected == .mistral_api_key,
+        .google => selected == .google_api_key,
         .openai_compatible => selected == .custom_provider,
         .opencode_go => selected == .opencode_go_subscription,
     };
@@ -97,6 +101,7 @@ pub fn isNamedCompatible(provider: ProviderId) bool {
         .fireworks,
         .together,
         .mistral,
+        .google,
         => true,
         else => false,
     };
@@ -136,6 +141,8 @@ test "provider parsing exposes named compatible providers" {
         "fireworks",
         "together",
         "mistral",
+        "google",
+        "gemini",
     }) |name| {
         try std.testing.expect(parse(name) != null);
     }

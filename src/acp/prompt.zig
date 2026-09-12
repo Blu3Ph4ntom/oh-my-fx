@@ -251,7 +251,7 @@ const AcpContext = struct {
                 .gateway => self.state.cfg.permission_reviewer_provider,
                 .codex => self.state.cfg.codex_permission_reviewer_provider,
                 .grok => null,
-                .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .openai_compatible => null,
+                .openai, .openrouter, .xai, .deepseek, .groq, .cerebras, .fireworks, .together, .mistral, .google, .openai_compatible => null,
                 .opencode_go => null,
             },
             .auto_classifier = self.auto_classifier,

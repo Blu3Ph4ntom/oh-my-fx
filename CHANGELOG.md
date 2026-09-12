@@ -1,5 +1,15 @@
 # fx
 
+## 0.0.15
+
+<!-- release:start -->
+
+### New Features
+
+- **Google Gemini provider:** Use a dedicated `GOOGLE_API_KEY`, live Gemini model discovery, streaming, tools, multimodal prompts, and supported reasoning controls through Google's OpenAI-compatible API.
+
+<!-- release:end -->
+
 ## 0.0.14
 
 <!-- release:start -->

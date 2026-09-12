@@ -900,7 +900,7 @@ fn runNonInteractiveWithDeps(
         },
         .provider => |rest| {
             if (rest.len != 1) {
-                try writeStderr(deps, "usage: omfx provider <gateway|openai|openrouter|xai|deepseek|groq|cerebras|fireworks|together|mistral|openai_compatible|codex|opencode_go>\n");
+                try writeStderr(deps, "usage: omfx provider <gateway|codex|opencode_go|openai_compatible|openai|openrouter|xai|deepseek|groq|cerebras|fireworks|together|mistral|google>\n");
                 return .handled_failure;
             }
             const target = model_provider.parse(rest[0]) orelse {
@@ -1120,6 +1120,7 @@ fn runNonInteractiveWithDeps(
                 .fireworks,
                 .together,
                 .mistral,
+                .google,
                 => if (cfg.named_compatible_cli_model_catalog) |factory|
                     factory(startup.provider)
                 else
